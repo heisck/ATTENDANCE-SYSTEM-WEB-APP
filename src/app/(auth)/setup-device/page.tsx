@@ -19,7 +19,7 @@ export default function SetupDevicePage() {
       if (!optionsRes.ok) throw new Error("Failed to get registration options");
       const options = await optionsRes.json();
 
-      const registration = await startRegistration({ optionsJSON: options });
+      const registration = await startRegistration(options);
 
       const verifyRes = await fetch("/api/webauthn/register", {
         method: "POST",

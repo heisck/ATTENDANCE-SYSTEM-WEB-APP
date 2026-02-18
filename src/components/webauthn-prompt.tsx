@@ -25,7 +25,7 @@ export function WebAuthnPrompt({ onVerified, onSkipped }: WebAuthnPromptProps) {
       }
 
       const options = await optionsRes.json();
-      const authentication = await startAuthentication({ optionsJSON: options });
+      const authentication = await startAuthentication(options);
 
       const verifyRes = await fetch("/api/webauthn/authenticate", {
         method: "POST",

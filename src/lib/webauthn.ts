@@ -6,12 +6,9 @@ import {
   type VerifiedRegistrationResponse,
   type VerifiedAuthenticationResponse,
 } from "@simplewebauthn/server";
-import type {
-  RegistrationResponseJSON,
-  AuthenticationResponseJSON,
-  AuthenticatorTransportFuture,
-} from "@simplewebauthn/server/script/deps";
 import { db } from "./db";
+
+type AuthenticatorTransportFuture = "ble" | "cable" | "hybrid" | "internal" | "nfc" | "smart-card" | "usb";
 
 const rpName = process.env.WEBAUTHN_RP_NAME || "AttendanceIQ";
 const rpID = process.env.WEBAUTHN_RP_ID || "localhost";
