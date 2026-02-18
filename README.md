@@ -1,0 +1,127 @@
+# AttendanceIQ
+
+Smart university attendance system with 4-layer security verification. Built for multi-tenant deployment across universities.
+
+## Security Layers
+
+| Layer | Method | Points | Purpose |
+|-------|--------|--------|---------|
+| 1 | WebAuthn Biometrics | +40 | One device per student, cryptographic identity |
+| 2 | GPS Proximity | +30 | Haversine distance check within campus radius |
+| 3 | Rotating QR Code | +20 | HMAC-signed tokens, 5-second rotation |
+| 4 | IP Validation | +10 | Campus network CIDR range check |
+
+Confidence score (0-100) determines if attendance is flagged for review.
+
+## Tech Stack
+
+- **Next.js 16** (App Router, Server Components)
+- **TypeScript** (strict mode)
+- **PostgreSQL** + **Prisma ORM**
+- **NextAuth.js v5** + **SimpleWebAuthn v9**
+- **Tailwind CSS 4** + **Lucide Icons**
+
+## Quick Start
+
+### Prerequisites
+
+- Node.js 20+
+- Docker (for PostgreSQL)
+
+### Setup
+
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Start PostgreSQL
+docker compose up -d
+
+# 3. Run database migrations
+npx prisma db push
+
+# 4. Generate Prisma client
+npx prisma generate
+
+# 5. Seed the database
+npx tsx prisma/seed.ts
+
+# 6. Start dev server
+npm run dev
+```
+
+Open http://localhost:3000
+
+### Seed Accounts
+
+All accounts use password: `password123`
+
+| Role | Email | Dashboard |
+|------|-------|-----------|
+| Super Admin | superadmin@attendanceiq.com | /super-admin |
+| University Admin | admin@knust.edu.gh | /admin |
+| Lecturer | lecturer@knust.edu.gh | /lecturer |
+| Student | student1@st.knust.edu.gh | /student |
+
+## Project Structure
+
+```
+src/
+├── app/
+│   ├── (auth)/           # Login, register, device setup
+│   ├── (dashboard)/      # Role-based dashboards
+│   │   ├── student/      # Attendance marking, history
+│   │   ├── lecturer/     # Session management, QR display
+│   │   ├── admin/        # Users, courses, settings
+│   │   └── super-admin/  # Platform-wide analytics
+│   └── api/              # REST endpoints
+├── components/           # Shared UI components
+├── lib/                  # Core utilities
+│   ├── auth.ts           # NextAuth configuration
+│   ├── webauthn.ts       # WebAuthn registration/verification
+│   ├── qr.ts             # HMAC token generation
+│   ├── gps.ts            # Haversine distance formula
+│   ├── ip.ts             # CIDR range checking
+│   └── confidence.ts     # Score calculation
+├── services/             # Business logic layer
+└── types/                # TypeScript definitions
+```
+
+## API Endpoints
+
+### Authentication
+- `POST /api/auth/register` - Register new user
+- `POST /api/auth/[...nextauth]` - NextAuth sign in/out
+
+### WebAuthn
+- `GET /api/webauthn/register` - Get registration options
+- `POST /api/webauthn/register` - Verify registration
+- `GET /api/webauthn/authenticate` - Get auth challenge
+- `POST /api/webauthn/authenticate` - Verify auth response
+
+### Attendance
+- `POST /api/attendance/sessions` - Create session (lecturer)
+- `GET /api/attendance/sessions/:id` - Get session details
+- `GET /api/attendance/sessions/:id/qr` - Get current QR token
+- `PATCH /api/attendance/sessions/:id` - Close session
+- `POST /api/attendance/mark` - Mark attendance (student)
+
+### Public API
+- `GET /api/v1/attendance` - Query records (requires x-api-key header)
+
+### Management
+- `POST /api/courses/manage` - Create course (admin)
+- `POST /api/enrollments` - Enroll students
+- `GET /api/reports?courseId=` - Get attendance report
+- `GET /api/reports/export?courseId=&format=csv` - Export as CSV
+- `POST /api/organizations/onboard` - Onboard new university
+
+## Docker Production
+
+```bash
+docker compose -f docker-compose.prod.yml up --build -d
+```
+
+## Environment Variables
+
+See `.env.example` for all required variables.

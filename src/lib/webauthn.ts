@@ -25,13 +25,14 @@ export async function getRegistrationOptions(userId: string, userName: string) {
   const options = await generateRegistrationOptions({
     rpName,
     rpID,
-    userID: new TextEncoder().encode(userId),
+    userID: userId,
     userName,
     attestationType: "none",
     excludeCredentials: existingCredentials.map((cred) => ({
       id: cred.credentialId,
+      type: "public-key",
       transports: cred.transports as AuthenticatorTransportFuture[],
-    })),
+    })) as any,
     authenticatorSelection: {
       residentKey: "preferred",
       userVerification: "preferred",
@@ -47,7 +48,7 @@ export async function getRegistrationOptions(userId: string, userName: string) {
 
 export async function verifyRegistration(
   userId: string,
-  response: RegistrationResponseJSON,
+  response: any,
   userAgent?: string
 ): Promise<VerifiedRegistrationResponse> {
   const expectedChallenge = challengeStore.get(userId);
@@ -61,18 +62,17 @@ export async function verifyRegistration(
   });
 
   if (verification.verified && verification.registrationInfo) {
-    const { credential, credentialDeviceType, credentialBackedUp } =
-      verification.registrationInfo;
+    const info = verification.registrationInfo;
 
     await db.webAuthnCredential.create({
       data: {
         userId,
-        credentialId: credential.id,
-        publicKey: Buffer.from(credential.publicKey),
-        counter: BigInt(credential.counter),
-        transports: response.response.transports || [],
-        deviceType: credentialDeviceType,
-        backedUp: credentialBackedUp,
+        credentialId: Buffer.from(info.credentialID).toString("base64url"),
+        publicKey: Buffer.from(info.credentialPublicKey),
+        counter: BigInt(info.counter),
+        transports: response.response?.transports || [],
+        deviceType: info.credentialDeviceType,
+        backedUp: info.credentialBackedUp,
         userAgent,
       },
     });
@@ -96,8 +96,9 @@ export async function getAuthenticationOptions(userId: string) {
     rpID,
     allowCredentials: credentials.map((cred) => ({
       id: cred.credentialId,
+      type: "public-key",
       transports: cred.transports as AuthenticatorTransportFuture[],
-    })),
+    })) as any,
     userVerification: "preferred",
   });
 
@@ -109,7 +110,7 @@ export async function getAuthenticationOptions(userId: string) {
 
 export async function verifyAuthentication(
   userId: string,
-  response: AuthenticationResponseJSON
+  response: any
 ): Promise<VerifiedAuthenticationResponse> {
   const expectedChallenge = challengeStore.get(userId);
   if (!expectedChallenge) throw new Error("Challenge expired or not found");
@@ -127,13 +128,13 @@ export async function verifyAuthentication(
     expectedChallenge,
     expectedOrigin: origin,
     expectedRPID: rpID,
-    credential: {
-      id: credential.credentialId,
-      publicKey: credential.publicKey,
+    authenticator: {
+      credentialID: Buffer.from(credential.credentialId, "base64url"),
+      credentialPublicKey: credential.publicKey,
       counter: Number(credential.counter),
       transports: credential.transports as AuthenticatorTransportFuture[],
     },
-  });
+  } as any);
 
   if (verification.verified) {
     await db.webAuthnCredential.update({
