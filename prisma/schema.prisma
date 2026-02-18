@@ -1,0 +1,207 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  LECTURER
+  STUDENT
+}
+
+enum SessionStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum SubscriptionPlan {
+  FREE
+  BASIC
+  PRO
+  ENTERPRISE
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  domain    String?
+  logoUrl   String?
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users        User[]
+  courses      Course[]
+  subscription Subscription?
+  ipRanges     TrustedIpRange[]
+
+  @@index([slug])
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String
+  passwordHash   String
+  role           Role     @default(STUDENT)
+  studentId      String?
+  organizationId String?
+  emailVerified  DateTime?
+  image          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization?        @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  credentials  WebAuthnCredential[]
+  attendances  AttendanceRecord[]
+  sessions     AttendanceSession[]  @relation("LecturerSessions")
+  courses      Course[]             @relation("LecturerCourses")
+  enrollments  Enrollment[]
+  auditLogs    AuditLog[]
+
+  @@index([email])
+  @@index([organizationId])
+  @@index([role])
+}
+
+model WebAuthnCredential {
+  id               String   @id @default(cuid())
+  userId           String
+  credentialId     String   @unique
+  publicKey        Bytes
+  counter          BigInt   @default(0)
+  transports       String[]
+  deviceType       String
+  backedUp         Boolean  @default(false)
+  userAgent        String?
+  registeredAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([credentialId])
+}
+
+model Course {
+  id             String   @id @default(cuid())
+  code           String
+  name           String
+  description    String?
+  organizationId String
+  lecturerId     String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lecturer     User                @relation("LecturerCourses", fields: [lecturerId], references: [id])
+  enrollments  Enrollment[]
+  sessions     AttendanceSession[]
+
+  @@unique([code, organizationId])
+  @@index([organizationId])
+  @@index([lecturerId])
+}
+
+model Enrollment {
+  id        String   @id @default(cuid())
+  courseId   String
+  studentId  String
+  enrolledAt DateTime @default(now())
+
+  course  Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  student User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, studentId])
+}
+
+model AttendanceSession {
+  id           String        @id @default(cuid())
+  courseId      String
+  lecturerId   String
+  status       SessionStatus @default(ACTIVE)
+  gpsLat       Float
+  gpsLng       Float
+  radiusMeters Int           @default(500)
+  qrSecret     String
+  startedAt    DateTime      @default(now())
+  closedAt     DateTime?
+
+  course   Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lecturer User               @relation("LecturerSessions", fields: [lecturerId], references: [id])
+  records  AttendanceRecord[]
+
+  @@index([courseId])
+  @@index([lecturerId])
+  @@index([status])
+}
+
+model AttendanceRecord {
+  id           String   @id @default(cuid())
+  sessionId    String
+  studentId    String
+  gpsLat       Float
+  gpsLng       Float
+  gpsDistance   Float
+  ipAddress    String
+  ipTrusted    Boolean  @default(false)
+  qrToken      String
+  webauthnUsed Boolean  @default(true)
+  confidence   Int
+  flagged      Boolean  @default(false)
+  markedAt     DateTime @default(now())
+
+  session AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student User              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, studentId])
+  @@index([sessionId])
+  @@index([studentId])
+  @@index([flagged])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String
+  metadata  Json     @default("{}")
+  ipAddress String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model TrustedIpRange {
+  id             String @id @default(cuid())
+  organizationId String
+  cidr           String
+  label          String
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+model Subscription {
+  id             String           @id @default(cuid())
+  organizationId String           @unique
+  plan           SubscriptionPlan @default(FREE)
+  maxStudents    Int              @default(100)
+  maxCourses     Int              @default(10)
+  stripeCustomerId   String?
+  stripeSubscriptionId String?
+  currentPeriodEnd DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
