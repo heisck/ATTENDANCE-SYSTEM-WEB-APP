@@ -77,27 +77,29 @@ export default async function PlatformAnalyticsPage() {
           {orgStats.map((org) => (
             <div
               key={org.id}
-              className="grid grid-cols-5 items-center gap-4 rounded-lg border border-border bg-card p-4"
+              className="rounded-lg border border-border bg-card p-4"
             >
-              <div>
-                <p className="font-medium">{org.name}</p>
-                <p className="text-xs text-muted-foreground">{org.slug}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-lg font-bold">{org._count.users}</p>
-                <p className="text-xs text-muted-foreground">Users</p>
-              </div>
-              <div className="text-center">
-                <p className="text-lg font-bold">{org._count.courses}</p>
-                <p className="text-xs text-muted-foreground">Courses</p>
-              </div>
-              <div className="text-center">
-                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
-                  {org.subscription?.plan || "FREE"}
-                </span>
-              </div>
-              <div className="text-right text-xs text-muted-foreground">
-                {org.createdAt.toLocaleDateString()}
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 lg:items-center">
+                <div className="sm:col-span-2 lg:col-span-1">
+                  <p className="font-medium">{org.name}</p>
+                  <p className="text-xs text-muted-foreground">{org.slug}</p>
+                </div>
+                <div className="sm:text-center">
+                  <p className="text-lg font-bold">{org._count.users}</p>
+                  <p className="text-xs text-muted-foreground">Users</p>
+                </div>
+                <div className="sm:text-center">
+                  <p className="text-lg font-bold">{org._count.courses}</p>
+                  <p className="text-xs text-muted-foreground">Courses</p>
+                </div>
+                <div className="sm:text-center">
+                  <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+                    {org.subscription?.plan || "FREE"}
+                  </span>
+                </div>
+                <div className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-1 lg:text-right">
+                  {org.createdAt.toLocaleDateString()}
+                </div>
               </div>
             </div>
           ))}
