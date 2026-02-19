@@ -54,6 +54,8 @@ model User {
   organizationId String?
   emailVerified  DateTime?
   image          String?
+  passkeysLockedUntilAdminReset Boolean @default(false)
+  firstPasskeyCreatedAt DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -68,6 +70,7 @@ model User {
   @@index([email])
   @@index([organizationId])
   @@index([role])
+  @@index([passkeysLockedUntilAdminReset])
 }
 
 model WebAuthnCredential {

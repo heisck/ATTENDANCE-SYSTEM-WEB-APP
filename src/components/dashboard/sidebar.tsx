@@ -31,7 +31,7 @@ const navByRole: Record<string, NavItem[]> = {
     { label: "Dashboard", href: "/student", icon: <LayoutDashboard className="h-4 w-4" /> },
     { label: "Mark Attendance", href: "/student/attend", icon: <QrCode className="h-4 w-4" /> },
     { label: "History", href: "/student/history", icon: <History className="h-4 w-4" /> },
-    { label: "My Device", href: "/setup-device", icon: <Fingerprint className="h-4 w-4" /> },
+    { label: "Devices", href: "/student/devices", icon: <Fingerprint className="h-4 w-4" /> },
   ],
   LECTURER: [
     { label: "Dashboard", href: "/lecturer", icon: <LayoutDashboard className="h-4 w-4" /> },
@@ -42,6 +42,7 @@ const navByRole: Record<string, NavItem[]> = {
     { label: "Dashboard", href: "/admin", icon: <LayoutDashboard className="h-4 w-4" /> },
     { label: "Users", href: "/admin/users", icon: <Users className="h-4 w-4" /> },
     { label: "Courses", href: "/admin/courses", icon: <BookOpen className="h-4 w-4" /> },
+    { label: "Passkey Management", href: "/admin/passkeys", icon: <Fingerprint className="h-4 w-4" /> },
     { label: "Settings", href: "/admin/settings", icon: <Settings className="h-4 w-4" /> },
   ],
   SUPER_ADMIN: [

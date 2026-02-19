@@ -65,7 +65,7 @@ export default async function StudentDashboard() {
                   href="/setup-device"
                   className="underline font-medium"
                 >
-                  register your biometric
+                  register your device
                 </Link>{" "}
                 before marking attendance.
               </p>

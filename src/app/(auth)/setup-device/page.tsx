@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { startRegistration } from "@simplewebauthn/browser";
-import { Fingerprint, Loader2, CheckCircle2, Shield } from "lucide-react";
+import { Fingerprint, Loader2, CheckCircle2, Shield, AlertCircle } from "lucide-react";
 
 export default function SetupDevicePage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState("");
 
@@ -16,7 +18,10 @@ export default function SetupDevicePage() {
 
     try {
       const optionsRes = await fetch("/api/webauthn/register");
-      if (!optionsRes.ok) throw new Error("Failed to get registration options");
+      if (!optionsRes.ok) {
+        const data = await optionsRes.json();
+        throw new Error(data.error || "Failed to get registration options");
+      }
       const options = await optionsRes.json();
 
       const registration = await startRegistration(options);
@@ -33,68 +38,103 @@ export default function SetupDevicePage() {
         setStatus("success");
         setTimeout(() => router.push("/student"), 2000);
       } else {
-        throw new Error("Verification failed");
+        throw new Error(result.error || "Verification failed");
       }
     } catch (err: any) {
       setStatus("error");
-      setError(err.message || "Device registration failed");
+      if (err.message.includes("locked")) {
+        setError("Your passkey registration is locked. Contact your administrator.");
+      } else if (err.message.includes("timeout") || err.message.includes("not allowed")) {
+        setError("Biometric verification was not completed. Please try again.");
+      } else {
+        setError(err.message || "Device registration failed");
+      }
     }
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm space-y-8 text-center">
-        <div>
-          <Shield className="mx-auto h-12 w-12 text-primary" />
-          <h1 className="mt-4 text-2xl font-bold">Setup Your Device</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Register your device&apos;s biometric (fingerprint or face) for
-            secure attendance verification. This binds your account to this
-            device.
-          </p>
-        </div>
-
-        {status === "success" ? (
-          <div className="space-y-4">
-            <CheckCircle2 className="mx-auto h-16 w-16 text-green-500" />
-            <p className="font-medium text-green-700">
-              Device registered successfully!
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Redirecting to dashboard...
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                {error}
+      <div className="w-full max-w-md">
+        <div className="rounded-lg border border-border bg-card p-8 space-y-6">
+          <div className="text-center space-y-2">
+            <div className="flex justify-center">
+              <div className="rounded-full bg-primary/10 p-4">
+                <Shield className="h-8 w-8 text-primary" />
               </div>
-            )}
-
-            <button
-              onClick={handleRegister}
-              disabled={status === "loading"}
-              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-50 transition-colors"
-            >
-              {status === "loading" ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <>
-                  <Fingerprint className="h-5 w-5" />
-                  Register Biometric
-                </>
-              )}
-            </button>
-
-            <button
-              onClick={() => router.push("/student")}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Skip for now
-            </button>
+            </div>
+            <h1 className="text-2xl font-bold">Register Your Device</h1>
+            <p className="text-sm text-muted-foreground">
+              Create a passkey with your device&apos;s biometric (fingerprint or face) to securely mark attendance
+            </p>
           </div>
-        )}
+
+          {status === "success" ? (
+            <div className="space-y-6 text-center">
+              <div className="space-y-2">
+                <CheckCircle2 className="mx-auto h-16 w-16 text-green-600" />
+                <p className="font-semibold text-green-700 text-lg">
+                  Passkey Registered!
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Your device is now secured and ready to use
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  router.push(session?.user ? "/student" : "/login");
+                }}
+                className="w-full h-10 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 font-medium transition-colors"
+              >
+                Continue to Dashboard
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {error && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-destructive">{error}</p>
+                </div>
+              )}
+
+              <button
+                onClick={handleRegister}
+                disabled={status === "loading"}
+                className="w-full inline-flex h-12 items-center justify-center gap-2 rounded-md bg-primary px-4 text-base font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {status === "loading" ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Setting up...
+                  </>
+                ) : (
+                  <>
+                    <Fingerprint className="h-5 w-5" />
+                    Register Biometric
+                  </>
+                )}
+              </button>
+
+              <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                <p className="text-xs font-medium text-foreground">Why is this required?</p>
+                <ul className="space-y-2 text-xs text-muted-foreground">
+                  <li className="flex gap-2">
+                    <span className="font-bold">•</span>
+                    <span>Only you can use this passkey with your biometric</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="font-bold">•</span>
+                    <span>Prevents unauthorized attendance marking</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="font-bold">•</span>
+                    <span>Cannot be shared or deleted without your permission</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

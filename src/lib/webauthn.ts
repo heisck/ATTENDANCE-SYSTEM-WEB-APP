@@ -16,10 +16,41 @@ const origin = process.env.WEBAUTHN_ORIGIN || "http://localhost:3000";
 
 const challengeStore = new Map<string, string>();
 
+function toBase64UrlCredentialId(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value instanceof Uint8Array) return Buffer.from(value).toString("base64url");
+  if (Buffer.isBuffer(value)) return value.toString("base64url");
+  return Buffer.from(value as ArrayBuffer).toString("base64url");
+}
+
+function maybeDecodeDoubleEncodedCredentialId(value: string): string | null {
+  try {
+    const decoded = Buffer.from(value, "base64url").toString("utf8");
+    if (/^[A-Za-z0-9_-]{16,}$/.test(decoded) && decoded !== value) {
+      return decoded;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getRegistrationOptions(userId: string, userName: string) {
   const existingCredentials = await db.webAuthnCredential.findMany({
     where: { userId },
     select: { credentialId: true, transports: true },
+  });
+
+  const excludeCredentials = existingCredentials.flatMap((cred) => {
+    const ids = [cred.credentialId];
+    const decoded = maybeDecodeDoubleEncodedCredentialId(cred.credentialId);
+    if (decoded) ids.push(decoded);
+
+    return ids.map((id) => ({
+      id,
+      type: "public-key" as const,
+      transports: cred.transports as AuthenticatorTransportFuture[],
+    }));
   });
 
   const options = await generateRegistrationOptions({
@@ -28,11 +59,7 @@ export async function getRegistrationOptions(userId: string, userName: string) {
     userID: userId,
     userName,
     attestationType: "none",
-    excludeCredentials: existingCredentials.map((cred) => ({
-      id: cred.credentialId,
-      type: "public-key",
-      transports: cred.transports as AuthenticatorTransportFuture[],
-    })) as any,
+    excludeCredentials: excludeCredentials as any,
     authenticatorSelection: {
       residentKey: "preferred",
       userVerification: "preferred",
@@ -54,6 +81,14 @@ export async function verifyRegistration(
   const expectedChallenge = challengeStore.get(userId);
   if (!expectedChallenge) throw new Error("Challenge expired or not found");
 
+  const user = await db.user.findUnique({ where: { id: userId } });
+  if (!user) throw new Error("User not found");
+
+  // Check if passkeys are locked
+  if (user.passkeysLockedUntilAdminReset && user.firstPasskeyCreatedAt) {
+    throw new Error("Passkey registration is locked. Please contact your administrator to reset.");
+  }
+
   const verification = await verifyRegistrationResponse({
     response,
     expectedChallenge,
@@ -64,10 +99,11 @@ export async function verifyRegistration(
   if (verification.verified && verification.registrationInfo) {
     const info = verification.registrationInfo;
 
+    // Lock passkeys after first creation
     await db.webAuthnCredential.create({
       data: {
         userId,
-        credentialId: Buffer.from(info.credentialID).toString("base64url"),
+        credentialId: toBase64UrlCredentialId(info.credentialID),
         publicKey: Buffer.from(info.credentialPublicKey),
         counter: BigInt(info.counter),
         transports: response.response?.transports || [],
@@ -76,6 +112,17 @@ export async function verifyRegistration(
         userAgent,
       },
     });
+
+    // Mark passkeys as locked on first creation
+    if (!user.firstPasskeyCreatedAt) {
+      await db.user.update({
+        where: { id: userId },
+        data: {
+          firstPasskeyCreatedAt: new Date(),
+          passkeysLockedUntilAdminReset: true,
+        },
+      });
+    }
   }
 
   challengeStore.delete(userId);
@@ -94,11 +141,8 @@ export async function getAuthenticationOptions(userId: string) {
 
   const options = await generateAuthenticationOptions({
     rpID,
-    allowCredentials: credentials.map((cred) => ({
-      id: cred.credentialId,
-      type: "public-key",
-      transports: cred.transports as AuthenticatorTransportFuture[],
-    })) as any,
+    // Let the client use discoverable credentials for this RP.
+    // We still enforce account ownership server-side in verifyAuthentication().
     userVerification: "preferred",
   });
 
@@ -118,8 +162,29 @@ export async function verifyAuthentication(
   const credential = await db.webAuthnCredential.findUnique({
     where: { credentialId: response.id },
   });
+  let resolvedCredential = credential;
 
-  if (!credential || credential.userId !== userId) {
+  if (!resolvedCredential) {
+    const legacyCredentialId = Buffer.from(response.id).toString("base64url");
+    resolvedCredential = await db.webAuthnCredential.findUnique({
+      where: { credentialId: legacyCredentialId },
+    });
+
+    // Self-heal legacy/double-encoded IDs when possible.
+    if (resolvedCredential && resolvedCredential.userId === userId) {
+      try {
+        await db.webAuthnCredential.update({
+          where: { id: resolvedCredential.id },
+          data: { credentialId: response.id },
+        });
+        resolvedCredential = { ...resolvedCredential, credentialId: response.id };
+      } catch {
+        // Ignore if unique conflict; verification can still continue.
+      }
+    }
+  }
+
+  if (!resolvedCredential || resolvedCredential.userId !== userId) {
     throw new Error("Credential not found or does not belong to user");
   }
 
@@ -129,10 +194,10 @@ export async function verifyAuthentication(
     expectedOrigin: origin,
     expectedRPID: rpID,
     authenticator: {
-      credentialID: Buffer.from(credential.credentialId, "base64url"),
-      credentialPublicKey: credential.publicKey,
-      counter: Number(credential.counter),
-      transports: credential.transports as AuthenticatorTransportFuture[],
+      credentialID: resolvedCredential.credentialId,
+      credentialPublicKey: resolvedCredential.publicKey,
+      counter: Number(resolvedCredential.counter),
+      transports: resolvedCredential.transports as AuthenticatorTransportFuture[],
     },
   } as any);
 

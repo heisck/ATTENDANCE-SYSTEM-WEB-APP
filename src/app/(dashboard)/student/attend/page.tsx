@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { QrScanner } from "@/components/qr-scanner";
 import { GpsCheck } from "@/components/gps-check";
 import { WebAuthnPrompt } from "@/components/webauthn-prompt";
+import Link from "next/link";
 import {
   CheckCircle2,
   XCircle,
-  Shield,
   Loader2,
   Fingerprint,
   MapPin,
@@ -38,14 +38,29 @@ export default function AttendPage() {
   const [webauthnVerified, setWebauthnVerified] = useState(false);
   const [gps, setGps] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [result, setResult] = useState<AttendanceResult | null>(null);
+  const [hasDevice, setHasDevice] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    async function checkDevice() {
+      try {
+        const res = await fetch("/api/webauthn/devices");
+        if (!res.ok) {
+          setHasDevice(false);
+          return;
+        }
+
+        const data = await res.json();
+        setHasDevice(Array.isArray(data.devices) && data.devices.length > 0);
+      } catch {
+        setHasDevice(false);
+      }
+    }
+
+    checkDevice();
+  }, []);
 
   function handleWebAuthnVerified() {
     setWebauthnVerified(true);
-    setStep("gps");
-  }
-
-  function handleWebAuthnSkipped() {
-    setWebauthnVerified(false);
     setStep("gps");
   }
 
@@ -146,22 +161,41 @@ export default function AttendPage() {
         ))}
       </div>
 
-      {step === "webauthn" && (
-        <WebAuthnPrompt
-          onVerified={handleWebAuthnVerified}
-          onSkipped={handleWebAuthnSkipped}
-        />
+      {hasDevice === null && (
+        <div className="flex flex-col items-center gap-4 py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Checking registered devices...</p>
+        </div>
       )}
 
-      {step === "gps" && (
+      {hasDevice === false && (
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-6 space-y-3">
+          <p className="font-semibold text-yellow-800">No registered device found</p>
+          <p className="text-sm text-yellow-700">
+            You must register a passkey before you can verify and mark attendance.
+          </p>
+          <Link
+            href="/setup-device"
+            className="inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            Register Device
+          </Link>
+        </div>
+      )}
+
+      {hasDevice && step === "webauthn" && (
+        <WebAuthnPrompt onVerified={handleWebAuthnVerified} />
+      )}
+
+      {hasDevice && step === "gps" && (
         <GpsCheck onLocationReady={handleGpsReady} />
       )}
 
-      {step === "qr" && (
+      {hasDevice && step === "qr" && (
         <QrScanner onScan={handleQrScan} />
       )}
 
-      {step === "submitting" && (
+      {hasDevice && step === "submitting" && (
         <div className="flex flex-col items-center gap-4 py-12">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
           <p className="font-medium">Verifying attendance...</p>
@@ -171,7 +205,7 @@ export default function AttendPage() {
         </div>
       )}
 
-      {step === "result" && result && (
+      {hasDevice && step === "result" && result && (
         <div className="space-y-4">
           <div
             className={`flex flex-col items-center gap-3 rounded-lg border p-8 ${

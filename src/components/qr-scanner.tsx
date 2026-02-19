@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Camera, CheckCircle2, XCircle } from "lucide-react";
+import { Camera, CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 interface QrScannerProps {
   onScan: (data: { sessionId: string; token: string; ts: number }) => void;
@@ -11,33 +11,59 @@ export function QrScanner({ onScan }: QrScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [scanning, setScanning] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
   const [error, setError] = useState("");
   const [scanned, setScanned] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
 
   async function startCamera() {
     setError("");
+    setVideoReady(false);
+    setScanning(true);
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: 640, height: 480 },
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+
+      if (!videoRef.current) {
+        setError("Unable to start camera preview. Please try again.");
+        stopCamera();
+        return;
       }
-      setScanning(true);
+
+      videoRef.current.srcObject = stream;
+      void videoRef.current.play().catch(() => {
+        setError("Unable to start camera preview. Please try again.");
+        stopCamera();
+      });
     } catch {
       setError("Camera access denied. Please allow camera permissions.");
+      setScanning(false);
     }
   }
 
   function stopCamera() {
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.srcObject = null;
+    }
+
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
     setScanning(false);
+    setVideoReady(false);
   }
 
   useEffect(() => {
@@ -136,19 +162,36 @@ export function QrScanner({ onScan }: QrScannerProps) {
           </span>
         </button>
       ) : (
-        <div className="relative overflow-hidden rounded-lg border border-border">
-          <video
-            ref={videoRef}
-            className="w-full"
-            playsInline
-            muted
-          />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="h-48 w-48 rounded-lg border-2 border-white/80 shadow-lg" />
+        <div className="relative overflow-hidden rounded-lg border border-border bg-black">
+          <div className="relative aspect-[4/3] w-full">
+            <video
+              ref={videoRef}
+              className="absolute inset-0 h-full w-full object-cover"
+              autoPlay
+              playsInline
+              muted
+              onLoadedData={() => setVideoReady(true)}
+            />
+            {!videoReady && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                <div className="flex items-center gap-2 rounded-md bg-black/70 px-3 py-2 text-sm text-white">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Starting camera...
+                </div>
+              </div>
+            )}
+            <div className="pointer-events-none absolute inset-0">
+              <div className="absolute left-1/2 top-1/2 h-56 w-56 -translate-x-1/2 -translate-y-1/2 rounded-xl border-4 border-cyan-300/95" />
+              <div className="absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-black/50 to-transparent" />
+              <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/50 to-transparent" />
+              <p className="absolute bottom-16 left-1/2 -translate-x-1/2 rounded-md bg-black/55 px-2 py-1 text-xs text-white">
+                Align QR within frame
+              </p>
+            </div>
           </div>
           <button
             onClick={stopCamera}
-            className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-md bg-black/50 px-4 py-2 text-sm text-white hover:bg-black/70 transition-colors"
+            className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-md bg-black/60 px-4 py-2 text-sm text-white hover:bg-black/80 transition-colors"
           >
             Cancel
           </button>
