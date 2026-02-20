@@ -23,11 +23,8 @@ RUN adduser --system --uid 1001 nextjs
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/tsx ./node_modules/tsx
-COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
 
 # Create public directory if it doesn't exist
 RUN mkdir -p /app/public
@@ -36,6 +33,5 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Run migrations and seed, then start app
-# Migrations must run as root for database access
-CMD ["sh", "-c", "echo 'Running database setup...' && npx prisma migrate deploy 2>/dev/null || npx prisma db push 2>/dev/null || true && echo 'Seeding database...' && npx tsx prisma/seed.ts 2>/dev/null || true && echo 'Starting application...' && su -s /bin/sh nextjs -c 'node server.js'"]
+# Run migrations and seed on startup, then start the app
+CMD ["sh", "-c", "echo 'Setting up database...' && npx prisma migrate deploy 2>/dev/null || npx prisma db push 2>/dev/null || true && echo 'Seeding initial data...' && npx tsx prisma/seed.ts 2>/dev/null || true && echo 'Starting application...' && node server.js"]
