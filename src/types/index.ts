@@ -1,6 +1,6 @@
-import { Role, SessionStatus } from "@prisma/client";
+import { AttendancePhase, Role, SessionStatus } from "@prisma/client";
 
-export type { Role, SessionStatus };
+export type { AttendancePhase, Role, SessionStatus };
 
 export interface OrganizationSettings {
   campusLat: number;
@@ -13,6 +13,8 @@ export interface QRPayload {
   sessionId: string;
   token: string;
   ts: number;
+  seq: number;
+  phase: AttendancePhase;
 }
 
 export interface GPSCoordinates {

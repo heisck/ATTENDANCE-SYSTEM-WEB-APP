@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getPhaseEndsAt, syncAttendanceSessionState } from "@/lib/attendance";
 import { generateQrPayload, getNextRotationMs } from "@/lib/qr";
 
 export async function GET(
@@ -14,10 +15,14 @@ export async function GET(
 
   const { id } = await params;
   const user = session.user as any;
+  const syncedSession = await syncAttendanceSessionState(id);
+  if (!syncedSession) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  }
 
   const attendanceSession = await db.attendanceSession.findUnique({
     where: { id },
-    select: { id: true, lecturerId: true, status: true, qrSecret: true },
+    select: { id: true, lecturerId: true, qrSecret: true },
   });
 
   if (!attendanceSession) {
@@ -28,12 +33,22 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  if (attendanceSession.status !== "ACTIVE") {
+  if (syncedSession.status !== "ACTIVE") {
     return NextResponse.json({ error: "Session is closed" }, { status: 410 });
   }
 
-  const qr = generateQrPayload(attendanceSession.id, attendanceSession.qrSecret);
-  const nextRotation = getNextRotationMs();
+  const qr = generateQrPayload(
+    attendanceSession.id,
+    attendanceSession.qrSecret,
+    syncedSession.phase,
+    syncedSession.qrRotationMs
+  );
+  const nextRotation = getNextRotationMs(syncedSession.qrRotationMs);
 
-  return NextResponse.json({ qr, nextRotationMs: nextRotation });
+  return NextResponse.json({
+    qr,
+    phase: syncedSession.phase,
+    phaseEndsAt: getPhaseEndsAt(syncedSession),
+    nextRotationMs: nextRotation,
+  });
 }

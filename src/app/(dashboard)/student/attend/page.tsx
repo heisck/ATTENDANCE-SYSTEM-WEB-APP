@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { QrScanner } from "@/components/qr-scanner";
 import { GpsCheck } from "@/components/gps-check";
 import { WebAuthnPrompt } from "@/components/webauthn-prompt";
@@ -13,6 +13,9 @@ import {
   MapPin,
   QrCode,
   Wifi,
+  AlertTriangle,
+  Clock,
+  RefreshCcw,
 } from "lucide-react";
 
 type Step = "webauthn" | "gps" | "qr" | "submitting" | "result";
@@ -33,12 +36,54 @@ interface AttendanceResult {
   error?: string;
 }
 
+interface SessionSyncResponse {
+  session: {
+    id: string;
+    status: "ACTIVE" | "CLOSED";
+    phase: "INITIAL" | "REVERIFY" | "CLOSED";
+    phaseEndsAt: string;
+  };
+  attendance: {
+    id: string;
+    initialMarkedAt: string;
+    reverifyRequired: boolean;
+    reverifyStatus:
+      | "NOT_REQUIRED"
+      | "PENDING"
+      | "RETRY_PENDING"
+      | "MISSED"
+      | "PASSED"
+      | "FAILED"
+      | "MANUAL_PRESENT";
+    reverifyDeadlineAt: string | null;
+    reverifyAttemptCount: number;
+    reverifyRetryCount: number;
+    reverifyMarkedAt: string | null;
+    reverifyManualOverride: boolean;
+    flagged: boolean;
+    canRequestRetry: boolean;
+  } | null;
+}
+
 export default function AttendPage() {
   const [step, setStep] = useState<Step>("webauthn");
   const [webauthnVerified, setWebauthnVerified] = useState(false);
   const [gps, setGps] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [result, setResult] = useState<AttendanceResult | null>(null);
   const [hasDevice, setHasDevice] = useState<boolean | null>(null);
+
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [syncState, setSyncState] = useState<SessionSyncResponse | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [requestingRetry, setRequestingRetry] = useState(false);
+
+  const [reverifyPasskeyVerified, setReverifyPasskeyVerified] = useState(false);
+  const [reverifySubmitting, setReverifySubmitting] = useState(false);
+  const [reverifyError, setReverifyError] = useState<string | null>(null);
+
+  const reverifyStatus = syncState?.attendance?.reverifyStatus;
+  const isPendingReverify =
+    reverifyStatus === "PENDING" || reverifyStatus === "RETRY_PENDING";
 
   useEffect(() => {
     async function checkDevice() {
@@ -59,6 +104,43 @@ export default function AttendPage() {
     checkDevice();
   }, []);
 
+  useEffect(() => {
+    if (!activeSessionId) return;
+
+    let cancelled = false;
+    const fetchSync = async () => {
+      try {
+        const res = await fetch(`/api/attendance/sessions/${activeSessionId}/me`);
+        const body = await res.json();
+        if (!res.ok) {
+          throw new Error(body.error || "Failed to sync session state");
+        }
+        if (!cancelled) {
+          setSyncState(body);
+          setSyncError(null);
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          setSyncError(error.message);
+        }
+      }
+    };
+
+    fetchSync();
+    const timer = setInterval(fetchSync, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    if (!isPendingReverify) {
+      setReverifyPasskeyVerified(false);
+      setReverifySubmitting(false);
+    }
+  }, [isPendingReverify]);
+
   function handleWebAuthnVerified() {
     setWebauthnVerified(true);
     setStep("gps");
@@ -69,7 +151,7 @@ export default function AttendPage() {
     setStep("qr");
   }
 
-  async function handleQrScan(data: { sessionId: string; token: string; ts: number }) {
+  async function handleInitialQrScan(data: { sessionId: string; token: string; ts: number }) {
     if (!gps) return;
 
     setStep("submitting");
@@ -108,6 +190,7 @@ export default function AttendPage() {
           gpsDistance: body.record.gpsDistance,
           layers: body.record.layers,
         });
+        setActiveSessionId(data.sessionId);
       }
       setStep("result");
     } catch {
@@ -123,42 +206,166 @@ export default function AttendPage() {
     }
   }
 
+  async function handleRequestRetry() {
+    if (!activeSessionId) return;
+
+    setRequestingRetry(true);
+    setReverifyError(null);
+    try {
+      const res = await fetch(
+        `/api/attendance/sessions/${activeSessionId}/reverify/request`,
+        { method: "POST" }
+      );
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error(body.error || "Retry request failed");
+      }
+      setSyncState((current) =>
+        current
+          ? {
+              ...current,
+              attendance: current.attendance
+                ? {
+                    ...current.attendance,
+                    reverifyStatus: body.record.reverifyStatus,
+                    reverifyRetryCount: body.record.reverifyRetryCount,
+                    reverifyAttemptCount: body.record.reverifyAttemptCount,
+                    reverifyDeadlineAt: body.record.reverifyDeadlineAt,
+                    canRequestRetry: false,
+                  }
+                : current.attendance,
+            }
+          : current
+      );
+    } catch (error: any) {
+      setReverifyError(error.message);
+    } finally {
+      setRequestingRetry(false);
+    }
+  }
+
+  async function handleReverifyQrScan(data: { sessionId: string; token: string; ts: number }) {
+    if (!activeSessionId) return;
+    if (data.sessionId !== activeSessionId) {
+      setReverifyError("This QR belongs to a different session.");
+      return;
+    }
+    if (!reverifyPasskeyVerified) {
+      setReverifyError("Passkey verification is required before scanning.");
+      return;
+    }
+
+    setReverifySubmitting(true);
+    setReverifyError(null);
+    try {
+      const res = await fetch("/api/attendance/reverify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: activeSessionId,
+          qrToken: data.token,
+          qrTimestamp: data.ts,
+          webauthnVerified: true,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error(body.error || "Reverification failed");
+      }
+
+      setSyncState((current) =>
+        current
+          ? {
+              ...current,
+              attendance: current.attendance
+                ? {
+                    ...current.attendance,
+                    reverifyStatus: "PASSED",
+                    reverifyMarkedAt: body.record.reverifyMarkedAt,
+                    flagged: false,
+                    canRequestRetry: false,
+                  }
+                : current.attendance,
+            }
+          : current
+      );
+      setReverifyPasskeyVerified(false);
+    } catch (error: any) {
+      setReverifyError(error.message);
+    } finally {
+      setReverifySubmitting(false);
+    }
+  }
+
+  const reverifyMessage = useMemo(() => {
+    if (!syncState?.attendance) return null;
+
+    const attendance = syncState.attendance;
+    if (!attendance.reverifyRequired) {
+      return {
+        tone: "green",
+        title: "Initial attendance confirmed",
+        body: "You were not selected for reverification. No further action is required.",
+      };
+    }
+
+    switch (attendance.reverifyStatus) {
+      case "PENDING":
+      case "RETRY_PENDING":
+        return {
+          tone: "amber",
+          title: "Reverification required",
+          body: attendance.reverifyDeadlineAt
+            ? `Complete reverification before ${new Date(
+                attendance.reverifyDeadlineAt
+              ).toLocaleTimeString()}.`
+            : "Complete reverification now.",
+        };
+      case "PASSED":
+      case "MANUAL_PRESENT":
+        return {
+          tone: "green",
+          title: "Reverification completed",
+          body: "Your attendance is fully verified.",
+        };
+      case "MISSED":
+        return {
+          tone: "yellow",
+          title: "Reverification missed",
+          body: "Request another slot if retries are still available.",
+        };
+      case "FAILED":
+        return {
+          tone: "red",
+          title: "Reverification attempts exhausted",
+          body: "You have been flagged for lecturer review.",
+        };
+      default:
+        return null;
+    }
+  }, [syncState]);
+
+  function resetFlow() {
+    setStep("webauthn");
+    setWebauthnVerified(false);
+    setGps(null);
+    setResult(null);
+    setActiveSessionId(null);
+    setSyncState(null);
+    setSyncError(null);
+    setRequestingRetry(false);
+    setReverifyPasskeyVerified(false);
+    setReverifySubmitting(false);
+    setReverifyError(null);
+  }
+
   return (
     <div className="mx-auto max-w-lg space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Mark Attendance</h1>
         <p className="text-muted-foreground">
-          Complete all verification steps to mark your attendance
+          Initial attendance is followed by adaptive random reverification.
         </p>
-      </div>
-
-      <div className="flex items-center gap-2">
-        {["webauthn", "gps", "qr", "result"].map((s, i) => (
-          <div key={s} className="flex items-center gap-2">
-            <div
-              className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium ${
-                step === s
-                  ? "bg-primary text-primary-foreground"
-                  : ["webauthn", "gps", "qr", "submitting", "result"].indexOf(step) > i
-                    ? "bg-green-100 text-green-700"
-                    : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {["webauthn", "gps", "qr", "submitting", "result"].indexOf(step) > i ? (
-                <CheckCircle2 className="h-4 w-4" />
-              ) : (
-                i + 1
-              )}
-            </div>
-            {i < 3 && (
-              <div className={`h-0.5 w-8 ${
-                ["webauthn", "gps", "qr", "submitting", "result"].indexOf(step) > i
-                  ? "bg-green-300"
-                  : "bg-muted"
-              }`} />
-            )}
-          </div>
-        ))}
       </div>
 
       {hasDevice === null && (
@@ -183,26 +390,49 @@ export default function AttendPage() {
         </div>
       )}
 
-      {hasDevice && step === "webauthn" && (
-        <WebAuthnPrompt onVerified={handleWebAuthnVerified} />
-      )}
+      {hasDevice && !result && (
+        <>
+          <div className="flex items-center gap-2">
+            {["webauthn", "gps", "qr", "result"].map((s, i) => (
+              <div key={s} className="flex items-center gap-2">
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium ${
+                    step === s
+                      ? "bg-primary text-primary-foreground"
+                      : ["webauthn", "gps", "qr", "submitting", "result"].indexOf(step) > i
+                        ? "bg-green-100 text-green-700"
+                        : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {["webauthn", "gps", "qr", "submitting", "result"].indexOf(step) > i ? (
+                    <CheckCircle2 className="h-4 w-4" />
+                  ) : (
+                    i + 1
+                  )}
+                </div>
+                {i < 3 && (
+                  <div
+                    className={`h-0.5 w-8 ${
+                      ["webauthn", "gps", "qr", "submitting", "result"].indexOf(step) > i
+                        ? "bg-green-300"
+                        : "bg-muted"
+                    }`}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
 
-      {hasDevice && step === "gps" && (
-        <GpsCheck onLocationReady={handleGpsReady} />
-      )}
-
-      {hasDevice && step === "qr" && (
-        <QrScanner onScan={handleQrScan} />
-      )}
-
-      {hasDevice && step === "submitting" && (
-        <div className="flex flex-col items-center gap-4 py-12">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <p className="font-medium">Verifying attendance...</p>
-          <p className="text-sm text-muted-foreground">
-            Running 4-layer verification pipeline
-          </p>
-        </div>
+          {step === "webauthn" && <WebAuthnPrompt onVerified={handleWebAuthnVerified} />}
+          {step === "gps" && <GpsCheck onLocationReady={handleGpsReady} />}
+          {step === "qr" && <QrScanner onScan={handleInitialQrScan} />}
+          {step === "submitting" && (
+            <div className="flex flex-col items-center gap-4 py-12">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <p className="font-medium">Verifying attendance...</p>
+            </div>
+          )}
+        </>
       )}
 
       {hasDevice && step === "result" && result && (
@@ -217,20 +447,15 @@ export default function AttendPage() {
             {result.success ? (
               <>
                 <CheckCircle2 className="h-16 w-16 text-green-600" />
-                <p className="text-xl font-bold text-green-800">
-                  Attendance Marked!
-                </p>
-                <p className="text-sm text-green-600">
-                  Confidence Score: {result.confidence}%
-                  {result.flagged && " (Flagged for review)"}
+                <p className="text-xl font-bold text-green-800">Initial Attendance Marked</p>
+                <p className="text-sm text-green-700">
+                  Confidence: {result.confidence}% {result.flagged ? "(Flagged for review)" : ""}
                 </p>
               </>
             ) : (
               <>
                 <XCircle className="h-16 w-16 text-red-600" />
-                <p className="text-xl font-bold text-red-800">
-                  Attendance Failed
-                </p>
+                <p className="text-xl font-bold text-red-800">Attendance Failed</p>
                 <p className="text-sm text-red-600">{result.error}</p>
               </>
             )}
@@ -238,7 +463,7 @@ export default function AttendPage() {
 
           {result.success && (
             <div className="rounded-lg border border-border p-4">
-              <p className="mb-3 text-sm font-medium">Verification Layers</p>
+              <p className="mb-3 text-sm font-medium">Initial Verification Layers</p>
               <div className="space-y-2">
                 <LayerRow
                   icon={<Fingerprint className="h-4 w-4" />}
@@ -268,16 +493,109 @@ export default function AttendPage() {
             </div>
           )}
 
+          {activeSessionId && (
+            <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">Reverification Sync</p>
+                {syncState?.session && (
+                  <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs">
+                    <Clock className="mr-1 h-3 w-3" />
+                    {syncState.session.phase} until{" "}
+                    {new Date(syncState.session.phaseEndsAt).toLocaleTimeString()}
+                  </span>
+                )}
+              </div>
+
+              {syncError && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+                  {syncError}
+                </div>
+              )}
+
+              {!syncState?.attendance && (
+                <p className="text-sm text-muted-foreground">
+                  Waiting for attendance state sync...
+                </p>
+              )}
+
+              {syncState?.attendance && reverifyMessage && (
+                <div
+                  className={`rounded-md border p-3 text-sm ${
+                    reverifyMessage.tone === "green"
+                      ? "border-green-300 bg-green-50 text-green-800"
+                      : reverifyMessage.tone === "amber"
+                        ? "border-amber-300 bg-amber-50 text-amber-800"
+                        : reverifyMessage.tone === "yellow"
+                          ? "border-yellow-300 bg-yellow-50 text-yellow-800"
+                          : "border-red-300 bg-red-50 text-red-800"
+                  }`}
+                >
+                  <p className="font-medium">{reverifyMessage.title}</p>
+                  <p className="mt-1">{reverifyMessage.body}</p>
+                  <p className="mt-1 text-xs">
+                    Attempts: {syncState.attendance.reverifyAttemptCount} | Retries used:{" "}
+                    {syncState.attendance.reverifyRetryCount}
+                  </p>
+                </div>
+              )}
+
+              {syncState?.attendance?.canRequestRetry && (
+                <button
+                  onClick={handleRequestRetry}
+                  disabled={requestingRetry}
+                  className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+                >
+                  {requestingRetry ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCcw className="h-4 w-4" />
+                  )}
+                  Request Reverification Retry
+                </button>
+              )}
+
+              {isPendingReverify && (
+                <div className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
+                  <div className="flex items-start gap-2 text-amber-800">
+                    <AlertTriangle className="mt-0.5 h-4 w-4" />
+                    <p className="text-sm font-medium">
+                      Complete reverification now: passkey verification, then scan the live QR.
+                    </p>
+                  </div>
+
+                  {!reverifyPasskeyVerified ? (
+                    <WebAuthnPrompt onVerified={() => setReverifyPasskeyVerified(true)} />
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-xs text-amber-800">
+                        Passkey verified. Scan the reverification QR before your deadline.
+                      </p>
+                      {reverifySubmitting ? (
+                        <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-white p-3 text-sm">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Submitting reverification...
+                        </div>
+                      ) : (
+                        <QrScanner onScan={handleReverifyQrScan} />
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {reverifyError && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+                  {reverifyError}
+                </div>
+              )}
+            </div>
+          )}
+
           <button
-            onClick={() => {
-              setStep("webauthn");
-              setWebauthnVerified(false);
-              setGps(null);
-              setResult(null);
-            }}
+            onClick={resetFlow}
             className="w-full rounded-md border border-border py-2 text-sm font-medium hover:bg-accent transition-colors"
           >
-            Mark Another Session
+            Reset Attendance Flow
           </button>
         </div>
       )}

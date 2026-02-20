@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { syncAttendanceSessionState } from "@/lib/attendance";
 import { markAttendanceSchema } from "@/lib/validators";
-import { verifyQrToken } from "@/lib/qr";
+import { verifyQrTokenStrict } from "@/lib/qr";
 import { isWithinRadius } from "@/lib/gps";
 import { isIpTrusted } from "@/lib/ip";
 import { calculateConfidence, isFlagged } from "@/lib/confidence";
@@ -21,6 +22,23 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const parsed = markAttendanceSchema.parse(body);
+    const now = new Date();
+
+    const syncedSession = await syncAttendanceSessionState(parsed.sessionId);
+    if (!syncedSession) {
+      return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    }
+
+    if (syncedSession.status !== "ACTIVE") {
+      return NextResponse.json({ error: "Session is no longer active" }, { status: 410 });
+    }
+
+    if (syncedSession.phase !== "INITIAL") {
+      return NextResponse.json(
+        { error: "Initial attendance window is closed. Wait for reverification prompts." },
+        { status: 410 }
+      );
+    }
 
     const attendanceSession = await db.attendanceSession.findUnique({
       where: { id: parsed.sessionId },
@@ -36,10 +54,6 @@ export async function POST(request: NextRequest) {
 
     if (!attendanceSession) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
-    }
-
-    if (attendanceSession.status !== "ACTIVE") {
-      return NextResponse.json({ error: "Session is no longer active" }, { status: 410 });
     }
 
     if (attendanceSession.course.enrollments.length === 0) {
@@ -61,11 +75,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const qrValid = verifyQrToken(
+    const qrValid = verifyQrTokenStrict(
       attendanceSession.qrSecret,
       parsed.qrToken,
-      parsed.qrTimestamp
+      "INITIAL",
+      now.getTime(),
+      syncedSession.qrRotationMs,
+      syncedSession.qrGraceMs
     );
+    if (!qrValid) {
+      return NextResponse.json(
+        { error: "QR is expired or invalid for the current time window" },
+        { status: 400 }
+      );
+    }
 
     const gpsResult = isWithinRadius(
       parsed.gpsLat,
@@ -109,6 +132,8 @@ export async function POST(request: NextRequest) {
         ipTrusted: ipCheck,
         qrToken: parsed.qrToken,
         webauthnUsed,
+        reverifyRequired: false,
+        reverifyStatus: "NOT_REQUIRED",
         confidence,
         flagged,
       },

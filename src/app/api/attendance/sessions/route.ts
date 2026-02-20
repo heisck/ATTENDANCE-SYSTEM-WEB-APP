@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import {
+  INITIAL_PHASE_MS,
+  TOTAL_SESSION_MS,
+  getDefaultInitialEndsAt,
+  getDefaultReverifyEndsAt,
+  QR_GRACE_MS,
+  QR_ROTATION_MS,
+} from "@/lib/attendance";
 import { generateQrSecret } from "@/lib/qr";
 import { createSessionSchema } from "@/lib/validators";
 
@@ -36,10 +44,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const startedAt = new Date();
+
     const attendanceSession = await db.attendanceSession.create({
       data: {
         courseId: parsed.courseId,
         lecturerId: user.id,
+        phase: "INITIAL",
+        startedAt,
+        initialEndsAt: getDefaultInitialEndsAt(startedAt),
+        reverifyEndsAt: getDefaultReverifyEndsAt(startedAt),
+        qrRotationMs: QR_ROTATION_MS,
+        qrGraceMs: QR_GRACE_MS,
         gpsLat: parsed.gpsLat,
         gpsLng: parsed.gpsLng,
         radiusMeters: parsed.radiusMeters,
@@ -65,6 +81,33 @@ export async function GET() {
   }
 
   const user = session.user as any;
+  const now = new Date();
+
+  await db.attendanceSession.updateMany({
+    where: {
+      status: "ACTIVE",
+      startedAt: { lt: new Date(now.getTime() - TOTAL_SESSION_MS) },
+    },
+    data: {
+      status: "CLOSED",
+      phase: "CLOSED",
+      closedAt: now,
+    },
+  });
+
+  await db.attendanceSession.updateMany({
+    where: {
+      status: "ACTIVE",
+      phase: "INITIAL",
+      startedAt: {
+        lte: new Date(now.getTime() - INITIAL_PHASE_MS),
+        gt: new Date(now.getTime() - TOTAL_SESSION_MS),
+      },
+    },
+    data: {
+      phase: "REVERIFY",
+    },
+  });
 
   const where =
     user.role === "LECTURER"

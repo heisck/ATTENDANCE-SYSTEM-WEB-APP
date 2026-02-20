@@ -83,15 +83,27 @@ async function main() {
 
   const students = [];
   for (let i = 1; i <= 5; i++) {
+    const studentEmail = `student${i}@st.knust.edu.gh`;
+    const studentId = `2024${String(i).padStart(4, "0")}`;
+    const indexNumber = `ITC/24/${String(i).padStart(4, "0")}`;
+
     const student = await prisma.user.upsert({
-      where: { email: `student${i}@st.knust.edu.gh` },
-      update: {},
-      create: {
-        email: `student${i}@st.knust.edu.gh`,
+      where: { email: studentEmail },
+      update: {
         name: `Student ${i}`,
         passwordHash: password,
         role: Role.STUDENT,
-        studentId: `2024${String(i).padStart(4, "0")}`,
+        studentId,
+        indexNumber,
+        organizationId: org.id,
+      },
+      create: {
+        email: studentEmail,
+        name: `Student ${i}`,
+        passwordHash: password,
+        role: Role.STUDENT,
+        studentId,
+        indexNumber,
         organizationId: org.id,
       },
     });

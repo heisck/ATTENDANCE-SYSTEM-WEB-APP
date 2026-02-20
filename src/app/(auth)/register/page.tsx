@@ -13,6 +13,7 @@ export default function RegisterPage() {
     password: "",
     role: "STUDENT" as "STUDENT" | "LECTURER",
     studentId: "",
+    indexNumber: "",
     organizationSlug: "",
   });
   const [error, setError] = useState("");
@@ -129,17 +130,34 @@ export default function RegisterPage() {
           </div>
 
           {form.role === "STUDENT" && (
-            <div className="space-y-2">
-              <label htmlFor="studentId" className="text-sm font-medium">
-                Student ID
-              </label>
-              <input
-                id="studentId"
-                value={form.studentId}
-                onChange={(e) => update("studentId", e.target.value)}
-                placeholder="e.g. 20241234"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label htmlFor="studentId" className="text-sm font-medium">
+                  Student ID
+                </label>
+                <input
+                  id="studentId"
+                  value={form.studentId}
+                  onChange={(e) => update("studentId", e.target.value)}
+                  placeholder="e.g. 20241234"
+                  required={form.role === "STUDENT"}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="indexNumber" className="text-sm font-medium">
+                  Index Number
+                </label>
+                <input
+                  id="indexNumber"
+                  value={form.indexNumber}
+                  onChange={(e) => update("indexNumber", e.target.value)}
+                  placeholder="e.g. ITC/24/0012"
+                  required={form.role === "STUDENT"}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </div>
             </div>
           )}
 

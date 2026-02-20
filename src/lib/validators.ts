@@ -11,7 +11,25 @@ export const registerSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
   role: z.enum(["STUDENT", "LECTURER"]),
   studentId: z.string().optional(),
+  indexNumber: z.string().optional(),
   organizationSlug: z.string().min(1, "Organization is required"),
+}).superRefine((data, ctx) => {
+  if (data.role === "STUDENT") {
+    if (!data.studentId || data.studentId.trim().length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["studentId"],
+        message: "Student ID is required for students",
+      });
+    }
+    if (!data.indexNumber || data.indexNumber.trim().length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["indexNumber"],
+        message: "Index Number is required for students",
+      });
+    }
+  }
 });
 
 export const createSessionSchema = z.object({

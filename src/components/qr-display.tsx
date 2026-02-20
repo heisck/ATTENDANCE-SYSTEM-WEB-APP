@@ -12,6 +12,8 @@ export function QrDisplay({ sessionId }: QrDisplayProps) {
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [phase, setPhase] = useState<"INITIAL" | "REVERIFY" | "CLOSED">("INITIAL");
+  const [phaseEndsAt, setPhaseEndsAt] = useState<string | null>(null);
 
   const fetchAndRender = useCallback(async () => {
     try {
@@ -21,7 +23,7 @@ export function QrDisplay({ sessionId }: QrDisplayProps) {
         throw new Error(data.error || "Failed to fetch QR");
       }
 
-      const { qr, nextRotationMs } = await res.json();
+      const { qr, nextRotationMs, phase, phaseEndsAt } = await res.json();
       const payload = JSON.stringify(qr);
 
       const dataUrl = await QRCode.toDataURL(payload, {
@@ -32,6 +34,8 @@ export function QrDisplay({ sessionId }: QrDisplayProps) {
       });
 
       setQrDataUrl(dataUrl);
+      setPhase(phase);
+      setPhaseEndsAt(phaseEndsAt ?? null);
       setError("");
       setLoading(false);
 
@@ -77,9 +81,19 @@ export function QrDisplay({ sessionId }: QrDisplayProps) {
           />
         )}
       </div>
-      <p className="text-center text-xs text-muted-foreground">
-        QR rotates every 5 seconds &mdash; students must scan in person
-      </p>
+      <div className="space-y-1 text-center">
+        <p className="text-xs text-muted-foreground">
+          QR rotates every 5 seconds &mdash; students must scan in person
+        </p>
+        <p className="text-xs font-medium text-foreground">
+          Phase: {phase === "INITIAL" ? "Initial Attendance" : phase === "REVERIFY" ? "Reverification" : "Closed"}
+        </p>
+        {phaseEndsAt && (
+          <p className="text-[11px] text-muted-foreground">
+            Phase ends at {new Date(phaseEndsAt).toLocaleTimeString()}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

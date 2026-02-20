@@ -19,6 +19,22 @@ enum SessionStatus {
   CLOSED
 }
 
+enum AttendancePhase {
+  INITIAL
+  REVERIFY
+  CLOSED
+}
+
+enum ReverifyStatus {
+  NOT_REQUIRED
+  PENDING
+  RETRY_PENDING
+  MISSED
+  PASSED
+  FAILED
+  MANUAL_PRESENT
+}
+
 enum SubscriptionPlan {
   FREE
   BASIC
@@ -50,7 +66,8 @@ model User {
   name           String
   passwordHash   String
   role           Role     @default(STUDENT)
-  studentId      String?
+  studentId      String?  @unique
+  indexNumber    String?  @unique
   organizationId String?
   emailVerified  DateTime?
   image          String?
@@ -128,6 +145,14 @@ model AttendanceSession {
   courseId      String
   lecturerId   String
   status       SessionStatus @default(ACTIVE)
+  phase        AttendancePhase @default(INITIAL)
+  initialEndsAt DateTime?
+  reverifyEndsAt DateTime?
+  qrRotationMs Int           @default(5000)
+  qrGraceMs    Int           @default(1000)
+  reverifySelectionRate Float @default(0.3)
+  reverifySelectionDone Boolean @default(false)
+  reverifySelectedCount Int  @default(0)
   gpsLat       Float
   gpsLng       Float
   radiusMeters Int           @default(500)
@@ -142,6 +167,7 @@ model AttendanceSession {
   @@index([courseId])
   @@index([lecturerId])
   @@index([status])
+  @@index([phase])
 }
 
 model AttendanceRecord {
@@ -155,6 +181,16 @@ model AttendanceRecord {
   ipTrusted    Boolean  @default(false)
   qrToken      String
   webauthnUsed Boolean  @default(true)
+  reverifyRequired Boolean @default(false)
+  reverifyStatus ReverifyStatus @default(NOT_REQUIRED)
+  reverifyRequestedAt DateTime?
+  reverifyDeadlineAt DateTime?
+  reverifyMarkedAt DateTime?
+  reverifyAttemptCount Int @default(0)
+  reverifyRetryCount Int @default(0)
+  reverifyPasskeyUsed Boolean @default(false)
+  reverifyManualOverride Boolean @default(false)
+  reverifyManualOverriddenAt DateTime?
   confidence   Int
   flagged      Boolean  @default(false)
   markedAt     DateTime @default(now())
@@ -166,6 +202,7 @@ model AttendanceRecord {
   @@index([sessionId])
   @@index([studentId])
   @@index([flagged])
+  @@index([reverifyStatus])
 }
 
 model AuditLog {

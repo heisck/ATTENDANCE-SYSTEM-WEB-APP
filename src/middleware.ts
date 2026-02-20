@@ -1,5 +1,5 @@
-import { auth } from "@/lib/auth";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getToken } from "next-auth/jwt";
 
 const roleRoutes: Record<string, string[]> = {
   STUDENT: ["/student"],
@@ -15,9 +15,19 @@ const roleDashboard: Record<string, string> = {
   SUPER_ADMIN: "/super-admin",
 };
 
-export default auth((req) => {
+export default async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const user = req.auth?.user as any;
+  const token = (await getToken({
+    req,
+    secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+  })) as any;
+  const user = token
+    ? {
+        id: token.id,
+        role: token.role,
+        organizationId: token.organizationId,
+      }
+    : null;
 
   const isAuthPage = pathname.startsWith("/login") || pathname.startsWith("/register");
   const isDashboard =
@@ -48,7 +58,7 @@ export default auth((req) => {
   }
 
   return NextResponse.next();
-});
+}
 
 export const config = {
   matcher: [
