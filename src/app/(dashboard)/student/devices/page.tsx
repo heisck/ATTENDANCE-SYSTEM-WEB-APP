@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, Smartphone, Laptop, Trash2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { useSession } from "next-auth/react";
+import Link from "next/link";
 
 interface Device {
   id: string;
@@ -41,12 +42,12 @@ export default function DevicesPage() {
   }
 
   async function handleDeleteDevice(credentialId: string) {
-    if (devices.length === 1) {
-      alert("You must have at least one device registered. If you already removed this passkey from your device password/passkey manager, contact your administrator to reset your passkeys.");
-      return;
-    }
+    const isOnlyDevice = devices.length === 1;
+    const confirmMessage = isOnlyDevice
+      ? "Delete your only passkey? You must register a new passkey before you can mark attendance again."
+      : "Delete this passkey? You won't be able to use it for attendance.";
 
-    if (!confirm("Delete this passkey? You won't be able to use it for attendance.")) {
+    if (!confirm(confirmMessage)) {
       return;
     }
 
@@ -61,7 +62,9 @@ export default function DevicesPage() {
         throw new Error(data.error || "Failed to delete device");
       }
 
-      setDevices(devices.filter(d => d.credentialId !== credentialId));
+      setDevices((current) =>
+        current.filter((d) => d.credentialId !== credentialId)
+      );
       setError(null);
     } catch (err: any) {
       setError(err.message);
@@ -91,11 +94,19 @@ export default function DevicesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Registered Devices</h1>
-        <p className="text-muted-foreground">
-          Manage the devices and passkeys used for attendance verification
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Registered Devices</h1>
+          <p className="text-muted-foreground">
+            Manage the devices and passkeys used for attendance verification
+          </p>
+        </div>
+        <Link
+          href="/setup-device"
+          className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          Register New Passkey
+        </Link>
       </div>
 
       {error && (
@@ -152,26 +163,25 @@ export default function DevicesPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                {devices.length === 1 ? (
+                {devices.length === 1 && (
                   <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted text-muted-foreground text-xs">
                     <CheckCircle2 className="h-4 w-4" />
                     Only Device
                   </div>
-                ) : (
-                  <button
-                    onClick={() => handleDeleteDevice(device.credentialId)}
-                    disabled={deletingId === device.credentialId}
-                    title="Delete this passkey"
-                    className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50 transition-colors"
-                  >
-                    {deletingId === device.credentialId ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-4 w-4" />
-                    )}
-                    Delete
-                  </button>
                 )}
+                <button
+                  onClick={() => handleDeleteDevice(device.credentialId)}
+                  disabled={deletingId === device.credentialId}
+                  title="Delete this passkey"
+                  className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50 transition-colors"
+                >
+                  {deletingId === device.credentialId ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                  Delete
+                </button>
               </div>
             </div>
           ))}
@@ -191,7 +201,7 @@ export default function DevicesPage() {
           </li>
           <li className="flex gap-2">
             <span className="font-medium text-foreground">•</span>
-            <span>You must always have at least one active device</span>
+            <span>Deleting your only passkey requires admin unlock first</span>
           </li>
           <li className="flex gap-2">
             <span className="font-medium text-foreground">•</span>

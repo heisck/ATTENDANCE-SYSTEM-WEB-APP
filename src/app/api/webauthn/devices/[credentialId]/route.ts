@@ -27,9 +27,20 @@ export async function DELETE(
       where: { userId: session.user.id },
     });
 
-    if (credentialCount <= 1) {
+    const userState = await db.user.findUnique({
+      where: { id: session.user.id },
+      select: { passkeysLockedUntilAdminReset: true },
+    });
+
+    if (!userState) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // During normal locked mode, users must keep at least one credential.
+    // After an admin unlock, allow deleting the last credential for passkey replacement.
+    if (credentialCount <= 1 && userState.passkeysLockedUntilAdminReset) {
       return NextResponse.json(
-        { error: "You must have at least one device registered" },
+        { error: "You must have at least one device registered while passkeys are locked. Ask your administrator to unlock your passkeys first." },
         { status: 400 }
       );
     }
