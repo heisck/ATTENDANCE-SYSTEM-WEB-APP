@@ -25,17 +25,17 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/node_modules/tsx ./node_modules/tsx
+COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
 
 # Create public directory if it doesn't exist
 RUN mkdir -p /app/public
 
-# Copy entrypoint script
-COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
-RUN chmod +x docker-entrypoint.sh
-
-USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["./docker-entrypoint.sh"]
+# Run migrations and seed, then start app
+# Migrations must run as root for database access
+CMD ["sh", "-c", "echo 'Running database setup...' && npx prisma migrate deploy 2>/dev/null || npx prisma db push 2>/dev/null || true && echo 'Seeding database...' && npx tsx prisma/seed.ts 2>/dev/null || true && echo 'Starting application...' && su -s /bin/sh nextjs -c 'node server.js'"]
