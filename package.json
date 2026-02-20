@@ -11,6 +11,7 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:seed": "npx tsx prisma/seed.ts",
+    "db:setup": "prisma db push --skip-generate && npx tsx prisma/seed.ts",
     "db:studio": "prisma studio"
   },
   "keywords": [],

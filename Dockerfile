@@ -33,6 +33,6 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Run migrations and seed on startup, then start the app.
-# Fail fast if DB setup fails so deployment does not go live with an empty schema.
-CMD ["sh", "-c", "set -e; echo 'Setting up database...'; npx prisma migrate deploy || npx prisma db push; echo 'Seeding initial data...'; npx tsx prisma/seed.ts; echo 'Starting application...'; node server.js"]
+# Start web app only. Run DB setup in Render Pre-Deploy Command:
+# npm run db:setup
+CMD ["node", "server.js"]
