@@ -22,11 +22,6 @@ export async function DELETE(
       return NextResponse.json({ error: "Credential not found" }, { status: 404 });
     }
 
-    // Check if user would be left without any credentials
-    const credentialCount = await db.webAuthnCredential.count({
-      where: { userId: session.user.id },
-    });
-
     const userState = await db.user.findUnique({
       where: { id: session.user.id },
       select: { passkeysLockedUntilAdminReset: true },
@@ -36,11 +31,9 @@ export async function DELETE(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // During normal locked mode, users must keep at least one credential.
-    // After an admin unlock, allow deleting the last credential for passkey replacement.
-    if (credentialCount <= 1 && userState.passkeysLockedUntilAdminReset) {
+    if (userState.passkeysLockedUntilAdminReset) {
       return NextResponse.json(
-        { error: "You must have at least one device registered while passkeys are locked. Ask your administrator to unlock your passkeys first." },
+        { error: "Passkey deletion is locked. Ask your administrator to unlock your passkeys first." },
         { status: 400 }
       );
     }

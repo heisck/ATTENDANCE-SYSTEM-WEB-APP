@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { startRegistration } from "@simplewebauthn/browser";
@@ -11,8 +11,52 @@ export default function SetupDevicePage() {
   const { data: session } = useSession();
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState("");
+  const [passkeysLockedUntilAdminReset, setPasskeysLockedUntilAdminReset] = useState(false);
+  const [hasExistingPasskey, setHasExistingPasskey] = useState(false);
+  const [checkingLock, setCheckingLock] = useState(true);
+
+  useEffect(() => {
+    checkPasskeyState();
+  }, []);
+
+  async function checkPasskeyState() {
+    try {
+      const res = await fetch("/api/webauthn/devices");
+      if (!res.ok) return;
+      const data = await res.json();
+      const isLocked = Boolean(data.passkeysLockedUntilAdminReset);
+      const hasPasskey = Array.isArray(data.devices) && data.devices.length > 0;
+      setPasskeysLockedUntilAdminReset(isLocked);
+      setHasExistingPasskey(hasPasskey);
+      if (isLocked) {
+        setStatus("error");
+        setError("Your passkey registration is locked. Contact your administrator.");
+      } else if (hasPasskey) {
+        setStatus("error");
+        setError("Delete your existing passkey first before registering a new one.");
+      }
+    } catch {
+      // The register API still enforces lock checks; this pre-check only improves UX.
+    } finally {
+      setCheckingLock(false);
+    }
+  }
 
   async function handleRegister() {
+    if (checkingLock) return;
+
+    if (passkeysLockedUntilAdminReset) {
+      setStatus("error");
+      setError("Your passkey registration is locked. Contact your administrator.");
+      return;
+    }
+
+    if (hasExistingPasskey) {
+      setStatus("error");
+      setError("Delete your existing passkey first before registering a new one.");
+      return;
+    }
+
     setStatus("loading");
     setError("");
 
@@ -44,6 +88,8 @@ export default function SetupDevicePage() {
       setStatus("error");
       if (err.message.includes("locked")) {
         setError("Your passkey registration is locked. Contact your administrator.");
+      } else if (err.message.toLowerCase().includes("existing passkey")) {
+        setError("Delete your existing passkey first before registering a new one.");
       } else if (err.message.includes("timeout") || err.message.includes("not allowed")) {
         setError("Biometric verification was not completed. Please try again.");
       } else {
@@ -99,13 +145,33 @@ export default function SetupDevicePage() {
 
               <button
                 onClick={handleRegister}
-                disabled={status === "loading"}
+                disabled={
+                  status === "loading" ||
+                  checkingLock ||
+                  passkeysLockedUntilAdminReset ||
+                  hasExistingPasskey
+                }
                 className="w-full inline-flex h-12 items-center justify-center gap-2 rounded-md bg-primary px-4 text-base font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {status === "loading" ? (
+                {checkingLock ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Checking status...
+                  </>
+                ) : status === "loading" ? (
                   <>
                     <Loader2 className="h-5 w-5 animate-spin" />
                     Setting up...
+                  </>
+                ) : passkeysLockedUntilAdminReset ? (
+                  <>
+                    <AlertCircle className="h-5 w-5" />
+                    Registration Locked
+                  </>
+                ) : hasExistingPasskey ? (
+                  <>
+                    <AlertCircle className="h-5 w-5" />
+                    Delete Existing Passkey First
                   </>
                 ) : (
                   <>

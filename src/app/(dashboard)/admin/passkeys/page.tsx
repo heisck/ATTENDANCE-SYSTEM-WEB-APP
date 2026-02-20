@@ -76,6 +76,30 @@ export default function PasskeyManagementPage() {
     }
   }
 
+  async function handleLockPasskeys(userId: string) {
+    try {
+      setActionInProgress(true);
+      const res = await fetch(`/api/admin/passkeys/${userId}/lock`, {
+        method: "POST",
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to lock passkeys");
+      }
+
+      setSuccess(`Passkeys locked for ${users.find((u) => u.id === userId)?.name}`);
+      await fetchUsers();
+      setSelectedUserId(null);
+
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setActionInProgress(false);
+    }
+  }
+
   async function handleDeleteCredentials(userId: string) {
     if (!confirm("Delete all passkeys for this user? They will need to re-register.")) {
       return;
@@ -109,7 +133,7 @@ export default function PasskeyManagementPage() {
       <div>
         <h1 className="text-2xl font-bold">Passkey Management</h1>
         <p className="text-muted-foreground">
-          Manage user passkeys and reset locks for legitimate access recovery
+          Manage user passkeys and control lock state for legitimate access recovery
         </p>
       </div>
 
@@ -184,7 +208,7 @@ export default function PasskeyManagementPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        {user.passkeysLockedUntilAdminReset && (
+                        {user.passkeysLockedUntilAdminReset ? (
                           <button
                             onClick={() => handleUnlockPasskeys(user.id)}
                             disabled={actionInProgress}
@@ -197,6 +221,20 @@ export default function PasskeyManagementPage() {
                               <Unlock className="h-3 w-3" />
                             )}
                             Unlock
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleLockPasskeys(user.id)}
+                            disabled={actionInProgress}
+                            title="Lock passkey changes until admin unlocks"
+                            className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-200 disabled:opacity-50 transition-colors"
+                          >
+                            {actionInProgress ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Lock className="h-3 w-3" />
+                            )}
+                            Lock
                           </button>
                         )}
                         <button
@@ -238,6 +276,10 @@ export default function PasskeyManagementPage() {
           <li className="flex gap-2">
             <span className="font-medium text-foreground">Unlock:</span>
             <span>Allow user to register a new passkey on a different device (e.g., lost device).</span>
+          </li>
+          <li className="flex gap-2">
+            <span className="font-medium text-foreground">Lock:</span>
+            <span>Disable passkey delete/add actions again until an admin re-unlocks the user.</span>
           </li>
           <li className="flex gap-2">
             <span className="font-medium text-foreground">Delete:</span>

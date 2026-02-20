@@ -9,18 +9,28 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const credentials = await db.webAuthnCredential.findMany({
-      where: { userId: session.user.id },
-      select: {
-        credentialId: true,
-        deviceType: true,
-        userAgent: true,
-        transports: true,
-        backedUp: true,
-        registeredAt: true,
-      },
-      orderBy: { registeredAt: "desc" },
-    });
+    const [credentials, userState] = await Promise.all([
+      db.webAuthnCredential.findMany({
+        where: { userId: session.user.id },
+        select: {
+          credentialId: true,
+          deviceType: true,
+          userAgent: true,
+          transports: true,
+          backedUp: true,
+          registeredAt: true,
+        },
+        orderBy: { registeredAt: "desc" },
+      }),
+      db.user.findUnique({
+        where: { id: session.user.id },
+        select: { passkeysLockedUntilAdminReset: true },
+      }),
+    ]);
+
+    if (!userState) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
 
     return NextResponse.json({
       devices: credentials.map((cred) => ({
@@ -32,6 +42,7 @@ export async function GET(request: NextRequest) {
         backedUp: cred.backedUp,
         registeredAt: cred.registeredAt,
       })),
+      passkeysLockedUntilAdminReset: userState.passkeysLockedUntilAdminReset,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

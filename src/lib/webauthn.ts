@@ -36,10 +36,27 @@ function maybeDecodeDoubleEncodedCredentialId(value: string): string | null {
 }
 
 export async function getRegistrationOptions(userId: string, userName: string) {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      passkeysLockedUntilAdminReset: true,
+    },
+  });
+
+  if (!user) throw new Error("User not found");
+
+  if (user.passkeysLockedUntilAdminReset) {
+    throw new Error("Passkey registration is locked. Please contact your administrator to reset.");
+  }
+
   const existingCredentials = await db.webAuthnCredential.findMany({
     where: { userId },
     select: { credentialId: true, transports: true },
   });
+
+  if (existingCredentials.length > 0) {
+    throw new Error("Delete your existing passkey before registering a new one.");
+  }
 
   const excludeCredentials = existingCredentials.flatMap((cred) => {
     const ids = [cred.credentialId];
@@ -81,12 +98,26 @@ export async function verifyRegistration(
   const expectedChallenge = challengeStore.get(userId);
   if (!expectedChallenge) throw new Error("Challenge expired or not found");
 
-  const user = await db.user.findUnique({ where: { id: userId } });
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      firstPasskeyCreatedAt: true,
+      passkeysLockedUntilAdminReset: true,
+    },
+  });
   if (!user) throw new Error("User not found");
 
   // Check if passkeys are locked
-  if (user.passkeysLockedUntilAdminReset && user.firstPasskeyCreatedAt) {
+  if (user.passkeysLockedUntilAdminReset) {
     throw new Error("Passkey registration is locked. Please contact your administrator to reset.");
+  }
+
+  const existingCredentialCount = await db.webAuthnCredential.count({
+    where: { userId },
+  });
+
+  if (existingCredentialCount > 0) {
+    throw new Error("Delete your existing passkey before registering a new one.");
   }
 
   const verification = await verifyRegistrationResponse({
@@ -98,31 +129,52 @@ export async function verifyRegistration(
 
   if (verification.verified && verification.registrationInfo) {
     const info = verification.registrationInfo;
-
-    // Lock passkeys after first creation
-    await db.webAuthnCredential.create({
-      data: {
-        userId,
-        credentialId: toBase64UrlCredentialId(info.credentialID),
-        publicKey: Buffer.from(info.credentialPublicKey),
-        counter: BigInt(info.counter),
-        transports: response.response?.transports || [],
-        deviceType: info.credentialDeviceType,
-        backedUp: info.credentialBackedUp,
-        userAgent,
-      },
-    });
-
-    // Mark passkeys as locked on first creation
-    if (!user.firstPasskeyCreatedAt) {
-      await db.user.update({
+    await db.$transaction(async (tx) => {
+      const freshUser = await tx.user.findUnique({
         where: { id: userId },
-        data: {
-          firstPasskeyCreatedAt: new Date(),
+        select: {
+          firstPasskeyCreatedAt: true,
           passkeysLockedUntilAdminReset: true,
         },
       });
-    }
+
+      if (!freshUser) {
+        throw new Error("User not found");
+      }
+
+      if (freshUser.passkeysLockedUntilAdminReset) {
+        throw new Error("Passkey registration is locked. Please contact your administrator to reset.");
+      }
+
+      const freshCredentialCount = await tx.webAuthnCredential.count({
+        where: { userId },
+      });
+
+      if (freshCredentialCount > 0) {
+        throw new Error("Delete your existing passkey before registering a new one.");
+      }
+
+      await tx.webAuthnCredential.create({
+        data: {
+          userId,
+          credentialId: toBase64UrlCredentialId(info.credentialID),
+          publicKey: Buffer.from(info.credentialPublicKey),
+          counter: BigInt(info.counter),
+          transports: response.response?.transports || [],
+          deviceType: info.credentialDeviceType,
+          backedUp: info.credentialBackedUp,
+          userAgent,
+        },
+      });
+
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          passkeysLockedUntilAdminReset: true,
+          firstPasskeyCreatedAt: freshUser.firstPasskeyCreatedAt ?? new Date(),
+        },
+      });
+    });
   }
 
   challengeStore.delete(userId);

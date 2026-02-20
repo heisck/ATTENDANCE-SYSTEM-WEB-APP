@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, Smartphone, Laptop, Trash2, AlertCircle, CheckCircle2 } from "lucide-react";
-import { useSession } from "next-auth/react";
 import Link from "next/link";
 
 interface Device {
@@ -16,11 +16,14 @@ interface Device {
 }
 
 export default function DevicesPage() {
-  const { data: session } = useSession();
+  const router = useRouter();
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [passkeysLockedUntilAdminReset, setPasskeysLockedUntilAdminReset] = useState(false);
+  const canRegisterNewPasskey =
+    !loading && !passkeysLockedUntilAdminReset && devices.length === 0;
 
   useEffect(() => {
     fetchDevices();
@@ -32,7 +35,8 @@ export default function DevicesPage() {
       const res = await fetch("/api/webauthn/devices");
       if (!res.ok) throw new Error("Failed to fetch devices");
       const data = await res.json();
-      setDevices(data.devices);
+      setDevices(data.devices || []);
+      setPasskeysLockedUntilAdminReset(Boolean(data.passkeysLockedUntilAdminReset));
       setError(null);
     } catch (err: any) {
       setError(err.message);
@@ -42,6 +46,11 @@ export default function DevicesPage() {
   }
 
   async function handleDeleteDevice(credentialId: string) {
+    if (passkeysLockedUntilAdminReset) {
+      setError("Passkeys are locked. Ask your administrator to unlock before deleting.");
+      return;
+    }
+
     const isOnlyDevice = devices.length === 1;
     const confirmMessage = isOnlyDevice
       ? "Delete your only passkey? You must register a new passkey before you can mark attendance again."
@@ -101,13 +110,34 @@ export default function DevicesPage() {
             Manage the devices and passkeys used for attendance verification
           </p>
         </div>
-        <Link
-          href="/setup-device"
-          className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+        <button
+          type="button"
+          onClick={() => router.push("/setup-device")}
+          disabled={!canRegisterNewPasskey}
+          title={
+            loading
+              ? "Loading passkey state"
+              : passkeysLockedUntilAdminReset
+              ? "Ask admin to unlock passkeys first"
+              : "Delete your current passkey before registering a new one"
+          }
+          className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-primary/40 transition-colors"
         >
           Register New Passkey
-        </Link>
+        </button>
       </div>
+
+      {passkeysLockedUntilAdminReset && (
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+          Passkey management is locked. Ask your administrator to unlock your account before deleting or adding a new passkey.
+        </div>
+      )}
+
+      {!passkeysLockedUntilAdminReset && devices.length > 0 && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+          Delete your current passkey first. Registering a new passkey is only enabled when you have no active passkeys.
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 flex items-start gap-3">
@@ -126,26 +156,32 @@ export default function DevicesPage() {
           <p className="text-sm text-muted-foreground mt-2">
             Go to <strong>Register Device</strong> to create your first passkey.
           </p>
-          <a
-            href="/setup-device"
-            className="inline-flex mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-          >
-            Register Device
-          </a>
+          {passkeysLockedUntilAdminReset ? (
+            <p className="mt-4 text-sm text-yellow-700">
+              Registration is locked. Contact your administrator to unlock passkeys.
+            </p>
+          ) : (
+            <Link
+              href="/setup-device"
+              className="inline-flex mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              Register Device
+            </Link>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
           {devices.map((device) => (
             <div
               key={device.credentialId}
-              className="rounded-lg border border-border bg-card p-4 flex items-center justify-between"
+              className="rounded-lg border border-border bg-card p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
             >
-              <div className="flex items-center gap-4">
+              <div className="flex min-w-0 items-start gap-4">
                 <div className="rounded-full bg-primary/10 p-3">
                   {getDeviceIcon(device.userAgent)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <p className="font-medium">{getDeviceName(device.userAgent)}</p>
                     {device.backedUp && (
                       <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
@@ -162,7 +198,7 @@ export default function DevicesPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2 sm:shrink-0">
                 {devices.length === 1 && (
                   <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted text-muted-foreground text-xs">
                     <CheckCircle2 className="h-4 w-4" />
@@ -171,8 +207,12 @@ export default function DevicesPage() {
                 )}
                 <button
                   onClick={() => handleDeleteDevice(device.credentialId)}
-                  disabled={deletingId === device.credentialId}
-                  title="Delete this passkey"
+                  disabled={passkeysLockedUntilAdminReset || deletingId === device.credentialId}
+                  title={
+                    passkeysLockedUntilAdminReset
+                      ? "Ask admin to unlock passkeys before deleting"
+                      : "Delete this passkey"
+                  }
                   className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50 transition-colors"
                 >
                   {deletingId === device.credentialId ? (
@@ -201,7 +241,11 @@ export default function DevicesPage() {
           </li>
           <li className="flex gap-2">
             <span className="font-medium text-foreground">•</span>
-            <span>Deleting your only passkey requires admin unlock first</span>
+            <span>Deleting any passkey requires admin unlock first</span>
+          </li>
+          <li className="flex gap-2">
+            <span className="font-medium text-foreground">•</span>
+            <span>You can register a new passkey only after deleting existing passkeys</span>
           </li>
           <li className="flex gap-2">
             <span className="font-medium text-foreground">•</span>
