@@ -128,3 +128,9 @@ This app uses Prisma with PostgreSQL (`DATABASE_URL`/`DIRECT_URL`), not the Supa
 - `DIRECT_URL`: Use direct database host (`db.<PROJECT_REF>.supabase.co:5432`) with `sslmode=require`.
 - URL-encode special characters in the DB password.
 - On Render, set both vars in the service Environment tab.
+
+### Render Auth Notes
+
+- `AUTH_URL` must be your public Render URL (not localhost).
+- `AUTH_TRUST_HOST=true` should be set behind Render's proxy.
+- `AUTH_SECRET` must be set and consistent across deploys.

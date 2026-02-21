@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { getSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Shield, Loader2 } from "lucide-react";
@@ -20,15 +20,32 @@ export default function LoginPage() {
 
     try {
       const result = await signIn("credentials", {
-        email,
+        email: email.trim(),
         password,
         redirect: false,
+        callbackUrl: "/",
       });
 
       if (result?.error) {
         setError("Invalid email or password");
       } else {
-        router.push("/student");
+        const session = await getSession();
+        if (!session?.user) {
+          setError("Sign-in did not create a session. Check AUTH_URL, AUTH_TRUST_HOST, and AUTH_SECRET.");
+          return;
+        }
+
+        const role = (session.user as any).role as string | undefined;
+        const dashboard =
+          role === "SUPER_ADMIN"
+            ? "/super-admin"
+            : role === "ADMIN"
+              ? "/admin"
+              : role === "LECTURER"
+                ? "/lecturer"
+                : "/student";
+
+        router.push(dashboard);
         router.refresh();
       }
     } catch {
