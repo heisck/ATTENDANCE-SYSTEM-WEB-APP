@@ -22,7 +22,7 @@ echo "Running database setup in background..."
   i=1
   while [ $i -le 5 ]; do
     echo "DB setup attempt $i/5"
-    if ./node_modules/.bin/prisma db push --skip-generate --accept-data-loss --schema prisma/schema.prisma && npm run db:seed; then
+    if CI=1 npm run db:setup </dev/null; then
       echo "Database setup completed."
       exit 0
     fi

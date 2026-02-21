@@ -10,8 +10,8 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "npx tsx prisma/seed.ts",
-    "db:setup": "prisma db push --skip-generate && npx tsx prisma/seed.ts",
+    "db:seed": "node prisma/seed.cjs",
+    "db:setup": "prisma db push --skip-generate --accept-data-loss --schema prisma/schema.prisma && node prisma/seed.cjs",
     "db:studio": "prisma studio"
   },
   "keywords": [],
