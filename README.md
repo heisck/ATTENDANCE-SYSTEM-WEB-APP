@@ -37,16 +37,10 @@ npm install
 # 2. Start PostgreSQL
 docker compose up -d
 
-# 3. Run database migrations
-npx prisma db push
+# 3. Create schema and seed data
+npm run db:setup
 
-# 4. Generate Prisma client
-npx prisma generate
-
-# 5. Seed the database
-npx tsx prisma/seed.ts
-
-# 6. Start dev server
+# 4. Start dev server
 npm run dev
 ```
 
@@ -125,3 +119,12 @@ docker compose -f docker-compose.prod.yml up --build -d
 ## Environment Variables
 
 See `.env.example` for all required variables.
+
+### Supabase Production Notes
+
+This app uses Prisma with PostgreSQL (`DATABASE_URL`/`DIRECT_URL`), not the Supabase JS client (`NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`) for database reads/writes.
+
+- `DATABASE_URL`: Use Supabase pooler URL (`:6543`) with `pgbouncer=true` and `sslmode=require`.
+- `DIRECT_URL`: Use direct database host (`db.<PROJECT_REF>.supabase.co:5432`) with `sslmode=require`.
+- URL-encode special characters in the DB password.
+- On Render, set both vars in the service Environment tab.
