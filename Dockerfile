@@ -33,6 +33,6 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Start web app only. Run DB setup in Render Pre-Deploy Command:
-# npm run db:setup
-CMD ["node", "server.js"]
+# Render free tier workaround:
+# Start app immediately (so port binds), then run DB setup in background with retries.
+CMD ["sh", "-c", "set -e; echo 'Starting application...'; node server.js & APP_PID=$!; (echo 'Running database setup in background...'; i=1; while [ $i -le 5 ]; do echo \"DB setup attempt $i/5\"; if npm run db:setup; then echo 'Database setup completed.'; exit 0; fi; echo 'Database setup failed, retrying in 10s...'; i=$((i+1)); sleep 10; done; echo 'Database setup failed after retries.'; exit 1) & wait $APP_PID"]
