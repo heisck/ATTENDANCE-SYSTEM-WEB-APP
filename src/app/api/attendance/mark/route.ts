@@ -5,8 +5,9 @@ import { syncAttendanceSessionState } from "@/lib/attendance";
 import { markAttendanceSchema } from "@/lib/validators";
 import { verifyQrTokenStrict } from "@/lib/qr";
 import { isWithinRadius } from "@/lib/gps";
-import { isIpTrusted } from "@/lib/ip";
+import { getClientIp, isIpTrusted } from "@/lib/ip";
 import { calculateConfidence, isFlagged } from "@/lib/confidence";
+import { logError, ApiErrorMessages } from "@/lib/api-error";
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -14,18 +15,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const user = session.user as any;
-  if (user.role !== "STUDENT") {
+  if (session.user.role !== "STUDENT") {
     return NextResponse.json({ error: "Only students can mark attendance" }, { status: 403 });
   }
 
   const [studentState, credentialCount] = await Promise.all([
     db.user.findUnique({
-      where: { id: user.id },
+      where: { id: session.user.id },
       select: { personalEmail: true, personalEmailVerifiedAt: true },
     }),
     db.webAuthnCredential.count({
-      where: { userId: user.id },
+      where: { userId: session.user.id },
     }),
   ]);
   if (!studentState?.personalEmail || !studentState.personalEmailVerifiedAt) {
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
         course: {
           include: {
             organization: { include: { ipRanges: true } },
-            enrollments: { where: { studentId: user.id } },
+            enrollments: { where: { studentId: session.user.id } },
           },
         },
       },
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
       where: {
         sessionId_studentId: {
           sessionId: parsed.sessionId,
-          studentId: user.id,
+          studentId: session.user.id,
         },
       },
     });
@@ -133,15 +133,23 @@ export async function POST(request: NextRequest) {
       attendanceSession.radiusMeters
     );
 
-    const clientIp =
-      request.headers.get("x-forwarded-for") ||
-      request.headers.get("x-real-ip") ||
-      "unknown";
+    // Extract real client IP from proxy headers (only works behind trusted proxy)
+    const clientIp = getClientIp(request.headers);
 
     const trustedRanges = attendanceSession.course.organization.ipRanges.map(
       (r) => r.cidr
     );
     const ipCheck = isIpTrusted(clientIp, trustedRanges);
+
+    // Log suspicious IP attempts for security monitoring
+    if (clientIp !== "unknown" && !ipCheck && trustedRanges.length > 0) {
+      console.warn("IP validation failed", {
+        studentId: session.user.id,
+        sessionId: parsed.sessionId,
+        clientIp,
+        expectedRanges: trustedRanges.length,
+      });
+    }
 
     const webauthnUsed = body.webauthnVerified === true;
 
@@ -159,7 +167,7 @@ export async function POST(request: NextRequest) {
     const record = await db.attendanceRecord.create({
       data: {
         sessionId: parsed.sessionId,
-        studentId: user.id,
+        studentId: session.user.id,
         gpsLat: parsed.gpsLat,
         gpsLng: parsed.gpsLng,
         gpsDistance: gpsResult.distance,
@@ -189,11 +197,14 @@ export async function POST(request: NextRequest) {
         },
       },
     });
-  } catch (error: any) {
-    if (error.name === "ZodError") {
-      return NextResponse.json({ error: error.errors[0].message }, { status: 400 });
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === "ZodError") {
+      return NextResponse.json({ error: ApiErrorMessages.INVALID_INPUT }, { status: 400 });
     }
-    console.error("Mark attendance error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    logError("attendance/mark", error, { userId: session.user.id });
+    return NextResponse.json(
+      { error: ApiErrorMessages.SERVER_ERROR },
+      { status: 500 }
+    );
   }
 }

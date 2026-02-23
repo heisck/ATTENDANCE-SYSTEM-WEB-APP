@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
+import type { JWT } from "next-auth/jwt";
 
 const roleRoutes: Record<string, string[]> = {
   STUDENT: ["/student"],
@@ -17,10 +18,10 @@ const roleDashboard: Record<string, string> = {
 
 export default async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const token = (await getToken({
+  const token = await getToken<JWT>({
     req,
     secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
-  })) as any;
+  });
   const user = token
     ? {
         id: token.id,

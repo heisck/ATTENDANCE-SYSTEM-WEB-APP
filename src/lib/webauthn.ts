@@ -294,8 +294,23 @@ export async function verifyAuthentication(
           data: { credentialId: response.id },
         });
         resolvedCredential = { ...resolvedCredential, credentialId: response.id };
-      } catch {
-        // Ignore if unique conflict; verification can still continue.
+      } catch (error: unknown) {
+        // Log credential ID migration conflicts for monitoring
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes("Unique constraint")) {
+          console.warn("WebAuthn credential ID migration skipped - unique constraint", {
+            userId,
+            credentialId: resolvedCredential.id,
+            reason: "Another credential may have this ID already",
+          });
+        } else {
+          console.error("WebAuthn credential ID migration failed", {
+            userId,
+            credentialId: resolvedCredential.id,
+            error: errorMessage,
+          });
+        }
+        // Verification can continue despite migration failure
       }
     }
   }

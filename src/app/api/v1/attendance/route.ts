@@ -5,13 +5,9 @@ async function validateApiKey(request: NextRequest) {
   const apiKey = request.headers.get("x-api-key");
   if (!apiKey) return null;
 
-  const org = await db.organization.findFirst({
-    where: {
-      settings: {
-        path: ["apiKey"],
-        equals: apiKey,
-      },
-    },
+  // Look up organization by API key (indexed for fast lookup)
+  const org = await db.organization.findUnique({
+    where: { apiKey },
   });
 
   return org;

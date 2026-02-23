@@ -45,169 +45,197 @@ function buildCourseStats(
 }
 
 export async function runReminderEngine() {
-  const organizations = await db.organization.findMany({
-    select: {
-      id: true,
-    },
-  });
-
-  let notificationsCreated = 0;
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 1000 * 60 * 60 * 24 * 30);
   const sixHoursAhead = new Date(now.getTime() + 1000 * 60 * 60 * 6);
+  const oneDayAgo = new Date(now.getTime() - 1000 * 60 * 60 * 24);
+  const twelveHoursAgo = new Date(now.getTime() - 1000 * 60 * 60 * 12);
 
-  for (const org of organizations) {
-    const students = await db.user.findMany({
-      where: {
-        organizationId: org.id,
-        role: "STUDENT",
+  let notificationsCreated = 0;
+
+  // Get all students with their enrollments and courses in one optimized query
+  const students = await db.user.findMany({
+    where: {
+      role: "STUDENT",
+    },
+    select: {
+      id: true,
+      name: true,
+      organizationId: true,
+      enrollments: {
+        select: {
+          courseId: true,
+          course: { select: { id: true, code: true, name: true } },
+        },
       },
-      select: { id: true, name: true },
-    });
+    },
+  });
 
-    for (const student of students) {
-      const enrollments = await db.enrollment.findMany({
-        where: { studentId: student.id },
-        include: {
-          course: { select: { id: true, code: true, name: true } },
-        },
-      });
+  // Get all sessions in a single query
+  const allSessions = await db.attendanceSession.findMany({
+    where: {
+      startedAt: { gte: thirtyDaysAgo, lte: now },
+    },
+    select: {
+      id: true,
+      courseId: true,
+      startedAt: true,
+    },
+  });
 
-      if (enrollments.length === 0) continue;
-      const courseIds = enrollments.map((entry) => entry.courseId);
+  // Get all attendance records for the period in one query
+  const allRecords = await db.attendanceRecord.findMany({
+    where: {
+      sessionId: { in: allSessions.map((s) => s.id) },
+    },
+    select: {
+      studentId: true,
+      sessionId: true,
+    },
+  });
 
-      const sessions = await db.attendanceSession.findMany({
-        where: {
-          courseId: { in: courseIds },
-          startedAt: { gte: thirtyDaysAgo, lte: now },
-        },
-        select: {
-          id: true,
-          courseId: true,
-          startedAt: true,
-        },
-      });
+  // Index records by student and session for fast lookup
+  const recordsByStudent = new Map<string, Set<string>>();
+  for (const record of allRecords) {
+    if (!recordsByStudent.has(record.studentId)) {
+      recordsByStudent.set(record.studentId, new Set());
+    }
+    recordsByStudent.get(record.studentId)!.add(record.sessionId);
+  }
 
-      const records = await db.attendanceRecord.findMany({
-        where: {
-          studentId: student.id,
-          sessionId: { in: sessions.map((row) => row.id) },
-        },
-        select: { sessionId: true },
-      });
+  // Get existing notifications in one query to avoid duplicates
+  const existingNotifications = await db.userNotification.findMany({
+    where: {
+      type: { in: ["ATTENDANCE_RISK", "UPCOMING_CLASS"] },
+      createdAt: { gte: oneDayAgo },
+    },
+    select: {
+      userId: true,
+      type: true,
+      metadata: true,
+    },
+  });
 
-      const stats = buildCourseStats(courseIds, sessions, records);
-      const atRiskCourses = stats.filter((entry) => entry.totalSessions > 0 && (entry.attendanceRate < 75 || entry.missed >= 2));
-      for (const risk of atRiskCourses) {
-        const courseInfo = enrollments.find((entry) => entry.courseId === risk.courseId)?.course;
-        if (!courseInfo) continue;
-
-        const existingRisk = await db.userNotification.findFirst({
-          where: {
-            userId: student.id,
-            type: "ATTENDANCE_RISK",
-            createdAt: {
-              gte: new Date(now.getTime() - 1000 * 60 * 60 * 24),
-            },
-            metadata: {
-              path: ["courseId"],
-              equals: courseInfo.id,
-            },
-          },
-          select: { id: true },
-        });
-        if (existingRisk) continue;
-
-        await db.userNotification.create({
-          data: {
-            userId: student.id,
-            type: "ATTENDANCE_RISK",
-            title: `Attendance risk for ${courseInfo.code}`,
-            body: `Your attendance is ${risk.attendanceRate}% with ${risk.missed} missed classes in the last 30 days.`,
-            sentAt: now,
-            metadata: {
-              courseId: courseInfo.id,
-              courseCode: courseInfo.code,
-              attendanceRate: risk.attendanceRate,
-              missed: risk.missed,
-            },
-          },
-        });
-        notificationsCreated += 1;
-      }
-
-      const predictedCourses = await db.attendanceSession.findMany({
-        where: {
-          courseId: { in: courseIds },
-          startedAt: { gte: thirtyDaysAgo, lte: now },
-        },
-        select: {
-          courseId: true,
-          startedAt: true,
-          course: { select: { id: true, code: true, name: true } },
-        },
-        orderBy: { startedAt: "desc" },
-      });
-
-      const latestByCourse = new Map<
-        string,
-        { id: string; code: string; name: string; startedAt: Date }
-      >();
-      for (const row of predictedCourses) {
-        if (!latestByCourse.has(row.courseId)) {
-          latestByCourse.set(row.courseId, {
-            id: row.course.id,
-            code: row.course.code,
-            name: row.course.name,
-            startedAt: row.startedAt,
-          });
-        }
-      }
-
-      for (const latest of latestByCourse.values()) {
-        const nextLikely = new Date(latest.startedAt);
-        while (nextLikely <= now) {
-          nextLikely.setDate(nextLikely.getDate() + 7);
-        }
-        if (nextLikely > sixHoursAhead) continue;
-
-        const existingUpcoming = await db.userNotification.findFirst({
-          where: {
-            userId: student.id,
-            type: "UPCOMING_CLASS",
-            createdAt: {
-              gte: new Date(now.getTime() - 1000 * 60 * 60 * 12),
-            },
-            metadata: {
-              path: ["courseId"],
-              equals: latest.id,
-            },
-          },
-          select: { id: true },
-        });
-        if (existingUpcoming) continue;
-
-        await db.userNotification.create({
-          data: {
-            userId: student.id,
-            type: "UPCOMING_CLASS",
-            title: `Upcoming class: ${latest.code}`,
-            body: `Expected around ${nextLikely.toLocaleTimeString()} based on recent attendance trends.`,
-            sentAt: now,
-            metadata: {
-              courseId: latest.id,
-              courseCode: latest.code,
-              nextLikelyAt: nextLikely.toISOString(),
-            },
-          },
-        });
-        notificationsCreated += 1;
-      }
+  // Index existing notifications by student and type
+  const existingByKey = new Map<string, boolean>();
+  for (const notif of existingNotifications) {
+    const courseId = (notif.metadata as any)?.courseId;
+    if (courseId) {
+      const key = `${notif.userId}:${notif.type}:${courseId}`;
+      existingByKey.set(key, true);
     }
   }
 
+  // Batch all notifications to create
+  const notificationsToCreate: typeof db.userNotification.create extends (args: infer P) => any
+    ? P["data"][]
+    : never[] = [];
+
+  // Process each student
+  for (const student of students) {
+    if (student.enrollments.length === 0) continue;
+
+    const courseIds = student.enrollments.map((e) => e.courseId);
+    const studentSessions = allSessions.filter((s) => courseIds.includes(s.courseId));
+
+    if (studentSessions.length === 0) continue;
+
+    const studentRecords = recordsByStudent.get(student.id) ?? new Set();
+
+    // Build stats for this student
+    const stats = buildCourseStats(courseIds, studentSessions, 
+      Array.from(studentRecords).map(sessionId => ({ sessionId }))
+    );
+
+    // Generate attendance risk notifications
+    const atRiskCourses = stats.filter(
+      (entry) =>
+        entry.totalSessions > 0 &&
+        (entry.attendanceRate < 75 || entry.missed >= 2)
+    );
+
+    for (const risk of atRiskCourses) {
+      const courseInfo = student.enrollments.find(
+        (e) => e.courseId === risk.courseId
+      )?.course;
+      if (!courseInfo) continue;
+
+      const key = `${student.id}:ATTENDANCE_RISK:${courseInfo.id}`;
+      if (existingByKey.has(key)) continue;
+
+      notificationsToCreate.push({
+        userId: student.id,
+        type: "ATTENDANCE_RISK",
+        title: `Attendance risk for ${courseInfo.code}`,
+        body: `Your attendance is ${risk.attendanceRate}% with ${risk.missed} missed classes in the last 30 days.`,
+        sentAt: now,
+        metadata: {
+          courseId: courseInfo.id,
+          courseCode: courseInfo.code,
+          attendanceRate: risk.attendanceRate,
+          missed: risk.missed,
+        },
+      });
+    }
+
+    // Generate upcoming class notifications
+    const latestByCourse = new Map<
+      string,
+      { id: string; code: string; name: string; startedAt: Date }
+    >();
+
+    for (const session of studentSessions) {
+      if (!latestByCourse.has(session.courseId)) {
+        const courseInfo = student.enrollments.find(
+          (e) => e.courseId === session.courseId
+        )?.course;
+        if (courseInfo) {
+          latestByCourse.set(session.courseId, {
+            id: courseInfo.id,
+            code: courseInfo.code,
+            name: courseInfo.name,
+            startedAt: session.startedAt,
+          });
+        }
+      }
+    }
+
+    for (const latest of latestByCourse.values()) {
+      const nextLikely = new Date(latest.startedAt);
+      while (nextLikely <= now) {
+        nextLikely.setDate(nextLikely.getDate() + 7);
+      }
+      if (nextLikely > sixHoursAhead) continue;
+
+      const key = `${student.id}:UPCOMING_CLASS:${latest.id}`;
+      if (existingByKey.has(key)) continue;
+
+      notificationsToCreate.push({
+        userId: student.id,
+        type: "UPCOMING_CLASS",
+        title: `Upcoming class: ${latest.code}`,
+        body: `Expected around ${nextLikely.toLocaleTimeString()} based on recent attendance trends.`,
+        sentAt: now,
+        metadata: {
+          courseId: latest.id,
+          courseCode: latest.code,
+          nextLikelyAt: nextLikely.toISOString(),
+        },
+      });
+    }
+  }
+
+  // Batch create all notifications in one operation
+  if (notificationsToCreate.length > 0) {
+    await db.userNotification.createMany({
+      data: notificationsToCreate,
+    });
+    notificationsCreated = notificationsToCreate.length;
+  }
+
   return {
-    organizations: organizations.length,
+    organizationsProcessed: new Set(students.map((s) => s.organizationId)).size,
+    studentsProcessed: students.length,
     notificationsCreated,
   };
 }

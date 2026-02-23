@@ -59,6 +59,7 @@ model Organization {
   slug      String   @unique
   domain    String?
   logoUrl   String?
+  apiKey    String?  @unique // For public API access
   settings  Json     @default("{}")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -70,6 +71,7 @@ model Organization {
   lecturerInvites LecturerInvite[]
 
   @@index([slug])
+  @@index([apiKey])
 }
 
 model User {

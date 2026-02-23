@@ -4,11 +4,12 @@ import {
   getRegistrationOptions,
   verifyRegistration,
 } from "@/lib/webauthn";
+import { handleApiError, ApiErrorMessages, logError } from "@/lib/api-error";
 
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: ApiErrorMessages.UNAUTHORIZED }, { status: 401 });
   }
 
   try {
@@ -17,15 +18,19 @@ export async function GET() {
       session.user.email!
     );
     return NextResponse.json(options);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+  } catch (error: unknown) {
+    logError("webauthn/register GET", error, { userId: session.user.id });
+    return NextResponse.json(
+      { error: ApiErrorMessages.WEBAUTHN_ERROR },
+      { status: 400 }
+    );
   }
 }
 
 export async function POST(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: ApiErrorMessages.UNAUTHORIZED }, { status: 401 });
   }
 
   try {
@@ -40,7 +45,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       verified: verification.verified,
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+  } catch (error: unknown) {
+    logError("webauthn/register POST", error, { userId: session.user.id });
+    return NextResponse.json(
+      { error: ApiErrorMessages.WEBAUTHN_CHALLENGE_FAILED },
+      { status: 400 }
+    );
   }
 }
