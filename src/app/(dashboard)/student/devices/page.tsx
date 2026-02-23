@@ -32,6 +32,19 @@ export default function DevicesPage() {
   async function fetchDevices() {
     try {
       setLoading(true);
+      const statusRes = await fetch("/api/auth/student-status");
+      if (statusRes.ok) {
+        const status = await statusRes.json();
+        if (status.requiresProfileCompletion || !status.personalEmailVerified) {
+          router.push("/student/complete-profile");
+          return;
+        }
+        if (!status.hasPasskey) {
+          router.push("/setup-device");
+          return;
+        }
+      }
+
       const res = await fetch("/api/webauthn/devices");
       if (!res.ok) throw new Error("Failed to fetch devices");
       const data = await res.json();

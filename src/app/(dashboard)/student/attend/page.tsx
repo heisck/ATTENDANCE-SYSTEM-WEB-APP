@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { QrScanner } from "@/components/qr-scanner";
 import { GpsCheck } from "@/components/gps-check";
 import { WebAuthnPrompt } from "@/components/webauthn-prompt";
+import { BleProximityCheck } from "@/components/ble-proximity-check";
 import Link from "next/link";
 import {
   CheckCircle2,
@@ -42,6 +44,8 @@ interface SessionSyncResponse {
     status: "ACTIVE" | "CLOSED";
     phase: "INITIAL" | "REVERIFY" | "CLOSED";
     phaseEndsAt: string;
+    currentSequenceId: string;
+    nextSequenceId: string;
   };
   attendance: {
     id: string;
@@ -66,6 +70,7 @@ interface SessionSyncResponse {
 }
 
 export default function AttendPage() {
+  const router = useRouter();
   const [step, setStep] = useState<Step>("webauthn");
   const [webauthnVerified, setWebauthnVerified] = useState(false);
   const [gps, setGps] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
@@ -88,6 +93,19 @@ export default function AttendPage() {
   useEffect(() => {
     async function checkDevice() {
       try {
+        const statusRes = await fetch("/api/auth/student-status");
+        if (statusRes.ok) {
+          const status = await statusRes.json();
+          if (status.requiresProfileCompletion || !status.personalEmailVerified) {
+            router.push("/student/complete-profile");
+            return;
+          }
+          if (!status.hasPasskey) {
+            router.push("/setup-device");
+            return;
+          }
+        }
+
         const res = await fetch("/api/webauthn/devices");
         if (!res.ok) {
           setHasDevice(false);
@@ -102,7 +120,7 @@ export default function AttendPage() {
     }
 
     checkDevice();
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     if (!activeSessionId) return;
@@ -368,6 +386,8 @@ export default function AttendPage() {
         </p>
       </div>
 
+      <BleProximityCheck />
+
       {hasDevice === null && (
         <div className="flex flex-col items-center gap-4 py-12">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -506,6 +526,13 @@ export default function AttendPage() {
                 )}
               </div>
 
+              {syncState?.session && (
+                <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
+                  Scan sequence <span className="font-semibold">{syncState.session.currentSequenceId}</span> now.
+                  Next: <span className="font-semibold">{syncState.session.nextSequenceId}</span>.
+                </div>
+              )}
+
               {syncError && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
                   {syncError}
@@ -559,7 +586,7 @@ export default function AttendPage() {
                   <div className="flex items-start gap-2 text-amber-800">
                     <AlertTriangle className="mt-0.5 h-4 w-4" />
                     <p className="text-sm font-medium">
-                      Complete reverification now: passkey verification, then scan the live QR.
+                      Complete reverification now: passkey verification, then scan the current live QR sequence.
                     </p>
                   </div>
 

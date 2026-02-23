@@ -7,6 +7,7 @@ import {
   syncAttendanceSessionState,
 } from "@/lib/attendance";
 import { db } from "@/lib/db";
+import { getQrSequence } from "@/lib/qr";
 
 export async function GET(
   _request: NextRequest,
@@ -85,12 +86,16 @@ export async function GET(
     record.reverifyRetryCount < REVERIFY_MAX_RETRIES &&
     record.reverifyAttemptCount < REVERIFY_MAX_ATTEMPTS;
 
+  const currentSequence = getQrSequence(Date.now(), syncedSession.qrRotationMs);
+
   return NextResponse.json({
     session: {
       id: syncedSession.id,
       status: syncedSession.status,
       phase: syncedSession.phase,
       phaseEndsAt: getPhaseEndsAt(syncedSession),
+      currentSequenceId: `E${String(currentSequence).padStart(3, "0")}`,
+      nextSequenceId: `E${String(currentSequence + 1).padStart(3, "0")}`,
     },
     attendance: record
       ? {

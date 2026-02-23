@@ -11,10 +11,17 @@ import { db } from "./db";
 type AuthenticatorTransportFuture = "ble" | "cable" | "hybrid" | "internal" | "nfc" | "smart-card" | "usb";
 
 const rpName = process.env.WEBAUTHN_RP_NAME || "AttendanceIQ";
-const rpID = process.env.WEBAUTHN_RP_ID || "localhost";
-const origin = process.env.WEBAUTHN_ORIGIN || "http://localhost:3000";
+const rpID = process.env.WEBAUTHN_RP_ID || (process.env.NODE_ENV === "production" ? null : "localhost");
+const origin = process.env.WEBAUTHN_ORIGIN || (process.env.NODE_ENV === "production" ? null : "http://localhost:3000");
 
-const challengeStore = new Map<string, string>();
+// Validate critical WebAuthn config in production
+if (process.env.NODE_ENV === "production") {
+  if (!rpID || !origin) {
+    throw new Error("WEBAUTHN_RP_ID and WEBAUTHN_ORIGIN are required in production");
+  }
+}
+
+const CHALLENGE_TTL_MS = 60000; // 60 seconds
 
 function toBase64UrlCredentialId(value: unknown): string {
   if (typeof value === "string") return value;
@@ -39,6 +46,9 @@ export async function getRegistrationOptions(userId: string, userName: string) {
   const user = await db.user.findUnique({
     where: { id: userId },
     select: {
+      role: true,
+      personalEmail: true,
+      personalEmailVerifiedAt: true,
       passkeysLockedUntilAdminReset: true,
     },
   });
@@ -47,6 +57,10 @@ export async function getRegistrationOptions(userId: string, userName: string) {
 
   if (user.passkeysLockedUntilAdminReset) {
     throw new Error("Passkey registration is locked. Please contact your administrator to reset.");
+  }
+
+  if (user.role === "STUDENT" && (!user.personalEmail || !user.personalEmailVerifiedAt)) {
+    throw new Error("Verify your personal email before registering a passkey.");
   }
 
   const existingCredentials = await db.webAuthnCredential.findMany({
@@ -72,7 +86,7 @@ export async function getRegistrationOptions(userId: string, userName: string) {
 
   const options = await generateRegistrationOptions({
     rpName,
-    rpID,
+    rpID: rpID!,
     userID: userId,
     userName,
     attestationType: "none",
@@ -84,8 +98,16 @@ export async function getRegistrationOptions(userId: string, userName: string) {
     },
   });
 
-  challengeStore.set(userId, options.challenge);
-  setTimeout(() => challengeStore.delete(userId), 60000);
+  // Store challenge in database with TTL
+  const expiresAt = new Date(Date.now() + CHALLENGE_TTL_MS);
+  await db.webAuthnChallenge.deleteMany({ where: { userId } });
+  await db.webAuthnChallenge.create({
+    data: {
+      userId,
+      challenge: options.challenge,
+      expiresAt,
+    },
+  });
 
   return options;
 }
@@ -95,12 +117,23 @@ export async function verifyRegistration(
   response: any,
   userAgent?: string
 ): Promise<VerifiedRegistrationResponse> {
-  const expectedChallenge = challengeStore.get(userId);
-  if (!expectedChallenge) throw new Error("Challenge expired or not found");
+  const challengeRecord = await db.webAuthnChallenge.findFirst({
+    where: {
+      userId,
+      expiresAt: { gt: new Date() },
+    },
+  });
+  if (!challengeRecord) {
+    throw new Error("WebAuthn challenge invalid or expired");
+  }
+  const expectedChallenge = challengeRecord.challenge;
 
   const user = await db.user.findUnique({
     where: { id: userId },
     select: {
+      role: true,
+      personalEmail: true,
+      personalEmailVerifiedAt: true,
       firstPasskeyCreatedAt: true,
       passkeysLockedUntilAdminReset: true,
     },
@@ -110,6 +143,10 @@ export async function verifyRegistration(
   // Check if passkeys are locked
   if (user.passkeysLockedUntilAdminReset) {
     throw new Error("Passkey registration is locked. Please contact your administrator to reset.");
+  }
+
+  if (user.role === "STUDENT" && (!user.personalEmail || !user.personalEmailVerifiedAt)) {
+    throw new Error("Verify your personal email before registering a passkey.");
   }
 
   const existingCredentialCount = await db.webAuthnCredential.count({
@@ -123,8 +160,8 @@ export async function verifyRegistration(
   const verification = await verifyRegistrationResponse({
     response,
     expectedChallenge,
-    expectedOrigin: origin,
-    expectedRPID: rpID,
+    expectedOrigin: origin!,
+    expectedRPID: rpID!,
   });
 
   if (verification.verified && verification.registrationInfo) {
@@ -133,6 +170,9 @@ export async function verifyRegistration(
       const freshUser = await tx.user.findUnique({
         where: { id: userId },
         select: {
+          role: true,
+          personalEmail: true,
+          personalEmailVerifiedAt: true,
           firstPasskeyCreatedAt: true,
           passkeysLockedUntilAdminReset: true,
         },
@@ -144,6 +184,13 @@ export async function verifyRegistration(
 
       if (freshUser.passkeysLockedUntilAdminReset) {
         throw new Error("Passkey registration is locked. Please contact your administrator to reset.");
+      }
+
+      if (
+        freshUser.role === "STUDENT" &&
+        (!freshUser.personalEmail || !freshUser.personalEmailVerifiedAt)
+      ) {
+        throw new Error("Verify your personal email before registering a passkey.");
       }
 
       const freshCredentialCount = await tx.webAuthnCredential.count({
@@ -177,7 +224,8 @@ export async function verifyRegistration(
     });
   }
 
-  challengeStore.delete(userId);
+  // Clean up challenge after verification attempt
+  await db.webAuthnChallenge.deleteMany({ where: { userId } });
   return verification;
 }
 
@@ -192,14 +240,22 @@ export async function getAuthenticationOptions(userId: string) {
   }
 
   const options = await generateAuthenticationOptions({
-    rpID,
+    rpID: rpID!,
     // Let the client use discoverable credentials for this RP.
     // We still enforce account ownership server-side in verifyAuthentication().
     userVerification: "preferred",
   });
 
-  challengeStore.set(userId, options.challenge);
-  setTimeout(() => challengeStore.delete(userId), 60000);
+  // Store challenge in database with TTL
+  const expiresAt = new Date(Date.now() + CHALLENGE_TTL_MS);
+  await db.webAuthnChallenge.deleteMany({ where: { userId } });
+  await db.webAuthnChallenge.create({
+    data: {
+      userId,
+      challenge: options.challenge,
+      expiresAt,
+    },
+  });
 
   return options;
 }
@@ -208,8 +264,16 @@ export async function verifyAuthentication(
   userId: string,
   response: any
 ): Promise<VerifiedAuthenticationResponse> {
-  const expectedChallenge = challengeStore.get(userId);
-  if (!expectedChallenge) throw new Error("Challenge expired or not found");
+  const challengeRecord = await db.webAuthnChallenge.findFirst({
+    where: {
+      userId,
+      expiresAt: { gt: new Date() },
+    },
+  });
+  if (!challengeRecord) {
+    throw new Error("WebAuthn challenge invalid or expired");
+  }
+  const expectedChallenge = challengeRecord.challenge;
 
   const credential = await db.webAuthnCredential.findUnique({
     where: { credentialId: response.id },
@@ -243,8 +307,8 @@ export async function verifyAuthentication(
   const verification = await verifyAuthenticationResponse({
     response,
     expectedChallenge,
-    expectedOrigin: origin,
-    expectedRPID: rpID,
+    expectedOrigin: origin!,
+    expectedRPID: rpID!,
     authenticator: {
       credentialID: resolvedCredential.credentialId,
       credentialPublicKey: resolvedCredential.publicKey,
@@ -260,7 +324,8 @@ export async function verifyAuthentication(
     });
   }
 
-  challengeStore.delete(userId);
+  // Clean up challenge after verification attempt
+  await db.webAuthnChallenge.deleteMany({ where: { userId } });
   return verification;
 }
 

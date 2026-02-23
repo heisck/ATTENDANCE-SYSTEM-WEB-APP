@@ -19,6 +19,7 @@ import {
   Play,
   FileText,
   Fingerprint,
+  UserPlus,
   Menu,
   X,
 } from "lucide-react";
@@ -44,6 +45,7 @@ const navByRole: Record<string, NavItem[]> = {
   ADMIN: [
     { label: "Dashboard", href: "/admin", icon: <LayoutDashboard className="h-4 w-4" /> },
     { label: "Users", href: "/admin/users", icon: <Users className="h-4 w-4" /> },
+    { label: "Lecturer Invites", href: "/admin/lecturer-invites", icon: <UserPlus className="h-4 w-4" /> },
     { label: "Courses", href: "/admin/courses", icon: <BookOpen className="h-4 w-4" /> },
     { label: "Passkey Management", href: "/admin/passkeys", icon: <Fingerprint className="h-4 w-4" /> },
     { label: "Settings", href: "/admin/settings", icon: <Settings className="h-4 w-4" /> },

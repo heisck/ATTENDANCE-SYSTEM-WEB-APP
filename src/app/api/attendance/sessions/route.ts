@@ -26,16 +26,23 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const parsed = createSessionSchema.parse(body);
+    const normalizedCourseCode = parsed.courseCode.trim().toUpperCase();
 
     const course = await db.course.findFirst({
-      where: { id: parsed.courseId, lecturerId: user.id },
+      where: {
+        code: { equals: normalizedCourseCode, mode: "insensitive" },
+        lecturerId: user.id,
+      },
     });
     if (!course) {
-      return NextResponse.json({ error: "Course not found or not assigned to you" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Course code not found or not assigned to you" },
+        { status: 404 }
+      );
     }
 
     const existing = await db.attendanceSession.findFirst({
-      where: { courseId: parsed.courseId, status: "ACTIVE" },
+      where: { courseId: course.id, status: "ACTIVE" },
     });
     if (existing) {
       return NextResponse.json(
@@ -48,7 +55,7 @@ export async function POST(request: NextRequest) {
 
     const attendanceSession = await db.attendanceSession.create({
       data: {
-        courseId: parsed.courseId,
+        courseId: course.id,
         lecturerId: user.id,
         phase: "INITIAL",
         startedAt,
@@ -74,7 +81,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -116,8 +123,14 @@ export async function GET() {
         ? { course: { enrollments: { some: { studentId: user.id } } }, status: "ACTIVE" as const }
         : {};
 
+  const statusFilter = new URL(request.url).searchParams.get("status")?.toUpperCase() || null;
+  const whereWithStatus: any = { ...where };
+  if (statusFilter === "ACTIVE" || statusFilter === "CLOSED") {
+    whereWithStatus.status = statusFilter;
+  }
+
   const sessions = await db.attendanceSession.findMany({
-    where,
+    where: whereWithStatus,
     include: {
       course: true,
       _count: { select: { records: true } },

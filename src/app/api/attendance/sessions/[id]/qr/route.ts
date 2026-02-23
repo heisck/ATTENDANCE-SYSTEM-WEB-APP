@@ -44,9 +44,22 @@ export async function GET(
     syncedSession.qrRotationMs
   );
   const nextRotation = getNextRotationMs(syncedSession.qrRotationMs);
+  const sequenceId = `E${String(qr.seq).padStart(3, "0")}`;
+  const nextSequence = qr.seq + 1;
+  const nextSequenceId = `E${String(nextSequence).padStart(3, "0")}`;
+  const cueColor = syncedSession.phase === "REVERIFY" ? "blue" : "green";
 
   return NextResponse.json({
     qr,
+    sequence: qr.seq,
+    sequenceId,
+    nextSequence,
+    nextSequenceId,
+    upcomingSequenceIds: [
+      nextSequenceId,
+      `E${String(nextSequence + 1).padStart(3, "0")}`,
+    ],
+    cueColor,
     phase: syncedSession.phase,
     phaseEndsAt: getPhaseEndsAt(syncedSession),
     nextRotationMs: nextRotation,

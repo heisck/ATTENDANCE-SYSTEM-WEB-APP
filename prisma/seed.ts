@@ -18,6 +18,8 @@ async function main() {
         campusLng: -1.5716,
         defaultRadiusMeters: 500,
         confidenceThreshold: 70,
+        studentEmailDomains: ["st.knust.edu.gh", "knust.edu.gh"],
+        timezone: "Africa/Accra",
       },
     },
   });
@@ -95,15 +97,19 @@ async function main() {
         role: Role.STUDENT,
         studentId,
         indexNumber,
+        personalEmail: `student${i}.personal@gmail.com`,
+        personalEmailVerifiedAt: new Date(),
         organizationId: org.id,
       },
       create: {
         email: studentEmail,
+        personalEmail: `student${i}.personal@gmail.com`,
         name: `Student ${i}`,
         passwordHash: password,
         role: Role.STUDENT,
         studentId,
         indexNumber,
+        personalEmailVerifiedAt: new Date(),
         organizationId: org.id,
       },
     });

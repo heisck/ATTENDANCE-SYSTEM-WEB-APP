@@ -16,11 +16,20 @@ export default function SetupDevicePage() {
   const [checkingLock, setCheckingLock] = useState(true);
 
   useEffect(() => {
-    checkPasskeyState();
+    checkStudentGateAndPasskeyState();
   }, []);
 
-  async function checkPasskeyState() {
+  async function checkStudentGateAndPasskeyState() {
     try {
+      const statusRes = await fetch("/api/auth/student-status");
+      if (statusRes.ok) {
+        const status = await statusRes.json();
+        if (status.role === "STUDENT" && (status.requiresProfileCompletion || !status.personalEmailVerified)) {
+          router.push("/student/complete-profile");
+          return;
+        }
+      }
+
       const res = await fetch("/api/webauthn/devices");
       if (!res.ok) return;
       const data = await res.json();

@@ -19,10 +19,45 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Only students can mark attendance" }, { status: 403 });
   }
 
+  const [studentState, credentialCount] = await Promise.all([
+    db.user.findUnique({
+      where: { id: user.id },
+      select: { personalEmail: true, personalEmailVerifiedAt: true },
+    }),
+    db.webAuthnCredential.count({
+      where: { userId: user.id },
+    }),
+  ]);
+  if (!studentState?.personalEmail || !studentState.personalEmailVerifiedAt) {
+    return NextResponse.json(
+      { error: "Complete and verify your personal email before attendance." },
+      { status: 403 }
+    );
+  }
+  if (credentialCount === 0) {
+    return NextResponse.json(
+      { error: "Register a passkey before attendance." },
+      { status: 403 }
+    );
+  }
+
   try {
     const body = await request.json();
     const parsed = markAttendanceSchema.parse(body);
     const now = new Date();
+    const scanTimestamp = Number(parsed.qrTimestamp);
+
+    if (!Number.isFinite(scanTimestamp)) {
+      return NextResponse.json({ error: "Invalid QR timestamp" }, { status: 400 });
+    }
+
+    const scanSkewMs = Math.abs(now.getTime() - scanTimestamp);
+    if (scanSkewMs > 8_000) {
+      return NextResponse.json(
+        { error: "QR scan is too old. Scan again and submit immediately." },
+        { status: 400 }
+      );
+    }
 
     const syncedSession = await syncAttendanceSessionState(parsed.sessionId);
     if (!syncedSession) {
@@ -79,7 +114,7 @@ export async function POST(request: NextRequest) {
       attendanceSession.qrSecret,
       parsed.qrToken,
       "INITIAL",
-      now.getTime(),
+      scanTimestamp,
       syncedSession.qrRotationMs,
       syncedSession.qrGraceMs
     );

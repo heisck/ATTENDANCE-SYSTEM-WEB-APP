@@ -15,6 +15,11 @@ export function QrScanner({ onScan }: QrScannerProps) {
   const [error, setError] = useState("");
   const [scanned, setScanned] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
+  const [zoomSupported, setZoomSupported] = useState(false);
+  const [zoomMin, setZoomMin] = useState(1);
+  const [zoomMax, setZoomMax] = useState(3);
+  const [zoomStep, setZoomStep] = useState(0.1);
+  const [zoomValue, setZoomValue] = useState(1);
 
   async function startCamera() {
     setError("");
@@ -30,6 +35,33 @@ export function QrScanner({ onScan }: QrScannerProps) {
         },
       });
       streamRef.current = stream;
+      const track = stream.getVideoTracks()[0];
+      if (track && typeof track.getCapabilities === "function") {
+        const caps: any = track.getCapabilities();
+        if (caps?.zoom) {
+          const min = Number(caps.zoom.min ?? 1);
+          const max = Number(caps.zoom.max ?? 3);
+          const step = Number(caps.zoom.step ?? 0.1);
+          setZoomSupported(true);
+          setZoomMin(min);
+          setZoomMax(max);
+          setZoomStep(step);
+          setZoomValue(min);
+          try {
+            await track.applyConstraints({
+              advanced: [{ zoom: min } as any],
+            });
+          } catch {
+            // Continue with default zoom if the browser rejects zoom constraints.
+          }
+        } else {
+          setZoomSupported(false);
+          setZoomMin(1);
+          setZoomMax(3);
+          setZoomStep(0.1);
+          setZoomValue(1);
+        }
+      }
 
       await new Promise<void>((resolve) => {
         requestAnimationFrame(() => resolve());
@@ -64,6 +96,7 @@ export function QrScanner({ onScan }: QrScannerProps) {
     }
     setScanning(false);
     setVideoReady(false);
+    setZoomValue(1);
   }
 
   useEffect(() => {
@@ -84,9 +117,21 @@ export function QrScanner({ onScan }: QrScannerProps) {
         return;
       }
 
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0);
+      const frameWidth = video.videoWidth;
+      const frameHeight = video.videoHeight;
+      canvas.width = frameWidth;
+      canvas.height = frameHeight;
+
+      if (!zoomSupported && zoomValue > 1) {
+        // Fallback digital zoom for browsers that don't expose camera zoom controls.
+        const srcW = frameWidth / zoomValue;
+        const srcH = frameHeight / zoomValue;
+        const srcX = (frameWidth - srcW) / 2;
+        const srcY = (frameHeight - srcH) / 2;
+        ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, frameWidth, frameHeight);
+      } else {
+        ctx.drawImage(video, 0, 0, frameWidth, frameHeight);
+      }
 
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
@@ -130,6 +175,20 @@ export function QrScanner({ onScan }: QrScannerProps) {
       document.head.removeChild(script);
     };
   }, []);
+
+  async function handleZoomChange(value: number) {
+    setZoomValue(value);
+    if (!zoomSupported || !streamRef.current) return;
+
+    try {
+      const track = streamRef.current.getVideoTracks()[0];
+      await track.applyConstraints({
+        advanced: [{ zoom: value } as any],
+      });
+    } catch {
+      // Keep scanning with last known value if applyConstraints fails.
+    }
+  }
 
   if (scanned) {
     return (
@@ -195,6 +254,21 @@ export function QrScanner({ onScan }: QrScannerProps) {
           >
             Cancel
           </button>
+          <div className="absolute left-3 right-3 top-3 z-10 rounded-md bg-black/55 px-3 py-2 text-white">
+            <div className="flex items-center justify-between text-xs">
+              <span>{zoomSupported ? "Camera zoom" : "Digital zoom fallback"}</span>
+              <span>{zoomValue.toFixed(1)}x</span>
+            </div>
+            <input
+              type="range"
+              min={zoomMin}
+              max={zoomMax}
+              step={zoomStep}
+              value={zoomValue}
+              onChange={(e) => handleZoomChange(Number(e.target.value))}
+              className="mt-2 w-full accent-cyan-300"
+            />
+          </div>
         </div>
       )}
 

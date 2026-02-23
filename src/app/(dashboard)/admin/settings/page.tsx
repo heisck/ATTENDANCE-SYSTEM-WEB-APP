@@ -71,6 +71,18 @@ export default async function AdminSettingsPage() {
                 {settings?.confidenceThreshold || 70}%
               </p>
             </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Timezone</p>
+              <p className="font-medium">{settings?.timezone || "UTC"}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Student Email Domains</p>
+              <p className="font-medium">
+                {Array.isArray(settings?.studentEmailDomains) && settings.studentEmailDomains.length > 0
+                  ? settings.studentEmailDomains.join(", ")
+                  : "Not configured"}
+              </p>
+            </div>
           </div>
         </div>
 

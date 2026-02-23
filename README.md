@@ -13,6 +13,17 @@ Smart university attendance system with 4-layer security verification. Built for
 
 Confidence score (0-100) determines if attendance is flagged for review.
 
+## Updated Security Workflow
+
+- Student public signup is student-only (institutional email + personal email).
+- Lecturer onboarding is invite-only by Admin/Super Admin.
+- Student personal email verification is required before attendance actions.
+- Student passkey setup is required before student dashboard attendance features.
+- Attendance sessions start from strict lecturer course-code validation.
+- QR output includes rotating sequence labels (`E001`, `E002`, ...) and timing cues.
+
+See [QR and Proximity Policy](docs/QR_AND_PROXIMITY_POLICY.md) for classroom scanning standards and distance guidance.
+
 ## Tech Stack
 
 - **Next.js 16** (App Router, Server Components)

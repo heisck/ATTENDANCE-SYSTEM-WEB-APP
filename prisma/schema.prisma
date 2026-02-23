@@ -43,6 +43,16 @@ enum SubscriptionPlan {
   ENTERPRISE
 }
 
+enum EmailVerificationTokenType {
+  PERSONAL_EMAIL_VERIFY
+}
+
+enum NotificationType {
+  UPCOMING_CLASS
+  ATTENDANCE_RISK
+  SYSTEM
+}
+
 model Organization {
   id        String   @id @default(cuid())
   name      String
@@ -57,6 +67,7 @@ model Organization {
   courses      Course[]
   subscription Subscription?
   ipRanges     TrustedIpRange[]
+  lecturerInvites LecturerInvite[]
 
   @@index([slug])
 }
@@ -64,6 +75,7 @@ model Organization {
 model User {
   id             String   @id @default(cuid())
   email          String   @unique
+  personalEmail  String?  @unique
   name           String
   passwordHash   String
   role           Role     @default(STUDENT)
@@ -71,6 +83,8 @@ model User {
   indexNumber    String?  @unique
   organizationId String?
   emailVerified  DateTime?
+  personalEmailVerifiedAt DateTime?
+  lastProfileCompletionPromptAt DateTime?
   image          String?
   passkeysLockedUntilAdminReset Boolean @default(false)
   firstPasskeyCreatedAt DateTime?
@@ -84,11 +98,27 @@ model User {
   courses      Course[]             @relation("LecturerCourses")
   enrollments  Enrollment[]
   auditLogs    AuditLog[]
+  lecturerInvitesCreated LecturerInvite[] @relation("LecturerInvitesCreatedBy")
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens PasswordResetToken[]
+  pushSubscriptions PushSubscription[]
+  notifications UserNotification[]
 
   @@index([email])
+  @@index([personalEmail])
   @@index([organizationId])
   @@index([role])
   @@index([passkeysLockedUntilAdminReset])
+}
+
+model WebAuthnChallenge {
+  id        String   @id @default(cuid())
+  userId    String
+  challenge String
+  expiresAt DateTime
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model WebAuthnCredential {
@@ -245,4 +275,89 @@ model Subscription {
   updatedAt      DateTime         @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model LecturerInvite {
+  id             String   @id @default(cuid())
+  organizationId String
+  invitedEmail   String
+  tokenHash      String   @unique
+  invitedByUserId String
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy    User         @relation("LecturerInvitesCreatedBy", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([invitedEmail])
+  @@index([expiresAt])
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  email     String
+  tokenHash String   @unique
+  type      EmailVerificationTokenType @default(PERSONAL_EMAIL_VERIFY)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([email])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  email     String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([email])
+  @@index([expiresAt])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint])
+  @@index([userId])
+}
+
+model UserNotification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      NotificationType @default(SYSTEM)
+  title     String
+  body      String
+  metadata  Json     @default("{}")
+  readAt    DateTime?
+  sentAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([type])
 }

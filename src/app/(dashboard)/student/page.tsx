@@ -1,8 +1,10 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getStudentGateState } from "@/lib/student-gates";
 import { redirect } from "next/navigation";
 import { StatsGrid, StatCard } from "@/components/dashboard/stats-cards";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
+import { PushNotificationToggle } from "@/components/push-notification-toggle";
 import { QrCode, CheckCircle2, AlertTriangle, BookOpen } from "lucide-react";
 import Link from "next/link";
 
@@ -11,8 +13,10 @@ export default async function StudentDashboard() {
   if (!session?.user) redirect("/login");
 
   const userId = session.user.id;
+  const gate = await getStudentGateState(userId);
+  if (gate.redirectPath) redirect(gate.redirectPath);
 
-  const [enrollments, totalAttendance, flaggedCount, recentRecords] =
+  const [enrollments, totalAttendance, flaggedCount, recentRecords, liveSessions] =
     await Promise.all([
       db.enrollment.count({ where: { studentId: userId } }),
       db.attendanceRecord.count({ where: { studentId: userId } }),
@@ -25,6 +29,21 @@ export default async function StudentDashboard() {
           session: { include: { course: true } },
         },
         orderBy: { markedAt: "desc" },
+        take: 10,
+      }),
+      db.attendanceSession.findMany({
+        where: {
+          status: "ACTIVE",
+          course: {
+            enrollments: {
+              some: { studentId: userId },
+            },
+          },
+        },
+        include: {
+          course: { select: { code: true, name: true } },
+        },
+        orderBy: { startedAt: "desc" },
         take: 10,
       }),
     ]);
@@ -74,6 +93,8 @@ export default async function StudentDashboard() {
         </div>
       )}
 
+      <PushNotificationToggle />
+
       <StatsGrid>
         <StatCard
           title="Enrolled Courses"
@@ -104,6 +125,25 @@ export default async function StudentDashboard() {
           icon={<QrCode className="h-5 w-5" />}
         />
       </StatsGrid>
+
+      <div>
+        <h2 className="mb-4 text-lg font-semibold">Live Attendance Sessions</h2>
+        <AttendanceTable
+          columns={[
+            { key: "course", label: "Course" },
+            { key: "phase", label: "Phase" },
+            { key: "started", label: "Started" },
+            { key: "action", label: "" },
+          ]}
+          data={liveSessions.map((sessionItem) => ({
+            course: `${sessionItem.course.code} - ${sessionItem.course.name}`,
+            phase: sessionItem.phase,
+            started: sessionItem.startedAt.toLocaleTimeString(),
+            action: "Open Scanner",
+          }))}
+          emptyMessage="No live sessions right now."
+        />
+      </div>
 
       <div>
         <h2 className="mb-4 text-lg font-semibold">Recent Attendance</h2>

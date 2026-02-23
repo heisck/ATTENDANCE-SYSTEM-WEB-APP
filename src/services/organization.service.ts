@@ -38,6 +38,8 @@ export async function onboardOrganization(input: {
         campusLng: input.campusLng || 0,
         defaultRadiusMeters: 500,
         confidenceThreshold: 70,
+        studentEmailDomains: input.orgDomain ? [input.orgDomain, `st.${input.orgDomain}`] : [],
+        timezone: "UTC",
       },
       subscription: {
         create: {

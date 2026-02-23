@@ -14,7 +14,7 @@ interface Course {
 export default function NewSessionPage() {
   const router = useRouter();
   const [courses, setCourses] = useState<Course[]>([]);
-  const [selectedCourse, setSelectedCourse] = useState("");
+  const [courseCode, setCourseCode] = useState("");
   const [gps, setGps] = useState<{ lat: number; lng: number } | null>(null);
   const [radius, setRadius] = useState(500);
   const [loading, setLoading] = useState(false);
@@ -30,7 +30,7 @@ export default function NewSessionPage() {
   }, []);
 
   async function handleStart() {
-    if (!selectedCourse || !gps) return;
+    if (!courseCode.trim() || !gps) return;
 
     setLoading(true);
     setError("");
@@ -40,7 +40,7 @@ export default function NewSessionPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          courseId: selectedCourse,
+          courseCode: courseCode.trim().toUpperCase(),
           gpsLat: gps.lat,
           gpsLng: gps.lng,
           radiusMeters: radius,
@@ -82,19 +82,23 @@ export default function NewSessionPage() {
 
       <div className="space-y-4">
         <div className="space-y-2">
-          <label className="text-sm font-medium">Select Course</label>
-          <select
-            value={selectedCourse}
-            onChange={(e) => setSelectedCourse(e.target.value)}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="">Choose a course...</option>
+          <label htmlFor="courseCode" className="text-sm font-medium">Enter Course Code</label>
+          <input
+            id="courseCode"
+            list="course-codes"
+            value={courseCode}
+            onChange={(e) => setCourseCode(e.target.value.toUpperCase())}
+            placeholder="e.g. CS351"
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+          <datalist id="course-codes">
             {courses.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.code} - {c.name}
-              </option>
+              <option key={c.id} value={c.code} />
             ))}
-          </select>
+          </datalist>
+          <p className="text-xs text-muted-foreground">
+            Session starts only if this exact course code belongs to you.
+          </p>
         </div>
 
         <div className="space-y-2">
@@ -121,7 +125,7 @@ export default function NewSessionPage() {
 
         <button
           onClick={handleStart}
-          disabled={!selectedCourse || !gps || loading}
+          disabled={!courseCode.trim() || !gps || loading}
           className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >
           {loading ? (

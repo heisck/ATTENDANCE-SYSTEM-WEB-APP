@@ -18,15 +18,52 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const [studentState, credentialCount] = await Promise.all([
+    db.user.findUnique({
+      where: { id: user.id },
+      select: { personalEmail: true, personalEmailVerifiedAt: true },
+    }),
+    db.webAuthnCredential.count({
+      where: { userId: user.id },
+    }),
+  ]);
+  if (!studentState?.personalEmail || !studentState.personalEmailVerifiedAt) {
+    return NextResponse.json(
+      { error: "Complete and verify your personal email before reverification." },
+      { status: 403 }
+    );
+  }
+  if (credentialCount === 0) {
+    return NextResponse.json(
+      { error: "Register a passkey before reverification." },
+      { status: 403 }
+    );
+  }
+
   try {
     const body = await request.json();
     const sessionId = typeof body?.sessionId === "string" ? body.sessionId : "";
     const qrToken = typeof body?.qrToken === "string" ? body.qrToken : "";
+    const qrTimestamp = Number(body?.qrTimestamp);
     const webauthnVerified = body?.webauthnVerified === true;
 
     if (!sessionId || !qrToken) {
       return NextResponse.json(
         { error: "sessionId and qrToken are required" },
+        { status: 400 }
+      );
+    }
+    if (!Number.isFinite(qrTimestamp)) {
+      return NextResponse.json(
+        { error: "Valid qrTimestamp is required" },
+        { status: 400 }
+      );
+    }
+
+    const scanSkewMs = Math.abs(Date.now() - qrTimestamp);
+    if (scanSkewMs > 8_000) {
+      return NextResponse.json(
+        { error: "QR scan is too old. Scan again and submit immediately." },
         { status: 400 }
       );
     }
@@ -104,7 +141,7 @@ export async function POST(request: NextRequest) {
       attendanceSession.qrSecret,
       qrToken,
       "REVERIFY",
-      Date.now(),
+      qrTimestamp,
       syncedSession.qrRotationMs,
       syncedSession.qrGraceMs
     );
