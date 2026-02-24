@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from "react";
 import {
   Bluetooth,
   Loader2,
-  AlertTriangle,
   CheckCircle2,
   Radio,
   Eye,
@@ -45,6 +44,10 @@ export function BleRelayScanner({
   const [distance, setDistance] = useState<number | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const scanAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (error) toast.error(error);
+  }, [error]);
 
   // Fetch available relay devices
   useEffect(() => {
@@ -202,15 +205,6 @@ export function BleRelayScanner({
         <Bluetooth className="h-5 w-5 text-muted-foreground" />
         <h3 className="font-semibold">Scan from Friend's Device (BLE)</h3>
       </div>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-          <p className="text-sm text-red-700 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4" />
-            {error}
-          </p>
-        </div>
-      )}
 
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">

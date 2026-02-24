@@ -46,6 +46,10 @@ export function BleRelayBroadcaster({
     lastScanTime: null as Date | null,
   });
 
+  useEffect(() => {
+    if (error) toast.error(error);
+  }, [error]);
+
   // Register device as relay after verification
   useEffect(() => {
     const registerDevice = async () => {
@@ -254,13 +258,6 @@ export function BleRelayBroadcaster({
       {/* Message */}
       {message && (
         <p className="text-sm text-muted-foreground">{message}</p>
-      )}
-
-      {/* Error Display */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded p-3">
-          <p className="text-sm text-red-700">{error}</p>
-        </div>
       )}
 
       {/* Broadcast Controls */}

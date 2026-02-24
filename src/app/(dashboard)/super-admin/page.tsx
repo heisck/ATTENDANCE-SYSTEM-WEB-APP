@@ -1,9 +1,7 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
-import { StatsGrid, StatCard } from "@/components/dashboard/stats-cards";
-import Image from "next/image";
-import { Building2, Users, BarChart3 } from "lucide-react";
+import { OverviewMetrics } from "@/components/dashboard/overview-metrics";
 
 export default async function SuperAdminDashboard() {
   const session = await auth();
@@ -26,38 +24,20 @@ export default async function SuperAdminDashboard() {
 
   return (
     <div className="space-y-6">
-      <section className="surface p-5 sm:p-6">
-        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-          Platform
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Overview</h1>
-        <p className="section-subtitle mt-1">
-          Manage all organizations on AttendanceIQ
-        </p>
+      <section className="surface p-4 sm:p-5">
+        <p className="section-title">Platform Workspace</p>
+        <p className="section-subtitle">Tenant management and global system activity.</p>
       </section>
 
-      <StatsGrid>
-        <StatCard
-          title="Organizations"
-          value={orgs}
-          icon={<Building2 className="h-5 w-5" />}
-        />
-        <StatCard
-          title="Total Users"
-          value={totalUsers}
-          icon={<Users className="h-5 w-5" />}
-        />
-        <StatCard
-          title="Total Sessions"
-          value={totalSessions}
-          icon={<BarChart3 className="h-5 w-5" />}
-        />
-        <StatCard
-          title="Attendance Records"
-          value={totalRecords}
-          icon={<Image src="/web-app-manifest-192x192.png" alt="" width={20} height={20} className="rounded" />}
-        />
-      </StatsGrid>
+      <OverviewMetrics
+        title="Platform Snapshot"
+        items={[
+          { key: "orgs", label: "Organizations", value: orgs },
+          { key: "users", label: "Total Users", value: totalUsers },
+          { key: "sessions", label: "Total Sessions", value: totalSessions },
+          { key: "records", label: "Attendance Records", value: totalRecords },
+        ]}
+      />
 
       <section className="space-y-3">
         <div className="flex items-end justify-between">

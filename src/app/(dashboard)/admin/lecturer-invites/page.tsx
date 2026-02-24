@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { Loader2, Mail, Send, RefreshCcw, Ban } from "lucide-react";
+import { toast } from "sonner";
 
 type LecturerInvite = {
   id: string;
@@ -22,8 +23,6 @@ export default function LecturerInvitesPage() {
   const [invites, setInvites] = useState<LecturerInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
 
   const role = (session?.user as any)?.role as string | undefined;
   const sessionOrgId = (session?.user as any)?.organizationId as string | undefined;
@@ -50,9 +49,8 @@ export default function LecturerInvitesPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to fetch invites");
       setInvites(data.invites || []);
-      setError(null);
     } catch (err: any) {
-      setError(err.message || "Failed to fetch invites");
+      toast.error(err.message || "Failed to fetch invites");
     } finally {
       setLoading(false);
     }
@@ -61,8 +59,6 @@ export default function LecturerInvitesPage() {
   async function handleCreateInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
-    setError(null);
-    setMessage(null);
     try {
       const payload: Record<string, unknown> = { invitedEmail, ttlHours };
       if (role === "SUPER_ADMIN") payload.organizationId = organizationId;
@@ -74,19 +70,17 @@ export default function LecturerInvitesPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create invite");
-      setMessage(`Invite created for ${invitedEmail}`);
+      toast.success(`Invite created for ${invitedEmail}`);
       setInvitedEmail("");
       await fetchInvites();
     } catch (err: any) {
-      setError(err.message || "Failed to create invite");
+      toast.error(err.message || "Failed to create invite");
     } finally {
       setSubmitting(false);
     }
   }
 
   async function runInviteAction(id: string, action: "resend" | "revoke") {
-    setError(null);
-    setMessage(null);
     try {
       const payload: Record<string, unknown> = { action };
       if (role === "SUPER_ADMIN") payload.organizationId = organizationId;
@@ -98,10 +92,10 @@ export default function LecturerInvitesPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Failed to ${action} invite`);
-      setMessage(`Invite ${action} completed.`);
+      toast.success(`Invite ${action} completed.`);
       await fetchInvites();
     } catch (err: any) {
-      setError(err.message || `Failed to ${action} invite`);
+      toast.error(err.message || `Failed to ${action} invite`);
     }
   }
 
@@ -130,17 +124,6 @@ export default function LecturerInvitesPage() {
             placeholder="Required for super-admin"
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
-        </div>
-      )}
-
-      {message && (
-        <div className="status-panel text-sm">
-          {message}
-        </div>
-      )}
-      {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          {error}
         </div>
       )}
 

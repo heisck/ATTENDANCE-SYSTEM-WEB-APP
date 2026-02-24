@@ -7,6 +7,7 @@ import { GpsCheck } from "@/components/gps-check";
 import { WebAuthnPrompt } from "@/components/webauthn-prompt";
 import { BleProximityCheck } from "@/components/ble-proximity-check";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
   CheckCircle2,
   XCircle,
@@ -213,6 +214,20 @@ export default function AttendPage() {
     return () => clearInterval(t);
   }, [reverifyPasskeyVerified, isPendingReverify]);
 
+  useEffect(() => {
+    if (syncError) toast.error(syncError);
+  }, [syncError]);
+
+  useEffect(() => {
+    if (reverifyError) toast.error(reverifyError);
+  }, [reverifyError]);
+
+  useEffect(() => {
+    if (step === "result" && result && !result.success && result.error) {
+      toast.error(result.error);
+    }
+  }, [result, step]);
+
   function handleWebAuthnVerified() {
     setWebauthnVerified(true);
     setStep("gps");
@@ -226,6 +241,7 @@ export default function AttendPage() {
   async function handleInitialQrScan(data: { sessionId: string; token: string; ts: number }) {
     if (!gps) return;
     if (selectedSession && data.sessionId !== selectedSession.id) {
+      toast.error("This QR belongs to a different session.");
       setResult({
         success: false,
         confidence: 0,
@@ -258,6 +274,7 @@ export default function AttendPage() {
       const body = await res.json();
 
       if (!res.ok) {
+        toast.error(body.error || "Attendance failed.");
         setResult({
           success: false,
           confidence: 0,
@@ -278,6 +295,7 @@ export default function AttendPage() {
       }
       setStep("result");
     } catch {
+      toast.error("Network error. Please try again.");
       setResult({
         success: false,
         confidence: 0,
@@ -445,13 +463,7 @@ export default function AttendPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div className="surface p-6">
-        <h1 className="text-2xl font-bold tracking-tight">Mark Attendance</h1>
-        <p className="mt-2 text-muted-foreground">
-          Initial attendance is followed by adaptive random reverification.
-        </p>
-      </div>
+    <div className="w-full max-w-none space-y-6">
 
       <BleProximityCheck />
 
@@ -582,10 +594,16 @@ export default function AttendPage() {
             </div>
           )}
           {!result.success && (
-            <div className="rounded-lg border p-4 border-red-200 bg-red-50">
-              <XCircle className="h-16 w-16 text-red-600" />
-              <p className="text-xl font-bold text-red-800">Attendance Failed</p>
-              <p className="text-sm text-red-600">{result.error}</p>
+            <div className="surface-muted p-4">
+              <p className="text-base font-semibold">Attendance was not completed.</p>
+              <p className="mt-1 text-sm text-muted-foreground">{result.error}</p>
+              <button
+                type="button"
+                onClick={resetFlow}
+                className="mt-3 inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+              >
+                Try Again
+              </button>
             </div>
           )}
 
@@ -635,12 +653,6 @@ export default function AttendPage() {
                 </div>
               )}
 
-              {syncError && (
-                <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
-                  {syncError}
-                </div>
-              )}
-
               {!syncState?.attendance && (
                 <p className="text-sm text-muted-foreground">
                   Waiting for attendance state sync...
@@ -658,7 +670,7 @@ export default function AttendPage() {
                           ? "border-border/70 bg-muted/40 text-foreground"
                           : reverifyMessage.tone === "yellow"
                             ? "border-border/70 bg-muted/40 text-foreground"
-                            : "border-red-300 bg-red-50 text-red-800"
+                            : "border-border/70 bg-muted/40 text-foreground"
                   }`}
                 >
                   <p className="font-medium">{reverifyMessage.title}</p>
@@ -736,11 +748,6 @@ export default function AttendPage() {
                 </div>
               )}
 
-              {reverifyError && (
-                <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
-                  {reverifyError}
-                </div>
-              )}
             </div>
           )}
         </div>

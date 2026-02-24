@@ -2,10 +2,10 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getStudentGateState } from "@/lib/student-gates";
 import { redirect } from "next/navigation";
-import { StatsGrid, StatCard } from "@/components/dashboard/stats-cards";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
+import { OverviewMetrics } from "@/components/dashboard/overview-metrics";
 import { PushNotificationToggle } from "@/components/push-notification-toggle";
-import { QrCode, CheckCircle2, AlertTriangle, BookOpen } from "lucide-react";
+import { QrCode, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 
 export default async function StudentDashboard() {
@@ -54,23 +54,18 @@ export default async function StudentDashboard() {
 
   return (
     <div className="space-y-6">
-      <section className="surface p-5 sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-              Student
-            </p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight">Dashboard</h1>
-            <p className="section-subtitle mt-1">Welcome back, {session.user.name}</p>
-          </div>
-          <Link
-            href="/student/attend"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            <QrCode className="h-4 w-4" />
-            Mark Attendance
-          </Link>
+      <section className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <div>
+          <p className="section-title">Student Workspace</p>
+          <p className="section-subtitle">Attendance tracking and verification status in one place.</p>
         </div>
+        <Link
+          href="/student/attend"
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          <QrCode className="h-4 w-4" />
+          Mark Attendance
+        </Link>
       </section>
 
       {!hasCredential && (
@@ -93,36 +88,30 @@ export default async function StudentDashboard() {
 
       <PushNotificationToggle />
 
-      <StatsGrid>
-        <StatCard
-          title="Enrolled Courses"
-          value={enrollments}
-          icon={<BookOpen className="h-5 w-5" />}
-        />
-        <StatCard
-          title="Total Attendance"
-          value={totalAttendance}
-          icon={<CheckCircle2 className="h-5 w-5" />}
-        />
-        <StatCard
-          title="Flagged Records"
-          value={flaggedCount}
-          subtitle={flaggedCount > 0 ? "Review recommended" : "All clear"}
-          icon={<AlertTriangle className="h-5 w-5" />}
-        />
-        <StatCard
-          title="Confidence Avg"
-          value={
-            recentRecords.length > 0
-              ? Math.round(
-                  recentRecords.reduce((a, r) => a + r.confidence, 0) /
-                    recentRecords.length
-                ) + "%"
-              : "N/A"
-          }
-          icon={<QrCode className="h-5 w-5" />}
-        />
-      </StatsGrid>
+      <OverviewMetrics
+        title="Attendance Snapshot"
+        items={[
+          { key: "courses", label: "Enrolled Courses", value: enrollments },
+          { key: "attendance", label: "Total Attendance", value: totalAttendance },
+          {
+            key: "flagged",
+            label: "Flagged Records",
+            value: flaggedCount,
+            hint: flaggedCount > 0 ? "Review recommended" : "All clear",
+          },
+          {
+            key: "confidence",
+            label: "Confidence Avg",
+            value:
+              recentRecords.length > 0
+                ? Math.round(
+                    recentRecords.reduce((a, r) => a + r.confidence, 0) /
+                      recentRecords.length
+                  ) + "%"
+                : "N/A",
+          },
+        ]}
+      />
 
       <section className="space-y-3">
         <div className="flex items-end justify-between">

@@ -77,7 +77,7 @@ function LoginForm() {
               href="/"
               className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary transition-colors hover:bg-primary/20 overflow-hidden"
             >
-              <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={32} height={32} className="rounded-lg" />
+              <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={32} height={32} className="rounded-lg logo-mark" />
             </Link>
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>

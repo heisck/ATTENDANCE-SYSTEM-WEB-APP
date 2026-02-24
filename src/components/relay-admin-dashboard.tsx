@@ -10,6 +10,7 @@ import {
   Radio,
   Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 
 interface RelayStats {
   totalRelays: number;
@@ -45,6 +46,10 @@ export function RelayAdminDashboard({
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (error) toast.error(error);
+  }, [error]);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -104,16 +109,6 @@ export function RelayAdminDashboard({
           </p>
         </div>
       </div>
-
-      {/* Error Display */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-          <p className="text-sm text-red-700 flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            {error}
-          </p>
-        </div>
-      )}
 
       {/* Key Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

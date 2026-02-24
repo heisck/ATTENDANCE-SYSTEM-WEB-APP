@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { startAuthentication } from "@simplewebauthn/browser";
-import { Fingerprint, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Fingerprint, Loader2, CheckCircle2 } from "lucide-react";
+import { toast } from "sonner";
 
 interface WebAuthnPromptProps {
   onVerified: () => void;
@@ -11,6 +12,10 @@ interface WebAuthnPromptProps {
 export function WebAuthnPrompt({ onVerified }: WebAuthnPromptProps) {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (status === "error" && error) toast.error(error);
+  }, [error, status]);
 
   async function buildUserError(err: any): Promise<string> {
     const rawMessage = String(err?.message || "");
@@ -95,13 +100,6 @@ export function WebAuthnPrompt({ onVerified }: WebAuthnPromptProps) {
             </p>
           </div>
         </div>
-
-        {status === "error" && (
-          <div className="rounded-md bg-destructive/10 border border-destructive/30 p-3 flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-destructive">{error}</p>
-          </div>
-        )}
 
         <div className="flex gap-3 pt-2">
           {(status === "idle" || status === "error") && (

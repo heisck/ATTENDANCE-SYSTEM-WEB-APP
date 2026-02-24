@@ -4,10 +4,9 @@ import { useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { signOut } from "next-auth/react";
 import type { LucideIcon } from "lucide-react";
 import Dock, { type DockItemData } from "@/components/Dock";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { UserMenu } from "@/components/dashboard/user-menu";
 import {
   BarChart3,
   BookOpen,
@@ -16,7 +15,6 @@ import {
   Fingerprint,
   History,
   Home,
-  LogOut,
   Play,
   QrCode,
   Settings,
@@ -64,11 +62,65 @@ function isRouteActive(pathname: string, href: string, rolePath: string) {
   return pathname === href || (href !== rolePath && pathname.startsWith(href));
 }
 
-export function Sidebar({ role, userName }: { role: string; userName: string }) {
+function roleLabel(role: string) {
+  return role.toLowerCase().replace(/_/g, " ");
+}
+
+function formatSegment(segment: string) {
+  return segment
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function deriveCurrentPage(pathname: string, rolePath: string, items: NavItem[]) {
+  if (pathname === rolePath) return "Dashboard";
+
+  const activeItem = items.find((item) => isRouteActive(pathname, item.href, rolePath));
+  if (activeItem) return activeItem.label;
+
+  const relativePath = pathname.replace(`${rolePath}/`, "");
+  const segments = relativePath.split("/").filter(Boolean);
+  if (segments.length === 0) return "Dashboard";
+
+  const last = segments[segments.length - 1];
+  const isIdLike = /^[a-f0-9-]{8,}$/i.test(last) || /^\d+$/.test(last);
+  if (isIdLike && segments.length > 1) {
+    return `${formatSegment(segments[segments.length - 2])} Details`;
+  }
+
+  return formatSegment(last);
+}
+
+function profileHrefByRole(role: string) {
+  switch (role) {
+    case "STUDENT":
+      return "/student/profile";
+    case "ADMIN":
+      return "/admin/settings";
+    case "LECTURER":
+      return "/lecturer";
+    case "SUPER_ADMIN":
+      return "/super-admin";
+    default:
+      return undefined;
+  }
+}
+
+export function Sidebar({
+  role,
+  userName,
+  userEmail,
+}: {
+  role: string;
+  userName: string;
+  userEmail?: string | null;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const items = navByRole[role] || [];
   const rolePath = `/${role.toLowerCase().replace(/_/g, "-")}`;
+  const currentPage = useMemo(() => deriveCurrentPage(pathname, rolePath, items), [items, pathname, rolePath]);
+  const profileHref = useMemo(() => profileHrefByRole(role), [role]);
 
   const dockItems = useMemo<DockItemData[]>(
     () =>
@@ -95,31 +147,21 @@ export function Sidebar({ role, userName }: { role: string; userName: string }) 
 
   return (
     <>
-      <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-border/70 bg-background/90 px-4 backdrop-blur-xl supports-[backdrop-filter]:bg-background/75">
-        <Link href={rolePath} className="flex items-center gap-2">
-          <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={24} height={24} className="rounded" />
-          <span className="text-base font-bold font-[family-name:var(--font-silkscreen)] tracking-tight">
-            attendanceIQ
-          </span>
-        </Link>
-        <div className="flex items-center gap-2">
-          <div className="hidden items-center gap-2 rounded-full border border-border/70 bg-card/65 px-3 py-1 text-xs text-muted-foreground sm:flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-foreground/40" />
-            <span className="max-w-[10rem] truncate">{userName}</span>
-            <span className="text-[10px] uppercase tracking-[0.12em]">
-              {role.toLowerCase().replace(/_/g, " ")}
+      <header className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between border-b border-border/70 bg-background/90 px-3 sm:px-4 lg:px-6 backdrop-blur-xl supports-[backdrop-filter]:bg-background/75">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link href={rolePath} className="flex items-center gap-2">
+            <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={24} height={24} className="rounded logo-mark" />
+            <span className="text-base font-bold font-[family-name:var(--font-silkscreen)] tracking-tight">
+              attendanceIQ
             </span>
+          </Link>
+          <span className="hidden h-6 w-px bg-border/70 sm:block" />
+          <div className="hidden min-w-0 sm:block">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{roleLabel(role)}</p>
+            <p className="truncate text-sm font-medium text-foreground">{currentPage}</p>
           </div>
-          <ThemeToggle />
-          <button
-            type="button"
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-            aria-label="Sign Out"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
         </div>
+        <UserMenu role={role} userName={userName} userEmail={userEmail} profileHref={profileHref} />
       </header>
 
       {dockItems.length > 0 && (

@@ -30,6 +30,10 @@ export function BleProximityCheck({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (error) toast.error(error);
+  }, [error]);
+
+  useEffect(() => {
     const hasWebBluetooth =
       typeof navigator !== "undefined" && Boolean((navigator as any).bluetooth);
     const isSecure = typeof window !== "undefined" ? window.isSecureContext : false;
@@ -201,13 +205,6 @@ export function BleProximityCheck({
                   </span>
                 </p>
               </div>
-            </div>
-          )}
-
-          {/* Error display */}
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-md p-3">
-              <p className="text-xs text-red-700">{error}</p>
             </div>
           )}
         </div>

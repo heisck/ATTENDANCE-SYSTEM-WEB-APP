@@ -129,7 +129,7 @@ function DockItem({
           onClick?.();
         }
       }}
-      className={`relative inline-flex items-center justify-center rounded-full border border-transparent bg-transparent text-black transition-colors duration-150 hover:border-black/15 hover:bg-gray-100/85 focus-visible:border-black/15 focus-visible:bg-gray-100/85 dark:border-gray-700 dark:bg-[#0b0b0c] dark:text-gray-100 dark:shadow-sm dark:shadow-black/30 dark:hover:border-gray-700 dark:hover:bg-[#0b0b0c] dark:focus-visible:border-gray-700 dark:focus-visible:bg-[#0b0b0c] ${className}`}
+      className={`relative inline-flex items-center justify-center rounded-full border border-transparent bg-transparent text-black transition-colors duration-150 hover:border-black/15 hover:bg-gray-100/85 focus-visible:border-black/15 focus-visible:bg-gray-100/85 dark:border-border dark:bg-[#2a2623] dark:text-gray-100 dark:shadow-sm dark:shadow-black/25 dark:hover:border-border dark:hover:bg-[#312c28] dark:focus-visible:border-border dark:focus-visible:bg-[#312c28] ${className}`}
       tabIndex={0}
       role="button"
       aria-haspopup="true"
@@ -161,7 +161,7 @@ function DockLabel({ children, className = "", isHovered }: DockLabelProps) {
 
   return (
     <motion.div
-      className={`${className} absolute -top-7 left-1/2 w-fit whitespace-pre rounded-md border border-border bg-popover px-2 py-0.5 text-xs text-popover-foreground shadow-sm dark:border-gray-700 dark:bg-[#0b0b0c] dark:text-gray-200 dark:shadow-black/25`}
+      className={`${className} absolute -top-7 left-1/2 w-fit whitespace-pre rounded-md border border-border bg-popover px-2 py-0.5 text-xs text-popover-foreground shadow-sm dark:border-border dark:bg-[#2b2724] dark:text-gray-200 dark:shadow-black/25`}
       role="tooltip"
       style={{ x: "-50%", opacity, y, scale, pointerEvents: "none" }}
     >
@@ -232,7 +232,7 @@ export default function Dock({
         onTouchCancel={() => {
           resetInteraction();
         }}
-        className={`${className} absolute bottom-2 left-1/2 transform -translate-x-1/2 flex items-end w-fit gap-4 rounded-2xl border border-black/10 bg-white pb-2 px-4 shadow-sm shadow-black/5 backdrop-blur-md supports-[backdrop-filter]:bg-white/90 dark:border-gray-700/70 dark:bg-[#0b0b0c]/90 dark:shadow-black/35 dark:supports-[backdrop-filter]:bg-black/10`}
+        className={`${className} absolute bottom-2 left-1/2 transform -translate-x-1/2 flex items-end w-fit gap-4 rounded-2xl border border-black/10 bg-white pb-2 px-4 shadow-sm shadow-black/5 backdrop-blur-md supports-[backdrop-filter]:bg-white/90 dark:border-border/80 dark:bg-[#25211e]/90 dark:shadow-black/30 dark:supports-[backdrop-filter]:bg-[#25211e]/85`}
         style={{ height: panelHeight, touchAction: "none" }}
         role="toolbar"
         aria-label="Application dock"

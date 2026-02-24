@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { GpsCheck } from "@/components/gps-check";
 import { Loader2, Play } from "lucide-react";
+import { toast } from "sonner";
 
 interface Course {
   id: string;
@@ -18,7 +19,6 @@ export default function NewSessionPage() {
   const [gps, setGps] = useState<{ lat: number; lng: number } | null>(null);
   const [radius, setRadius] = useState(500);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
   useEffect(() => {
     fetch("/api/courses")
@@ -33,7 +33,6 @@ export default function NewSessionPage() {
     if (!courseCode.trim() || !gps) return;
 
     setLoading(true);
-    setError("");
 
     try {
       const res = await fetch("/api/attendance/sessions", {
@@ -59,7 +58,7 @@ export default function NewSessionPage() {
 
       router.push(`/lecturer/session/${data.id}`);
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err?.message || "Failed to create session");
     } finally {
       setLoading(false);
     }
@@ -73,12 +72,6 @@ export default function NewSessionPage() {
           Create a new session and display the QR code for students
         </p>
       </div>
-
-      {error && (
-        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
 
       <div className="space-y-4">
         <div className="space-y-2">

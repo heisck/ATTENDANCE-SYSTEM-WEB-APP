@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Smartphone, Laptop, Trash2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Loader2, Smartphone, Laptop, Trash2, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 
 interface Device {
   id: string;
@@ -19,7 +20,6 @@ export default function DevicesPage() {
   const router = useRouter();
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [passkeysLockedUntilAdminReset, setPasskeysLockedUntilAdminReset] = useState(false);
   const canRegisterNewPasskey =
@@ -50,9 +50,8 @@ export default function DevicesPage() {
       const data = await res.json();
       setDevices(data.devices || []);
       setPasskeysLockedUntilAdminReset(Boolean(data.passkeysLockedUntilAdminReset));
-      setError(null);
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message || "Failed to load devices");
     } finally {
       setLoading(false);
     }
@@ -60,7 +59,7 @@ export default function DevicesPage() {
 
   async function handleDeleteDevice(credentialId: string) {
     if (passkeysLockedUntilAdminReset) {
-      setError("Passkeys are locked. Ask your administrator to unlock before deleting.");
+      toast.error("Passkeys are locked. Ask your administrator to unlock before deleting.");
       return;
     }
 
@@ -87,9 +86,9 @@ export default function DevicesPage() {
       setDevices((current) =>
         current.filter((d) => d.credentialId !== credentialId)
       );
-      setError(null);
+      toast.success("Passkey deleted.");
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message || "Failed to delete device");
     } finally {
       setDeletingId(null);
     }
@@ -151,13 +150,6 @@ export default function DevicesPage() {
       {!passkeysLockedUntilAdminReset && devices.length > 0 && (
         <div className="surface-muted p-4 text-sm text-foreground/80">
           Delete your current passkey first. Registering a new passkey is only enabled when you have no active passkeys.
-        </div>
-      )}
-
-      {error && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-destructive">{error}</p>
         </div>
       )}
 

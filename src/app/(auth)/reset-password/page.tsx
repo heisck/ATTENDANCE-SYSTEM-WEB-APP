@@ -77,7 +77,7 @@ function ResetPasswordForm() {
       </div>
       <div className="w-full max-w-sm rounded-lg border border-border bg-card p-6 space-y-6">
         <div className="text-center">
-          <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={40} height={40} className="mx-auto rounded" />
+          <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={40} height={40} className="mx-auto rounded logo-mark" />
           <h1 className="mt-3 text-2xl font-bold">Reset password</h1>
           <p className="mt-2 text-sm text-muted-foreground">Set a new secure password.</p>
         </div>

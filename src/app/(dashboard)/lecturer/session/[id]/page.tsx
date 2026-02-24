@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { QrDisplay } from "@/components/qr-display";
 import { QrPortApprovalPanel } from "@/components/qr-port-approval-panel";
 import { Users, Clock, StopCircle, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { toast } from "sonner";
 
 interface SessionData {
   id: string;
@@ -61,6 +62,10 @@ export default function SessionMonitorPage() {
     const interval = setInterval(fetchSession, 5000);
     return () => clearInterval(interval);
   }, [fetchSession]);
+
+  useEffect(() => {
+    if (actionError) toast.error(actionError);
+  }, [actionError]);
 
   async function handleClose() {
     if (!confirm("Are you sure you want to close this session?")) return;
@@ -201,12 +206,6 @@ export default function SessionMonitorPage() {
           </button>
         )}
       </div>
-
-      {actionError && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-          {actionError}
-        </div>
-      )}
 
       {isReverify && (
         <div className="surface grid gap-3 p-4 sm:grid-cols-4">

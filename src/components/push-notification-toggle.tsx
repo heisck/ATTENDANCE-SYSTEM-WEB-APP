@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Bell, BellOff, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 function base64UrlToUint8Array(base64UrlString: string) {
   const padding = "=".repeat((4 - (base64UrlString.length % 4)) % 4);
@@ -15,7 +16,6 @@ export function PushNotificationToggle() {
   const [permission, setPermission] = useState<NotificationPermission>("default");
   const [subscribed, setSubscribed] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const publicKey = useMemo(() => process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY || "", []);
 
@@ -39,7 +39,6 @@ export function PushNotificationToggle() {
   async function enablePush() {
     if (!supported) return;
     setLoading(true);
-    setError(null);
 
     try {
       const permissionResult = await Notification.requestPermission();
@@ -67,8 +66,9 @@ export function PushNotificationToggle() {
         throw new Error(data.error || "Failed to save push subscription");
       }
       setSubscribed(true);
+      toast.success("Push notifications enabled.");
     } catch (err: any) {
-      setError(err.message || "Unable to enable notifications");
+      toast.error(err.message || "Unable to enable notifications");
     } finally {
       setLoading(false);
     }
@@ -77,7 +77,6 @@ export function PushNotificationToggle() {
   async function disablePush() {
     if (!supported) return;
     setLoading(true);
-    setError(null);
 
     try {
       const registration = await navigator.serviceWorker.getRegistration("/sw.js");
@@ -96,8 +95,9 @@ export function PushNotificationToggle() {
       }
 
       setSubscribed(false);
+      toast.success("Push notifications disabled.");
     } catch (err: any) {
-      setError(err.message || "Unable to disable notifications");
+      toast.error(err.message || "Unable to disable notifications");
     } finally {
       setLoading(false);
     }
@@ -117,10 +117,6 @@ export function PushNotificationToggle() {
         <p className="text-sm font-medium">Attendance Push Notifications</p>
         <span className="text-xs text-muted-foreground">Permission: {permission}</span>
       </div>
-
-      {error && (
-        <p className="text-xs text-destructive">{error}</p>
-      )}
 
       {!subscribed ? (
         <button

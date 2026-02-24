@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Camera, CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { Camera, CheckCircle2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 interface QrScannerProps {
   onScan: (data: { sessionId: string; token: string; ts: number }) => void;
@@ -20,6 +21,10 @@ export function QrScanner({ onScan }: QrScannerProps) {
   const [zoomMax, setZoomMax] = useState(3);
   const [zoomStep, setZoomStep] = useState(0.1);
   const [zoomValue, setZoomValue] = useState(1);
+
+  useEffect(() => {
+    if (error) toast.error(error);
+  }, [error]);
 
   async function startCamera() {
     setError("");
@@ -202,13 +207,6 @@ export function QrScanner({ onScan }: QrScannerProps) {
 
   return (
     <div className="space-y-4">
-      {error && (
-        <div className="flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-          <XCircle className="h-4 w-4" />
-          {error}
-        </div>
-      )}
-
       {!scanning ? (
         <button
           onClick={startCamera}

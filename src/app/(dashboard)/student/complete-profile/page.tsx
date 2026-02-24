@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Mail, CheckCircle2, AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
 
 type StudentProfileState = {
   email: string;
@@ -17,8 +18,6 @@ export default function CompleteProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [resending, setResending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [canProceed, setCanProceed] = useState(false);
 
   useEffect(() => {
@@ -42,7 +41,7 @@ export default function CompleteProfilePage() {
           setCanProceed(Boolean(statusData.canProceed));
         }
       } catch (err: any) {
-        setError(err.message || "Unable to load profile");
+        toast.error(err.message || "Unable to load profile");
       } finally {
         setLoading(false);
       }
@@ -54,8 +53,6 @@ export default function CompleteProfilePage() {
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
-    setError(null);
-    setMessage(null);
 
     try {
       const res = await fetch("/api/auth/student-profile", {
@@ -67,7 +64,7 @@ export default function CompleteProfilePage() {
       if (!res.ok) {
         throw new Error(data.error || "Unable to save profile");
       }
-      setMessage(data.message || "Profile updated.");
+      toast.success(data.message || "Profile updated.");
       setProfile((current) =>
         current
           ? {
@@ -78,7 +75,7 @@ export default function CompleteProfilePage() {
           : current
       );
     } catch (err: any) {
-      setError(err.message || "Unable to save profile");
+      toast.error(err.message || "Unable to save profile");
     } finally {
       setSaving(false);
     }
@@ -86,15 +83,13 @@ export default function CompleteProfilePage() {
 
   async function handleResend() {
     setResending(true);
-    setError(null);
-    setMessage(null);
     try {
       const res = await fetch("/api/auth/resend-verification", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Unable to resend verification");
-      setMessage("Verification link sent.");
+      toast.success("Verification link sent.");
     } catch (err: any) {
-      setError(err.message || "Unable to resend verification");
+      toast.error(err.message || "Unable to resend verification");
     } finally {
       setResending(false);
     }
@@ -116,18 +111,6 @@ export default function CompleteProfilePage() {
           Add and verify your personal email before attendance actions are enabled.
         </p>
       </div>
-
-      {message && (
-        <div className="status-panel flex items-center gap-2">
-          <CheckCircle2 className="h-4 w-4 shrink-0" />
-          {message}
-        </div>
-      )}
-      {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
 
       <div className="surface space-y-4 p-5">
         <div>

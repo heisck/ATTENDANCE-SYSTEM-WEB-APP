@@ -1,9 +1,9 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
-import { StatsGrid, StatCard } from "@/components/dashboard/stats-cards";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
-import { BookOpen, Users, Play, BarChart3 } from "lucide-react";
+import { OverviewMetrics } from "@/components/dashboard/overview-metrics";
+import { Play } from "lucide-react";
 import Link from "next/link";
 
 export default async function LecturerDashboard() {
@@ -34,51 +34,37 @@ export default async function LecturerDashboard() {
 
   return (
     <div className="space-y-6">
-      <section className="surface p-5 sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-              Lecturer
-            </p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight">Dashboard</h1>
-            <p className="section-subtitle mt-1">Welcome back, {session.user.name}</p>
-          </div>
-          <Link
-            href="/lecturer/session/new"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            <Play className="h-4 w-4" />
-            Start Session
-          </Link>
+      <section className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <div>
+          <p className="section-title">Lecturer Workspace</p>
+          <p className="section-subtitle">Course operations and attendance sessions at a glance.</p>
         </div>
+        <Link
+          href="/lecturer/session/new"
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          <Play className="h-4 w-4" />
+          Start Session
+        </Link>
       </section>
 
-      <StatsGrid>
-        <StatCard
-          title="My Courses"
-          value={courses}
-          icon={<BookOpen className="h-5 w-5" />}
-        />
-        <StatCard
-          title="Active Sessions"
-          value={activeSessions}
-          icon={<Play className="h-5 w-5" />}
-        />
-        <StatCard
-          title="Total Students"
-          value={totalStudents}
-          icon={<Users className="h-5 w-5" />}
-        />
-        <StatCard
-          title="Sessions This Month"
-          value={recentSessions.filter(
-            (s) =>
-              s.startedAt.getMonth() === new Date().getMonth() &&
-              s.startedAt.getFullYear() === new Date().getFullYear()
-          ).length}
-          icon={<BarChart3 className="h-5 w-5" />}
-        />
-      </StatsGrid>
+      <OverviewMetrics
+        title="Teaching Snapshot"
+        items={[
+          { key: "courses", label: "My Courses", value: courses },
+          { key: "active", label: "Active Sessions", value: activeSessions },
+          { key: "students", label: "Total Students", value: totalStudents },
+          {
+            key: "monthly",
+            label: "Sessions This Month",
+            value: recentSessions.filter(
+              (s) =>
+                s.startedAt.getMonth() === new Date().getMonth() &&
+                s.startedAt.getFullYear() === new Date().getFullYear()
+            ).length,
+          },
+        ]}
+      />
 
       <section className="space-y-3">
         <div className="flex items-end justify-between">

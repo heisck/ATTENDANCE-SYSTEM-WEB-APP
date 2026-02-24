@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CheckCircle2, Lock, Unlock, Loader2, AlertCircle, Trash2 } from "lucide-react";
+import { CheckCircle2, Lock, Unlock, Loader2, Trash2 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
+import { toast } from "sonner";
 
 interface PasskeyUser {
   id: string;
@@ -19,10 +20,7 @@ export default function PasskeyManagementPage() {
   const { data: session } = useSession();
   const [users, setUsers] = useState<PasskeyUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [actionInProgress, setActionInProgress] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   if (!session?.user) {
     redirect("/login");
@@ -44,9 +42,8 @@ export default function PasskeyManagementPage() {
       if (!res.ok) throw new Error("Failed to fetch users");
       const data = await res.json();
       setUsers(data.users);
-      setError(null);
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message || "Failed to fetch users");
     } finally {
       setLoading(false);
     }
@@ -64,13 +61,10 @@ export default function PasskeyManagementPage() {
         throw new Error(data.error || "Failed to unlock passkeys");
       }
 
-      setSuccess(`Passkeys unlocked for ${users.find(u => u.id === userId)?.name}`);
+      toast.success(`Passkeys unlocked for ${users.find(u => u.id === userId)?.name}`);
       await fetchUsers();
-      setSelectedUserId(null);
-
-      setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message || "Failed to unlock passkeys");
     } finally {
       setActionInProgress(false);
     }
@@ -88,13 +82,10 @@ export default function PasskeyManagementPage() {
         throw new Error(data.error || "Failed to lock passkeys");
       }
 
-      setSuccess(`Passkeys locked for ${users.find((u) => u.id === userId)?.name}`);
+      toast.success(`Passkeys locked for ${users.find((u) => u.id === userId)?.name}`);
       await fetchUsers();
-      setSelectedUserId(null);
-
-      setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message || "Failed to lock passkeys");
     } finally {
       setActionInProgress(false);
     }
@@ -116,13 +107,10 @@ export default function PasskeyManagementPage() {
         throw new Error(data.error || "Failed to delete credentials");
       }
 
-      setSuccess(`Passkeys deleted for ${users.find(u => u.id === userId)?.name}`);
+      toast.success(`Passkeys deleted for ${users.find(u => u.id === userId)?.name}`);
       await fetchUsers();
-      setSelectedUserId(null);
-
-      setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
-      setError(err.message);
+      toast.error(err.message || "Failed to delete credentials");
     } finally {
       setActionInProgress(false);
     }
@@ -136,23 +124,6 @@ export default function PasskeyManagementPage() {
           Manage user passkeys and control lock state for legitimate access recovery
         </p>
       </div>
-
-      {error && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-medium text-destructive">Error</p>
-            <p className="text-sm text-destructive/80">{error}</p>
-          </div>
-        </div>
-      )}
-
-      {success && (
-        <div className="status-panel flex items-start gap-3">
-          <CheckCircle2 className="h-5 w-5 flex-shrink-0 mt-0.5" />
-          <p className="text-sm">{success}</p>
-        </div>
-      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-12">

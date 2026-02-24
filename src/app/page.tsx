@@ -10,7 +10,7 @@ export default function HomePage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center gap-2">
-              <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={32} height={32} className="rounded" />
+              <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={32} height={32} className="rounded logo-mark" />
               <span className="text-xl font-bold [font-family:var(--font-silkscreen)] tracking-tight">attendanceIQ</span>
             </div>
             <div className="flex items-center gap-4">
@@ -91,7 +91,7 @@ export default function HomePage() {
                 score="+20 pts"
               />
               <FeatureCard
-                icon={<Image src="/web-app-manifest-192x192.png" alt="" width={32} height={32} className="rounded" />}
+                icon={<Image src="/web-app-manifest-192x192.png" alt="" width={32} height={32} className="rounded logo-mark" />}
                 title="Network Validation"
                 description="Campus WiFi IP range verification adds contextual trust evidence."
                 score="+10 pts"

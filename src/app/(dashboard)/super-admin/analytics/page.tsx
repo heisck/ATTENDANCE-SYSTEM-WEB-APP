@@ -68,7 +68,7 @@ export default async function PlatformAnalyticsPage() {
           title="Avg Confidence"
           value={`${Math.round(avgConfidence._avg.confidence || 0)}%`}
           subtitle={`${flaggedRecords} flagged records`}
-          icon={<Image src="/web-app-manifest-192x192.png" alt="" width={20} height={20} className="rounded" />}
+          icon={<Image src="/web-app-manifest-192x192.png" alt="" width={20} height={20} className="rounded logo-mark" />}
         />
       </StatsGrid>
 
