@@ -103,7 +103,7 @@ export default function NewSessionPage() {
 
         <div className="space-y-2">
           <label className="text-sm font-medium">
-            Radius: {radius}m
+            Radius &amp; GPS accuracy: {radius}m
           </label>
           <input
             type="range"
@@ -115,13 +115,13 @@ export default function NewSessionPage() {
             className="w-full"
           />
           <p className="text-xs text-muted-foreground">
-            Students must be within this distance to mark attendance
+            Students must be within this distance, and both you and students must calibrate GPS until accuracy is ≤{radius}m
           </p>
         </div>
 
         <GpsCheck
           onLocationReady={(lat, lng) => setGps({ lat, lng })}
-          maxAccuracyMeters={50}
+          maxAccuracyMeters={radius}
         />
 
         <button
