@@ -121,6 +121,7 @@ export default function NewSessionPage() {
 
         <GpsCheck
           onLocationReady={(lat, lng) => setGps({ lat, lng })}
+          maxAccuracyMeters={50}
         />
 
         <button
