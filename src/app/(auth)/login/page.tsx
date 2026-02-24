@@ -30,12 +30,12 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const result = await signIn("credentials", {
+      const result = (await signIn("credentials", {
         email: email.trim(),
         password,
         redirect: true,
         callbackUrl: "/api/auth/signed-in-redirect",
-      });
+      })) as { error?: string } | undefined;
 
       if (result?.error) {
         const message = "Invalid email or password";

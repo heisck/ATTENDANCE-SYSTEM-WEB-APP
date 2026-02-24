@@ -64,12 +64,12 @@ export default function RegisterPage() {
       });
       setSubmitStage("signing-in");
 
-      const signInResult = await signIn("credentials", {
+      const signInResult = (await signIn("credentials", {
         email: form.institutionalEmail.trim().toLowerCase(),
         password: form.password,
         redirect: true,
         callbackUrl: "/api/auth/signed-in-redirect",
-      });
+      })) as { error?: string } | undefined;
 
       if (signInResult?.error) {
         const message = "Account created, but automatic sign-in failed. Please sign in manually.";
