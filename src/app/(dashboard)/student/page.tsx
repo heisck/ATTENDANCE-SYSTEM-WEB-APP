@@ -53,44 +53,42 @@ export default async function StudentDashboard() {
   });
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Student Dashboard</h1>
-          <p className="text-muted-foreground">
-            Welcome back, {session.user.name}
-          </p>
+    <div className="space-y-6">
+      <section className="surface p-5 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              Student
+            </p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight">Dashboard</h1>
+            <p className="section-subtitle mt-1">Welcome back, {session.user.name}</p>
+          </div>
+          <Link
+            href="/student/attend"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <QrCode className="h-4 w-4" />
+            Mark Attendance
+          </Link>
         </div>
-        <Link
-          href="/student/attend"
-          className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition-colors"
-        >
-          <QrCode className="h-4 w-4" />
-          Mark Attendance
-        </Link>
-      </div>
+      </section>
 
       {!hasCredential && (
-        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="h-5 w-5 text-yellow-600" />
+        <section className="surface-muted p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-foreground/70" />
             <div>
-              <p className="font-medium text-yellow-800">
-                Device not registered
-              </p>
-              <p className="text-sm text-yellow-700">
+              <p className="text-sm font-medium">Device not registered</p>
+              <p className="mt-1 text-sm text-muted-foreground">
                 You need to{" "}
-                <Link
-                  href="/setup-device"
-                  className="underline font-medium"
-                >
+                <Link href="/setup-device" className="font-medium text-foreground underline underline-offset-2">
                   register your device
                 </Link>{" "}
                 before marking attendance.
               </p>
             </div>
           </div>
-        </div>
+        </section>
       )}
 
       <PushNotificationToggle />
@@ -126,8 +124,13 @@ export default async function StudentDashboard() {
         />
       </StatsGrid>
 
-      <div>
-        <h2 className="mb-4 text-lg font-semibold">Live Attendance Sessions</h2>
+      <section className="space-y-3">
+        <div className="flex items-end justify-between">
+          <h2 className="section-title">Live Attendance Sessions</h2>
+          <p className="hidden text-xs text-muted-foreground sm:block">
+            Real-time sessions available for check-in
+          </p>
+        </div>
         <AttendanceTable
           columns={[
             { key: "course", label: "Course" },
@@ -137,16 +140,29 @@ export default async function StudentDashboard() {
           ]}
           data={liveSessions.map((sessionItem) => ({
             course: `${sessionItem.course.code} - ${sessionItem.course.name}`,
-            phase: sessionItem.phase,
+            phase: (
+              <span className="inline-flex rounded-full border border-border px-2 py-0.5 text-xs font-medium">
+                {sessionItem.phase}
+              </span>
+            ),
             started: sessionItem.startedAt.toLocaleTimeString(),
-            action: "Open Scanner",
+            action: (
+              <Link href="/student/attend" className="text-xs font-medium text-foreground underline underline-offset-2">
+                Open Scanner
+              </Link>
+            ),
           }))}
           emptyMessage="No live sessions right now."
         />
-      </div>
+      </section>
 
-      <div>
-        <h2 className="mb-4 text-lg font-semibold">Recent Attendance</h2>
+      <section className="space-y-3">
+        <div className="flex items-end justify-between">
+          <h2 className="section-title">Recent Attendance</h2>
+          <p className="hidden text-xs text-muted-foreground sm:block">
+            Your latest verification records
+          </p>
+        </div>
         <AttendanceTable
           columns={[
             { key: "course", label: "Course" },
@@ -158,11 +174,19 @@ export default async function StudentDashboard() {
             course: `${r.session.course.code} - ${r.session.course.name}`,
             date: r.markedAt.toLocaleDateString(),
             confidence: `${r.confidence}%`,
-            status: r.flagged ? "Flagged" : "Verified",
+            status: r.flagged ? (
+              <span className="inline-flex rounded-full border border-border bg-muted/70 px-2 py-0.5 text-xs font-medium">
+                Flagged
+              </span>
+            ) : (
+              <span className="inline-flex rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium">
+                Verified
+              </span>
+            ),
           }))}
           emptyMessage="No attendance records yet. Mark your first attendance!"
         />
-      </div>
+      </section>
     </div>
   );
 }

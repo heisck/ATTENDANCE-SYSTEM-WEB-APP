@@ -109,16 +109,17 @@ export default function CompleteProfilePage() {
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Complete Student Profile</h1>
-        <p className="text-muted-foreground">
+    <div className="mx-auto max-w-2xl space-y-6">
+      <div className="surface p-6">
+        <h1 className="text-2xl font-bold tracking-tight">Complete Student Profile</h1>
+        <p className="mt-2 text-muted-foreground">
           Add and verify your personal email before attendance actions are enabled.
         </p>
       </div>
 
       {message && (
-        <div className="rounded-md border border-green-300 bg-green-50 p-3 text-sm text-green-800">
+        <div className="status-panel flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
           {message}
         </div>
       )}
@@ -128,7 +129,7 @@ export default function CompleteProfilePage() {
         </div>
       )}
 
-      <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+      <div className="surface space-y-4 p-5">
         <div>
           <p className="text-xs uppercase tracking-wide text-muted-foreground">Institutional Email</p>
           <p className="font-medium">{profile?.email}</p>
@@ -172,12 +173,12 @@ export default function CompleteProfilePage() {
       </div>
 
       {profile?.personalEmailVerifiedAt ? (
-        <div className="rounded-md border border-green-300 bg-green-50 p-4 text-sm text-green-800">
+        <div className="status-panel">
           <div className="flex items-center gap-2 font-medium">
             <CheckCircle2 className="h-4 w-4" />
             Personal email verified
           </div>
-          <p className="mt-1">You can continue to your dashboard.</p>
+          <p className="mt-1 text-muted-foreground">You can continue to your dashboard.</p>
           <button
             type="button"
             onClick={() => router.push("/student")}
@@ -187,12 +188,12 @@ export default function CompleteProfilePage() {
           </button>
         </div>
       ) : (
-        <div className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+        <div className="surface-muted p-4 text-sm">
           <div className="flex items-center gap-2 font-medium">
             <AlertTriangle className="h-4 w-4" />
             Verification pending
           </div>
-          <p className="mt-1">
+          <p className="mt-1 text-muted-foreground">
             Open your personal email inbox and click the verification link.
           </p>
         </div>

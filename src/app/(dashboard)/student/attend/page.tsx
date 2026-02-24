@@ -445,10 +445,10 @@ export default function AttendPage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Mark Attendance</h1>
-        <p className="text-muted-foreground">
+    <div className="mx-auto max-w-3xl space-y-6">
+      <div className="surface p-6">
+        <h1 className="text-2xl font-bold tracking-tight">Mark Attendance</h1>
+        <p className="mt-2 text-muted-foreground">
           Initial attendance is followed by adaptive random reverification.
         </p>
       </div>
@@ -463,9 +463,9 @@ export default function AttendPage() {
       )}
 
       {hasDevice === false && (
-        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-6 space-y-3">
-          <p className="font-semibold text-yellow-800">No registered device found</p>
-          <p className="text-sm text-yellow-700">
+        <div className="surface-muted space-y-3 p-6">
+          <p className="font-semibold">No registered device found</p>
+          <p className="text-sm text-muted-foreground">
             You must register a passkey before you can verify and mark attendance.
           </p>
           <Link
@@ -486,9 +486,9 @@ export default function AttendPage() {
                   ? step === "qr"
                     ? "bg-primary text-primary-foreground"
                     : ["session", "webauthn", "gps", "qr", "submitting"].indexOf(step) > 2
-                      ? "bg-green-100 text-green-700"
+                      ? "border border-border/70 bg-muted text-foreground"
                       : "bg-muted text-muted-foreground"
-                  : "bg-green-100 text-green-700"
+                  : "border border-border/70 bg-muted text-foreground"
               }`}
             >
               Phase 1
@@ -510,7 +510,7 @@ export default function AttendPage() {
                   Loading sessions...
                 </div>
               ) : sessions.length === 0 ? (
-                <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                <div className="status-panel">
                   No active sessions for your courses right now. Ask your lecturer to start a session.
                 </div>
               ) : (
@@ -562,15 +562,15 @@ export default function AttendPage() {
         <div className="space-y-4">
           {result.success && (
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-1 text-green-700">
+              <span className="status-chip">
                 Phase 1 <CheckCircle2 className="h-3.5 w-3.5" />
               </span>
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ${
                   reverifyStatus === "PASSED" || reverifyStatus === "MANUAL_PRESENT"
-                    ? "bg-green-100 text-green-700"
+                    ? "status-chip"
                     : isPendingReverify
-                      ? "bg-amber-100 text-amber-800"
+                      ? "status-chip"
                       : "bg-muted text-muted-foreground"
                 }`}
               >
@@ -629,7 +629,7 @@ export default function AttendPage() {
               </div>
 
               {syncState?.session && (
-                <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
+                <div className="status-panel-subtle text-xs">
                   Scan sequence <span className="font-semibold">{syncState.session.currentSequenceId}</span> now.
                   Next: <span className="font-semibold">{syncState.session.nextSequenceId}</span>.
                 </div>
@@ -652,12 +652,12 @@ export default function AttendPage() {
                   className={`rounded-md border p-3 text-sm ${
                     reverifyMessage.tone === "neutral"
                       ? "border-border bg-muted/50 text-foreground"
-                      : reverifyMessage.tone === "green"
-                        ? "border-green-300 bg-green-50 text-green-800"
+                    : reverifyMessage.tone === "green"
+                        ? "border-border/70 bg-muted/40 text-foreground"
                         : reverifyMessage.tone === "amber"
-                          ? "border-amber-300 bg-amber-50 text-amber-800"
+                          ? "border-border/70 bg-muted/40 text-foreground"
                           : reverifyMessage.tone === "yellow"
-                            ? "border-yellow-300 bg-yellow-50 text-yellow-800"
+                            ? "border-border/70 bg-muted/40 text-foreground"
                             : "border-red-300 bg-red-50 text-red-800"
                   }`}
                 >
@@ -686,14 +686,14 @@ export default function AttendPage() {
               )}
 
               {isPendingReverify && (
-                <div className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
-                  <div className="flex items-start gap-2 text-amber-800">
+                <div className="surface-muted space-y-3 p-3">
+                  <div className="flex items-start gap-2 text-foreground">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <div>
                       <p className="text-sm font-medium">
                         Reverification about to start. Verify your passkey again.
                       </p>
-                      <p className="mt-1 text-xs text-amber-700">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         After verification, you&apos;ll get a 6-second heads-up before the scan window.
                       </p>
                     </div>
@@ -702,21 +702,21 @@ export default function AttendPage() {
                   {!reverifyPasskeyVerified ? (
                     <WebAuthnPrompt onVerified={() => setReverifyPasskeyVerified(true)} />
                   ) : reverifyCountdown !== null && reverifyCountdown > 0 ? (
-                    <div className="rounded-md border border-amber-200 bg-white p-4 text-center">
-                      <p className="text-lg font-semibold text-amber-800">
+                    <div className="status-panel-subtle p-4 text-center">
+                      <p className="text-lg font-semibold">
                         Scan in {reverifyCountdown} second{reverifyCountdown !== 1 ? "s" : ""}
                       </p>
-                      <p className="mt-1 text-xs text-amber-600">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         Point your camera at the QR when the countdown ends.
                       </p>
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <p className="text-xs font-medium text-amber-800">
+                      <p className="text-xs font-medium text-foreground">
                         Passkey verified. Scan the reverification QR now.
                       </p>
                       {reverifySubmitting ? (
-                        <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-white p-3 text-sm">
+                        <div className="status-panel-subtle flex items-center gap-2 text-sm">
                           <Loader2 className="h-4 w-4 animate-spin" />
                           Submitting reverification...
                         </div>
@@ -729,10 +729,10 @@ export default function AttendPage() {
               )}
 
               {(reverifyStatus === "PASSED" || reverifyStatus === "MANUAL_PRESENT") && (
-                <div className="rounded-md border border-green-300 bg-green-50 p-4 text-center">
-                  <CheckCircle2 className="mx-auto h-10 w-10 text-green-600" />
-                  <p className="mt-2 font-semibold text-green-800">Fully done!</p>
-                  <p className="text-sm text-green-700">You can close this window.</p>
+                <div className="status-panel p-4 text-center">
+                  <CheckCircle2 className="mx-auto h-10 w-10" />
+                  <p className="mt-2 font-semibold">Fully done!</p>
+                  <p className="text-sm text-muted-foreground">You can close this window.</p>
                 </div>
               )}
 
@@ -763,7 +763,7 @@ function LayerRow({
   return (
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <span className={passed ? "text-green-600" : "text-muted-foreground"}>
+        <span className={passed ? "text-foreground" : "text-muted-foreground"}>
           {icon}
         </span>
         <span className="text-sm">{label}</span>
@@ -771,13 +771,13 @@ function LayerRow({
       <div className="flex items-center gap-2">
         <span
           className={`text-xs font-medium ${
-            passed ? "text-green-600" : "text-muted-foreground"
+            passed ? "text-foreground" : "text-muted-foreground"
           }`}
         >
           {passed ? `+${points}` : "+0"}
         </span>
         {passed ? (
-          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <CheckCircle2 className="h-4 w-4 text-foreground" />
         ) : (
           <XCircle className="h-4 w-4 text-muted-foreground" />
         )}

@@ -47,19 +47,19 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0.08 265);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
+  --primary: oklch(0.24 0.03 255);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.965 0.002 255);
   --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
+  --muted: oklch(0.965 0.002 255);
+  --muted-foreground: oklch(0.5 0 0);
+  --accent: oklch(0.955 0.003 255);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0.08 265);
+  --border: oklch(0.91 0.004 255);
+  --input: oklch(0.91 0.004 255);
+  --ring: oklch(0.6 0.04 255);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -116,10 +116,45 @@
   }
   body {
     @apply bg-background text-foreground overflow-x-hidden;
+    background-image:
+      radial-gradient(circle at 20% -10%, oklch(0.96 0.01 255 / 0.8), transparent 42%),
+      radial-gradient(circle at 100% 0%, oklch(0.97 0.005 255 / 0.9), transparent 38%);
+  }
+  .dark body {
+    background-image:
+      radial-gradient(circle at 20% -10%, oklch(0.24 0.01 255 / 0.5), transparent 45%),
+      radial-gradient(circle at 100% 0%, oklch(0.19 0.01 255 / 0.7), transparent 42%);
   }
   input,
   select,
   textarea {
     font-size: 16px !important;
+  }
+}
+
+@layer components {
+  .surface {
+    @apply rounded-2xl border border-border/70 bg-card/90 shadow-sm backdrop-blur-sm;
+  }
+  .surface-muted {
+    @apply rounded-2xl border border-border/70 bg-muted/35;
+  }
+  .status-chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted px-2.5 py-1 text-xs font-medium text-foreground;
+  }
+  .status-chip-soft {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/50 px-2.5 py-1 text-xs font-medium text-muted-foreground;
+  }
+  .status-panel {
+    @apply rounded-xl border border-border/70 bg-muted/40 p-4 text-sm text-foreground;
+  }
+  .status-panel-subtle {
+    @apply rounded-xl border border-border/60 bg-card p-3 text-sm text-muted-foreground;
+  }
+  .section-title {
+    @apply text-base font-semibold tracking-tight;
+  }
+  .section-subtitle {
+    @apply text-sm text-muted-foreground;
   }
 }

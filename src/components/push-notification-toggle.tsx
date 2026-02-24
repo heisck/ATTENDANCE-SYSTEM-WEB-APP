@@ -105,14 +105,14 @@ export function PushNotificationToggle() {
 
   if (!supported) {
     return (
-      <div className="rounded-md border border-border bg-card p-3 text-xs text-muted-foreground">
+      <div className="surface p-3 text-xs text-muted-foreground">
         Push notifications are not supported by this browser.
       </div>
     );
   }
 
   return (
-    <div className="rounded-md border border-border bg-card p-3 space-y-2">
+    <div className="surface space-y-2 p-3">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-medium">Attendance Push Notifications</p>
         <span className="text-xs text-muted-foreground">Permission: {permission}</span>

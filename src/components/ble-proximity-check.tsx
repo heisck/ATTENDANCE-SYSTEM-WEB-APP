@@ -110,7 +110,7 @@ export function BleProximityCheck({
   return (
     <div className="rounded-md border border-border bg-card p-4">
       <div className="flex items-center gap-2 font-semibold mb-3">
-        <Bluetooth className="h-5 w-5 text-blue-600" />
+        <Bluetooth className="h-5 w-5 text-muted-foreground" />
         <span>Multi-Device Proximity Verification (BLE)</span>
       </div>
 
@@ -118,9 +118,9 @@ export function BleProximityCheck({
       <div className="space-y-2 mb-4">
         <div className="flex items-center gap-2 text-sm">
           {supported ? (
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <CheckCircle2 className="h-4 w-4 text-foreground" />
           ) : (
-            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
           )}
           <span>
             Web Bluetooth support:{" "}
@@ -132,9 +132,9 @@ export function BleProximityCheck({
 
         <div className="flex items-center gap-2 text-sm">
           {secureContext ? (
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <CheckCircle2 className="h-4 w-4 text-foreground" />
           ) : (
-            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
           )}
           <span>
             Secure context (HTTPS):{" "}
@@ -147,8 +147,8 @@ export function BleProximityCheck({
       {supported && secureContext && (
         <div className="space-y-3">
           {!sourceDeviceId && (
-            <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-              <p className="text-xs text-blue-700">
+            <div className="status-panel-subtle">
+              <p className="text-xs">
                 Running in generic BLE scan mode. Device-specific proximity matching
                 will be available after source device details are provided.
               </p>
@@ -160,8 +160,8 @@ export function BleProximityCheck({
             disabled={scanning || deviceFound}
             className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-md font-medium transition ${
               deviceFound
-                ? "bg-green-100 text-green-700 cursor-default"
-                : "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                ? "border border-border/70 bg-muted text-foreground cursor-default"
+                : "bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             }`}
           >
             {scanning ? (
@@ -184,21 +184,19 @@ export function BleProximityCheck({
 
           {/* Signal strength display */}
           {deviceFound && rssi !== null && (
-            <div className="bg-green-50 border border-green-200 rounded-md p-3">
+            <div className="status-panel-subtle">
               <div className="flex items-center gap-2 mb-2">
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                <span className="font-medium text-sm text-green-900">
+                <CheckCircle2 className="h-4 w-4" />
+                <span className="font-medium text-sm">
                   Proximity Verified
                 </span>
               </div>
-              <div className="text-xs text-green-700 space-y-1">
+              <div className="text-xs text-muted-foreground space-y-1">
                 <p>Signal Strength (RSSI): {rssi} dBm</p>
                 <p>Estimated Distance: {distance?.toFixed(1) || "0"} meters</p>
                 <p>
                   Status:{" "}
-                  <span className={
-                    distance && distance < 10 ? "text-green-600 font-medium" : "text-amber-600 font-medium"
-                  }>
+                  <span className="font-medium text-foreground">
                     {distance && distance < 10 ? "Close proximity confirmed" : "Within range"}
                   </span>
                 </p>
@@ -217,13 +215,13 @@ export function BleProximityCheck({
 
       {/* Not supported message */}
       {(!supported || !secureContext) && (
-        <div className="bg-amber-50 border border-amber-200 rounded-md p-3">
-          <p className="text-xs text-amber-700">
+        <div className="status-panel-subtle">
+          <p className="text-xs">
             {!secureContext
               ? "HTTPS is required for Web Bluetooth"
               : "Web Bluetooth is not available on this device or browser"}
           </p>
-          <p className="text-xs text-amber-600 mt-2">
+          <p className="mt-2 text-xs text-muted-foreground">
             Attendance can still be marked using standard verification (QR + GPS + Passkey).
           </p>
         </div>

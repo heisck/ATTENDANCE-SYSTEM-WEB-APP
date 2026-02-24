@@ -111,15 +111,15 @@ export default function LecturerInvitesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Lecturer Invites</h1>
-        <p className="text-muted-foreground">
+      <div className="surface p-6">
+        <h1 className="text-2xl font-bold tracking-tight">Lecturer Invites</h1>
+        <p className="mt-2 text-muted-foreground">
           Invite lecturers to create accounts. Public lecturer signup is disabled.
         </p>
       </div>
 
       {role === "SUPER_ADMIN" && (
-        <div className="space-y-2 rounded-md border border-border bg-card p-4">
+        <div className="surface space-y-2 p-4">
           <label htmlFor="organizationId" className="text-sm font-medium">
             Organization ID
           </label>
@@ -134,7 +134,7 @@ export default function LecturerInvitesPage() {
       )}
 
       {message && (
-        <div className="rounded-md border border-green-300 bg-green-50 p-3 text-sm text-green-800">
+        <div className="status-panel text-sm">
           {message}
         </div>
       )}
@@ -144,7 +144,7 @@ export default function LecturerInvitesPage() {
         </div>
       )}
 
-      <form onSubmit={handleCreateInvite} className="space-y-4 rounded-lg border border-border bg-card p-4">
+      <form onSubmit={handleCreateInvite} className="surface space-y-4 p-4">
         <div className="space-y-2">
           <label htmlFor="invitedEmail" className="text-sm font-medium">
             Lecturer Email
@@ -186,7 +186,7 @@ export default function LecturerInvitesPage() {
         </button>
       </form>
 
-      <div className="rounded-lg border border-border bg-card">
+      <div className="surface overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b border-border bg-muted/30">

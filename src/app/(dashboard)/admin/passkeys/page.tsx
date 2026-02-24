@@ -130,9 +130,9 @@ export default function PasskeyManagementPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Passkey Management</h1>
-        <p className="text-muted-foreground">
+      <div className="surface p-6">
+        <h1 className="text-2xl font-bold tracking-tight">Passkey Management</h1>
+        <p className="mt-2 text-muted-foreground">
           Manage user passkeys and control lock state for legitimate access recovery
         </p>
       </div>
@@ -148,9 +148,9 @@ export default function PasskeyManagementPage() {
       )}
 
       {success && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-4 flex items-start gap-3">
-          <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-green-700">{success}</p>
+        <div className="status-panel flex items-start gap-3">
+          <CheckCircle2 className="h-5 w-5 flex-shrink-0 mt-0.5" />
+          <p className="text-sm">{success}</p>
         </div>
       )}
 
@@ -159,7 +159,7 @@ export default function PasskeyManagementPage() {
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       ) : (
-        <div className="rounded-lg border border-border">
+        <div className="surface overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-muted/30">
@@ -188,8 +188,8 @@ export default function PasskeyManagementPage() {
                           </>
                         ) : (
                           <>
-                            <CheckCircle2 className="h-4 w-4 text-green-600" />
-                            <span className="text-xs font-medium text-green-600">
+                            <CheckCircle2 className="h-4 w-4 text-foreground" />
+                            <span className="text-xs font-medium text-foreground">
                               Active
                             </span>
                           </>
@@ -227,7 +227,7 @@ export default function PasskeyManagementPage() {
                             onClick={() => handleLockPasskeys(user.id)}
                             disabled={actionInProgress}
                             title="Lock passkey changes until admin unlocks"
-                            className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-200 disabled:opacity-50 transition-colors"
+                            className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted/80 disabled:opacity-50 transition-colors"
                           >
                             {actionInProgress ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
@@ -266,7 +266,7 @@ export default function PasskeyManagementPage() {
         </div>
       )}
 
-      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+      <div className="surface-muted space-y-3 p-4">
         <h3 className="font-semibold">How this works</h3>
         <ul className="space-y-2 text-sm text-muted-foreground">
           <li className="flex gap-2">

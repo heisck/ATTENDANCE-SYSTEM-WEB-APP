@@ -110,9 +110,9 @@ export function QrPortApprovalPanel({
   const rejectedRequests = requests.filter((r) => r.status === "REJECTED");
 
   return (
-    <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+    <div className="surface space-y-4 p-4">
       <div className="flex items-center gap-2 border-b pb-3">
-        <Share2 className="h-5 w-5 text-primary" />
+        <Share2 className="h-5 w-5 text-muted-foreground" />
         <div>
           <h3 className="font-semibold">QR Port Requests</h3>
           <p className="text-sm text-muted-foreground">
@@ -129,7 +129,7 @@ export function QrPortApprovalPanel({
         <div className="space-y-4">
           {pendingRequests.length > 0 && (
             <div className="space-y-2">
-              <h4 className="flex items-center gap-2 text-sm font-semibold text-amber-700">
+              <h4 className="flex items-center gap-2 text-sm font-semibold">
                 <AlertCircle className="h-4 w-4" />
                 Pending ({pendingRequests.length})
               </h4>
@@ -137,11 +137,11 @@ export function QrPortApprovalPanel({
                 {pendingRequests.map((req) => (
                   <div
                     key={req.id}
-                    className="flex items-center justify-between rounded-md border border-amber-200 bg-amber-50/50 p-3"
+                    className="status-panel-subtle flex items-center justify-between"
                   >
                     <div>
-                      <p className="font-medium text-amber-900">{req.student.name}</p>
-                      <p className="text-xs text-amber-700">
+                      <p className="font-medium">{req.student.name}</p>
+                      <p className="text-xs text-muted-foreground">
                         {req.student.email} &middot; Requested{" "}
                         {new Date(req.requestedAt).toLocaleTimeString()}
                       </p>
@@ -150,7 +150,7 @@ export function QrPortApprovalPanel({
                       <button
                         onClick={() => handleApprove(req.id)}
                         disabled={approving === req.id}
-                        className="inline-flex items-center gap-1 rounded-md bg-green-100 px-2.5 py-1.5 text-xs font-medium text-green-700 hover:bg-green-200 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                       >
                         {approving === req.id ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -180,18 +180,15 @@ export function QrPortApprovalPanel({
 
           {approvedRequests.length > 0 && (
             <div className="space-y-2">
-              <h4 className="flex items-center gap-2 text-sm font-semibold text-green-700">
+              <h4 className="flex items-center gap-2 text-sm font-semibold">
                 <CheckCircle2 className="h-4 w-4" />
                 Approved ({approvedRequests.length})
               </h4>
               <div className="space-y-2">
                 {approvedRequests.map((req) => (
-                  <div
-                    key={req.id}
-                    className="rounded-md border border-green-200 bg-green-50/50 p-3"
-                  >
-                    <p className="font-medium text-green-900">{req.student.name}</p>
-                    <p className="text-xs text-green-700">
+                  <div key={req.id} className="status-panel-subtle">
+                    <p className="font-medium">{req.student.name}</p>
+                    <p className="text-xs text-muted-foreground">
                       Can display live QR for friends to scan
                     </p>
                   </div>

@@ -62,12 +62,12 @@ export function GpsCheck({ onLocationReady, maxAccuracyMeters = 30 }: GpsCheckPr
 
   if (confirmed && coords) {
     return (
-      <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+      <div className="status-panel">
         <div className="flex items-center gap-3">
-          <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+          <CheckCircle2 className="h-5 w-5 shrink-0" />
           <div>
-            <p className="text-sm font-medium text-green-800">Location confirmed</p>
-            <p className="text-xs text-green-700">
+            <p className="text-sm font-medium">Location confirmed</p>
+            <p className="text-xs text-muted-foreground">
               ±{Math.round(coords.accuracy)}m accuracy
             </p>
           </div>
@@ -94,11 +94,7 @@ export function GpsCheck({ onLocationReady, maxAccuracyMeters = 30 }: GpsCheckPr
               </p>
             )}
             {status === "success" && coords && (
-              <p
-                className={`text-xs font-medium ${
-                  accuracyOk ? "text-green-600" : "text-amber-600"
-                }`}
-              >
+              <p className="text-xs font-medium text-foreground">
                 Accuracy: ±{Math.round(coords.accuracy)}m
                 {accuracyOk
                   ? " — Good, you can use this"

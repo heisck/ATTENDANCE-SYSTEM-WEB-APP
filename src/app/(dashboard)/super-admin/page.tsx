@@ -25,13 +25,16 @@ export default async function SuperAdminDashboard() {
   });
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">Platform Overview</h1>
-        <p className="text-muted-foreground">
+    <div className="space-y-6">
+      <section className="surface p-5 sm:p-6">
+        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          Platform
+        </p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Overview</h1>
+        <p className="section-subtitle mt-1">
           Manage all organizations on AttendanceIQ
         </p>
-      </div>
+      </section>
 
       <StatsGrid>
         <StatCard
@@ -56,13 +59,18 @@ export default async function SuperAdminDashboard() {
         />
       </StatsGrid>
 
-      <div>
-        <h2 className="mb-4 text-lg font-semibold">Organizations</h2>
+      <section className="space-y-3">
+        <div className="flex items-end justify-between">
+          <h2 className="section-title">Organizations</h2>
+          <p className="hidden text-xs text-muted-foreground sm:block">
+            Tenants and subscription snapshot
+          </p>
+        </div>
         <div className="space-y-3">
           {organizations.map((org) => (
             <div
               key={org.id}
-              className="flex items-center justify-between rounded-lg border border-border bg-card p-4"
+              className="surface flex items-center justify-between p-4"
             >
               <div>
                 <p className="font-medium">{org.name}</p>
@@ -79,14 +87,14 @@ export default async function SuperAdminDashboard() {
                   <p className="font-medium">{org._count.courses}</p>
                   <p className="text-muted-foreground">Courses</p>
                 </div>
-                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+                <span className="rounded-full border border-border bg-muted/45 px-2.5 py-0.5 text-xs font-medium">
                   {org.subscription?.plan || "FREE"}
                 </span>
               </div>
             </div>
           ))}
         </div>
-      </div>
+      </section>
     </div>
   );
 }

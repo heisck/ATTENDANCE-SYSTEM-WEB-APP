@@ -94,14 +94,14 @@ export function QrDisplay({ sessionId }: QrDisplayProps) {
   }, []);
 
   const cueStyles = useMemo(() => {
-    if (cueColor === "blue") return "bg-blue-100 text-blue-700 border-blue-200";
-    if (cueColor === "amber") return "bg-amber-100 text-amber-700 border-amber-200";
-    return "bg-green-100 text-green-700 border-green-200";
+    if (cueColor === "blue") return "border-border bg-muted text-foreground";
+    if (cueColor === "amber") return "border-border bg-muted/80 text-foreground";
+    return "border-border bg-muted/60 text-foreground";
   }, [cueColor]);
   const cueDotClass = useMemo(() => {
-    if (cueColor === "blue") return "bg-blue-500";
-    if (cueColor === "amber") return "bg-amber-500";
-    return "bg-green-500";
+    if (cueColor === "blue") return "bg-foreground/90";
+    if (cueColor === "amber") return "bg-foreground/70";
+    return "bg-foreground/55";
   }, [cueColor]);
 
   async function toggleFullscreen() {

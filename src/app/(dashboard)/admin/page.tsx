@@ -32,13 +32,16 @@ export default async function AdminDashboard() {
   });
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">University Admin</h1>
-        <p className="text-muted-foreground">
+    <div className="space-y-6">
+      <section className="surface p-5 sm:p-6">
+        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          Administration
+        </p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight">University Overview</h1>
+        <p className="section-subtitle mt-1">
           Manage your university&apos;s attendance system
         </p>
-      </div>
+      </section>
 
       <StatsGrid>
         <StatCard
@@ -63,13 +66,18 @@ export default async function AdminDashboard() {
         />
       </StatsGrid>
 
-      <div>
-        <h2 className="mb-4 text-lg font-semibold">Recent Activity</h2>
+      <section className="space-y-3">
+        <div className="flex items-end justify-between">
+          <h2 className="section-title">Recent Activity</h2>
+          <p className="hidden text-xs text-muted-foreground sm:block">
+            Latest sessions across your institution
+          </p>
+        </div>
         <div className="space-y-3">
           {recentActivity.map((s) => (
             <div
               key={s.id}
-              className="flex items-center justify-between rounded-lg border border-border bg-card p-4"
+              className="surface flex items-center justify-between p-4"
             >
               <div>
                 <p className="font-medium">
@@ -86,8 +94,8 @@ export default async function AdminDashboard() {
                 <span
                   className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
                     s.status === "ACTIVE"
-                      ? "bg-green-100 text-green-700"
-                      : "bg-gray-100 text-gray-600"
+                      ? "border border-border bg-muted/40 text-foreground"
+                      : "border border-border bg-muted/70 text-muted-foreground"
                   }`}
                 >
                   {s.status}
@@ -96,10 +104,10 @@ export default async function AdminDashboard() {
             </div>
           ))}
           {recentActivity.length === 0 && (
-            <p className="text-muted-foreground">No activity yet.</p>
+            <div className="surface p-5 text-sm text-muted-foreground">No activity yet.</div>
           )}
         </div>
-      </div>
+      </section>
     </div>
   );
 }

@@ -176,8 +176,8 @@ export function BleRelayScanner({
 
   if (!supported) {
     return (
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-        <p className="text-sm text-amber-700 font-medium">
+      <div className="status-panel">
+        <p className="text-sm font-medium">
           BLE relay scanning is not enabled for this session yet. Please wait for
           students to scan the QR directly or use the main camera scanner.
         </p>
@@ -187,8 +187,8 @@ export function BleRelayScanner({
 
   if (relays.length === 0) {
     return (
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <p className="text-sm text-blue-700">
+      <div className="status-panel">
+        <p className="text-sm">
           No students are currently broadcasting. Once they scan the QR code,
           they can become relay points for students with camera issues.
         </p>
@@ -199,7 +199,7 @@ export function BleRelayScanner({
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 mb-4">
-        <Bluetooth className="h-5 w-5 text-blue-600" />
+        <Bluetooth className="h-5 w-5 text-muted-foreground" />
         <h3 className="font-semibold">Scan from Friend's Device (BLE)</h3>
       </div>
 
@@ -226,8 +226,8 @@ export function BleRelayScanner({
               className={`w-full p-4 rounded-lg border transition text-left ${
                 scanning
                   ? "opacity-50 cursor-not-allowed"
-                  : "hover:bg-blue-50 hover:border-blue-300"
-              } ${selectedRelay?.id === relay.id ? "border-blue-500 bg-blue-50" : "border-border"}`}
+                  : "hover:bg-accent"
+              } ${selectedRelay?.id === relay.id ? "border-border bg-muted/50" : "border-border"}`}
             >
               <div className="flex items-start justify-between">
                 <div>
@@ -241,20 +241,20 @@ export function BleRelayScanner({
                 </div>
 
                 {scanning && selectedRelay?.id === relay.id ? (
-                  <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 ) : (
                   <Radio className="h-5 w-5 text-muted-foreground" />
                 )}
               </div>
 
               {selectedRelay?.id === relay.id && rssi !== null && (
-                <div className="mt-3 p-2 bg-white rounded border border-green-200">
+                <div className="status-panel-subtle mt-3">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       setShowDetails(!showDetails);
                     }}
-                    className="flex items-center gap-2 text-xs text-green-700 font-medium w-full justify-between"
+                    className="flex w-full items-center justify-between gap-2 text-xs font-medium"
                   >
                     <span className="flex items-center gap-1">
                       <CheckCircle2 className="h-4 w-4" />
@@ -273,7 +273,7 @@ export function BleRelayScanner({
                       <p>Estimated Distance: {distance?.toFixed(1)}m</p>
                       <p>
                         Status:{" "}
-                        <span className="text-green-600 font-medium">
+                        <span className="font-medium text-foreground">
                           Close enough
                         </span>
                       </p>

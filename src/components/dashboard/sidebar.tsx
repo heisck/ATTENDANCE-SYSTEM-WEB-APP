@@ -80,13 +80,13 @@ export function Sidebar({ role, userName }: { role: string; userName: string }) 
           icon: (
             <Icon
               size={17}
-              className={isActive ? "text-black dark:text-gray-100" : "text-black dark:text-gray-400"}
+              className={isActive ? "text-black dark:text-gray-100" : "text-black/90 dark:text-gray-400"}
             />
           ),
           label: item.label,
           onClick: () => router.push(item.href),
           className: isActive
-            ? "border-gray-300/80 bg-white/90 dark:border-gray-500/70 dark:bg-gray-700/45"
+            ? "border-black/15 bg-gray-100/85 dark:border-gray-500/70 dark:bg-gray-700/45"
             : "",
         };
       }),
@@ -95,7 +95,7 @@ export function Sidebar({ role, userName }: { role: string; userName: string }) 
 
   return (
     <>
-      <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-card/85">
+      <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-border/70 bg-background/90 px-4 backdrop-blur-xl supports-[backdrop-filter]:bg-background/75">
         <Link href={rolePath} className="flex items-center gap-2">
           <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={24} height={24} className="rounded" />
           <span className="text-base font-bold font-[family-name:var(--font-silkscreen)] tracking-tight">
@@ -103,6 +103,13 @@ export function Sidebar({ role, userName }: { role: string; userName: string }) 
           </span>
         </Link>
         <div className="flex items-center gap-2">
+          <div className="hidden items-center gap-2 rounded-full border border-border/70 bg-card/65 px-3 py-1 text-xs text-muted-foreground sm:flex">
+            <span className="h-1.5 w-1.5 rounded-full bg-foreground/40" />
+            <span className="max-w-[10rem] truncate">{userName}</span>
+            <span className="text-[10px] uppercase tracking-[0.12em]">
+              {role.toLowerCase().replace(/_/g, " ")}
+            </span>
+          </div>
           <ThemeToggle />
           <button
             type="button"

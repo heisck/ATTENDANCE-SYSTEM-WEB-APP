@@ -116,7 +116,7 @@ export function WebAuthnPrompt({ onVerified }: WebAuthnPromptProps) {
           {status === "success" && (
             <button
               disabled
-              className="flex-1 rounded-md bg-green-600 px-4 py-3 text-sm font-semibold text-white flex items-center justify-center gap-2"
+              className="flex-1 rounded-md border border-border/70 bg-muted px-4 py-3 text-sm font-semibold text-foreground flex items-center justify-center gap-2"
             >
               <CheckCircle2 className="h-5 w-5" />
               Verified

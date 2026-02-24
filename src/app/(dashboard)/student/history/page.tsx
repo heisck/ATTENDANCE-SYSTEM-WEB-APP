@@ -118,16 +118,16 @@ export default async function StudentHistoryPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Attendance History</h1>
-        <p className="text-muted-foreground">
+      <section className="surface p-5 sm:p-6">
+        <h1 className="text-2xl font-semibold tracking-tight">Attendance History</h1>
+        <p className="section-subtitle mt-1">
           Detailed monthly and course-level attendance records
         </p>
-      </div>
+      </section>
 
       <div className="grid gap-3 sm:grid-cols-2">
         {courseSummary.map((course) => (
-          <div key={course.courseId} className="rounded-lg border border-border bg-card p-4">
+          <div key={course.courseId} className="surface p-4">
             <div className="flex items-start justify-between gap-2">
               <div>
                 <p className="font-semibold">{course.code}</p>
@@ -135,7 +135,9 @@ export default async function StudentHistoryPage() {
               </div>
               <span
                 className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                  course.atRisk ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
+                  course.atRisk
+                    ? "border border-destructive/30 bg-destructive/10 text-destructive"
+                    : "border border-border bg-muted/40 text-foreground"
                 }`}
               >
                 {course.atRisk ? "At Risk" : "On Track"}
@@ -152,7 +154,7 @@ export default async function StudentHistoryPage() {
           </div>
         ))}
         {courseSummary.length === 0 && (
-          <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground sm:col-span-2">
+          <div className="surface p-4 text-sm text-muted-foreground sm:col-span-2">
             No enrolled courses found.
           </div>
         )}

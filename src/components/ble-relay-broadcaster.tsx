@@ -191,11 +191,9 @@ export function BleRelayBroadcaster({
   const getStatusColor = (currentStatus: string) => {
     switch (currentStatus) {
       case "approved":
-        return "text-green-600";
       case "broadcasting":
-        return "text-blue-600";
       case "pending":
-        return "text-amber-600";
+        return "text-foreground";
       case "error":
         return "text-red-600";
       default:
@@ -204,10 +202,10 @@ export function BleRelayBroadcaster({
   };
 
   return (
-    <div className="border rounded-lg p-4 space-y-4">
+    <div className="surface space-y-4 p-4">
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2">
-          <Bluetooth className="h-5 w-5 text-blue-600" />
+          <Bluetooth className="h-5 w-5 text-muted-foreground" />
           <div>
             <h4 className="font-semibold">BLE Relay Broadcaster</h4>
             <p className="text-xs text-muted-foreground">
@@ -269,7 +267,7 @@ export function BleRelayBroadcaster({
       {status === "approved" && !broadcasting && (
         <button
           onClick={startBroadcasting}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium transition"
+          className="w-full flex items-center justify-center gap-2 rounded bg-primary px-4 py-2 font-medium text-primary-foreground transition hover:bg-primary/90"
         >
           <Radio className="h-4 w-4" />
           Start Broadcasting
@@ -280,18 +278,18 @@ export function BleRelayBroadcaster({
         <>
           <button
             onClick={stopBroadcasting}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200 font-medium transition"
+            className="w-full flex items-center justify-center gap-2 rounded bg-destructive/10 px-4 py-2 font-medium text-destructive transition hover:bg-destructive/20"
           >
             Stop Broadcasting
           </button>
 
           {/* Broadcast Details */}
           {relayData && (
-            <div className="bg-blue-50 border border-blue-200 rounded p-3 space-y-2">
-              <p className="text-xs font-semibold text-blue-900">
+            <div className="status-panel-subtle space-y-2">
+              <p className="text-xs font-semibold">
                 Broadcast Active
               </p>
-              <div className="text-xs text-blue-700 space-y-1">
+              <div className="space-y-1 text-xs text-muted-foreground">
                 <p>Beacon UUID: {relayData.bleBeaconUuid?.substring(0, 13)}...</p>
                 <p>
                   Broadcast Power: {relayData.broadcastPower} dBm (~
@@ -301,7 +299,7 @@ export function BleRelayBroadcaster({
               </div>
               <button
                 onClick={copyBeaconData}
-                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                className="flex items-center gap-1 text-xs font-medium text-foreground hover:text-foreground/80"
               >
                 {copied ? (
                   <>
@@ -326,7 +324,7 @@ export function BleRelayBroadcaster({
             </div>
             <div className="bg-card border rounded p-2">
               <p className="text-muted-foreground">Status</p>
-              <p className="text-sm font-semibold text-green-600">Live</p>
+              <p className="text-sm font-semibold">Live</p>
             </div>
           </div>
         </>
@@ -334,8 +332,8 @@ export function BleRelayBroadcaster({
 
       {/* Waiting for Approval */}
       {status === "pending" && (
-        <div className="bg-amber-50 border border-amber-200 rounded p-3">
-          <p className="text-xs text-amber-700">
+        <div className="status-panel-subtle">
+          <p className="text-xs">
             Your device has been registered. The lecturer will review and approve it
             shortly. Once approved, you can start broadcasting your QR code to friends.
           </p>

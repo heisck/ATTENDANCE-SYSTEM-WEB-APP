@@ -95,8 +95,8 @@ export function RelayAdminDashboard({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-2 border-b pb-4">
-        <BarChart3 className="h-5 w-5 text-blue-600" />
+      <div className="surface flex items-center gap-2 p-4">
+        <BarChart3 className="h-5 w-5 text-muted-foreground" />
         <div>
           <h3 className="font-semibold">BLE Relay Analytics</h3>
           <p className="text-sm text-muted-foreground">
@@ -117,43 +117,43 @@ export function RelayAdminDashboard({
 
       {/* Key Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-card border rounded-lg p-4">
+        <div className="surface rounded-lg p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground">Total Relays</p>
               <p className="text-3xl font-bold">{stats.totalRelays}</p>
             </div>
-            <Bluetooth className="h-8 w-8 text-blue-200" />
+            <Bluetooth className="h-8 w-8 text-muted-foreground/40" />
           </div>
         </div>
 
-        <div className="bg-card border rounded-lg p-4">
+        <div className="surface rounded-lg p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground">Active Now</p>
-              <p className="text-3xl font-bold text-green-600">{stats.activeRelays}</p>
+              <p className="text-3xl font-bold">{stats.activeRelays}</p>
             </div>
-            <Radio className="h-8 w-8 text-green-200 animate-pulse" />
+            <Radio className="h-8 w-8 text-muted-foreground/40 animate-pulse" />
           </div>
         </div>
 
-        <div className="bg-card border rounded-lg p-4">
+        <div className="surface rounded-lg p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground">Total Scans via Relay</p>
               <p className="text-3xl font-bold">{stats.totalRelayScans}</p>
             </div>
-            <TrendingUp className="h-8 w-8 text-purple-200" />
+            <TrendingUp className="h-8 w-8 text-muted-foreground/40" />
           </div>
         </div>
 
-        <div className="bg-card border rounded-lg p-4">
+        <div className="surface rounded-lg p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground">Avg Scans/Relay</p>
               <p className="text-3xl font-bold">{scansPerRelay}</p>
             </div>
-            <Users className="h-8 w-8 text-orange-200" />
+            <Users className="h-8 w-8 text-muted-foreground/40" />
           </div>
         </div>
       </div>
@@ -161,9 +161,9 @@ export function RelayAdminDashboard({
       {/* Status Breakdown */}
       <div className="grid md:grid-cols-2 gap-4">
         {/* Approval Status */}
-        <div className="border rounded-lg p-4">
+        <div className="surface rounded-lg p-4">
           <h4 className="font-semibold mb-4 flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 text-amber-600" />
+            <AlertCircle className="h-4 w-4 text-muted-foreground" />
             Approval Status
           </h4>
 
@@ -173,7 +173,7 @@ export function RelayAdminDashboard({
               <div className="flex items-center gap-2">
                 <div className="w-32 bg-gray-200 rounded-full h-2">
                   <div
-                    className="bg-amber-500 h-2 rounded-full"
+                    className="h-2 rounded-full bg-muted-foreground/55"
                     style={{
                       width: `${stats.totalRelays > 0 ? (stats.pendingApprovals / stats.totalRelays) * 100 : 0}%`,
                     }}
@@ -188,7 +188,7 @@ export function RelayAdminDashboard({
               <div className="flex items-center gap-2">
                 <div className="w-32 bg-gray-200 rounded-full h-2">
                   <div
-                    className="bg-green-500 h-2 rounded-full"
+                    className="h-2 rounded-full bg-muted-foreground/75"
                     style={{
                       width: `${stats.totalRelays > 0 ? (stats.approvedRelays / stats.totalRelays) * 100 : 0}%`,
                     }}
@@ -205,7 +205,7 @@ export function RelayAdminDashboard({
               <div className="flex items-center gap-2">
                 <div className="w-32 bg-gray-200 rounded-full h-2">
                   <div
-                    className="bg-red-500 h-2 rounded-full"
+                    className="h-2 rounded-full bg-destructive/80"
                     style={{
                       width: `${stats.totalRelays > 0 ? (stats.rejectedRelays / stats.totalRelays) * 100 : 0}%`,
                     }}
@@ -237,11 +237,11 @@ export function RelayAdminDashboard({
         </div>
 
         {/* Summary Stats */}
-        <div className="border rounded-lg p-4">
+        <div className="surface rounded-lg p-4">
           <h4 className="font-semibold mb-4">Session Summary</h4>
 
           <div className="space-y-3 text-sm">
-            <div className="flex items-center justify-between p-2 bg-blue-50 rounded">
+            <div className="flex items-center justify-between rounded p-2 bg-muted/35">
               <span className="text-muted-foreground">Relay Acceptance Rate</span>
               <span className="font-semibold">
                 {stats.totalRelays > 0
@@ -251,7 +251,7 @@ export function RelayAdminDashboard({
               </span>
             </div>
 
-            <div className="flex items-center justify-between p-2 bg-green-50 rounded">
+            <div className="flex items-center justify-between rounded p-2 bg-muted/35">
               <span className="text-muted-foreground">Avg Students per Relay</span>
               <span className="font-semibold">
                 {stats.approvedRelays > 0
@@ -260,12 +260,12 @@ export function RelayAdminDashboard({
               </span>
             </div>
 
-            <div className="flex items-center justify-between p-2 bg-purple-50 rounded">
+            <div className="flex items-center justify-between rounded p-2 bg-muted/35">
               <span className="text-muted-foreground">Total Broadcast Sessions</span>
               <span className="font-semibold">{stats.activeRelays}</span>
             </div>
 
-            <div className="flex items-center justify-between p-2 bg-orange-50 rounded">
+            <div className="flex items-center justify-between rounded p-2 bg-muted/35">
               <span className="text-muted-foreground">Relay Efficiency</span>
               <span className="font-semibold">
                 {stats.approvedRelays > 0
@@ -278,9 +278,9 @@ export function RelayAdminDashboard({
       </div>
 
       {/* Insights */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h4 className="font-semibold text-blue-900 mb-2">System Insights</h4>
-        <ul className="space-y-1 text-sm text-blue-700">
+      <div className="surface-muted rounded-lg p-4">
+        <h4 className="mb-2 font-semibold">System Insights</h4>
+        <ul className="space-y-1 text-sm text-muted-foreground">
           {stats.pendingApprovals > 0 && (
             <li>
               There are {stats.pendingApprovals} pending relay device{stats.pendingApprovals === 1 ? "" : "s"} awaiting

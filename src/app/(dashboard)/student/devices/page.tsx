@@ -116,38 +116,40 @@ export default function DevicesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Registered Devices</h1>
-          <p className="text-muted-foreground">
-            Manage the devices and passkeys used for attendance verification
-          </p>
+      <section className="surface p-5 sm:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Registered Devices</h1>
+            <p className="section-subtitle mt-1">
+              Manage the devices and passkeys used for attendance verification
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => router.push("/setup-device")}
+            disabled={!canRegisterNewPasskey}
+            title={
+              loading
+                ? "Loading passkey state"
+                : passkeysLockedUntilAdminReset
+                ? "Ask admin to unlock passkeys first"
+                : "Delete your current passkey before registering a new one"
+            }
+            className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-primary/40"
+          >
+            Register New Passkey
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => router.push("/setup-device")}
-          disabled={!canRegisterNewPasskey}
-          title={
-            loading
-              ? "Loading passkey state"
-              : passkeysLockedUntilAdminReset
-              ? "Ask admin to unlock passkeys first"
-              : "Delete your current passkey before registering a new one"
-          }
-          className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-primary/40 transition-colors"
-        >
-          Register New Passkey
-        </button>
-      </div>
+      </section>
 
       {passkeysLockedUntilAdminReset && (
-        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+        <div className="surface-muted p-4 text-sm text-foreground/80">
           Passkey management is locked. Ask your administrator to unlock your account before deleting or adding a new passkey.
         </div>
       )}
 
       {!passkeysLockedUntilAdminReset && devices.length > 0 && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+        <div className="surface-muted p-4 text-sm text-foreground/80">
           Delete your current passkey first. Registering a new passkey is only enabled when you have no active passkeys.
         </div>
       )}
@@ -164,13 +166,13 @@ export default function DevicesPage() {
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       ) : devices.length === 0 ? (
-        <div className="rounded-lg border border-border bg-card p-8 text-center">
+        <div className="surface p-8 text-center">
           <p className="text-muted-foreground">No devices registered yet.</p>
           <p className="text-sm text-muted-foreground mt-2">
             Go to <strong>Register Device</strong> to create your first passkey.
           </p>
           {passkeysLockedUntilAdminReset ? (
-            <p className="mt-4 text-sm text-yellow-700">
+            <p className="mt-4 text-sm text-muted-foreground">
               Registration is locked. Contact your administrator to unlock passkeys.
             </p>
           ) : (
@@ -187,17 +189,17 @@ export default function DevicesPage() {
           {devices.map((device) => (
             <div
               key={device.credentialId}
-              className="rounded-lg border border-border bg-card p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+              className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="flex min-w-0 items-start gap-4">
-                <div className="rounded-full bg-primary/10 p-3">
+                <div className="rounded-full border border-border/60 bg-muted/55 p-3">
                   {getDeviceIcon(device.userAgent)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-medium">{getDeviceName(device.userAgent)}</p>
                     {device.backedUp && (
-                      <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                      <span className="inline-flex items-center rounded-full border border-border bg-muted/45 px-2 py-0.5 text-xs font-medium">
                         Cloud Synced
                       </span>
                     )}
@@ -241,7 +243,7 @@ export default function DevicesPage() {
         </div>
       )}
 
-      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+      <div className="surface p-4 space-y-3">
         <h3 className="font-semibold">Important Security Information</h3>
         <ul className="space-y-2 text-sm text-muted-foreground">
           <li className="flex gap-2">

@@ -156,8 +156,8 @@ export function RelayApprovalPanel({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-2 border-b pb-4">
-        <Bluetooth className="h-5 w-5 text-blue-600" />
+      <div className="surface flex items-center gap-2 p-4">
+        <Bluetooth className="h-5 w-5 text-muted-foreground" />
         <div>
           <h3 className="font-semibold">BLE Relay Device Management</h3>
           <p className="text-sm text-muted-foreground">
@@ -168,21 +168,21 @@ export function RelayApprovalPanel({
 
       {/* Statistics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-card border rounded-lg p-3">
+        <div className="surface rounded-lg p-3">
           <p className="text-xs text-muted-foreground">Total Relays</p>
           <p className="text-2xl font-bold">{stats.totalRelays}</p>
         </div>
-        <div className="bg-card border rounded-lg p-3">
+        <div className="surface rounded-lg p-3">
           <p className="text-xs text-muted-foreground">Pending</p>
-          <p className="text-2xl font-bold text-amber-600">
+          <p className="text-2xl font-bold">
             {stats.pendingApprovals}
           </p>
         </div>
-        <div className="bg-card border rounded-lg p-3">
+        <div className="surface rounded-lg p-3">
           <p className="text-xs text-muted-foreground">Active</p>
-          <p className="text-2xl font-bold text-green-600">{stats.approvedRelays}</p>
+          <p className="text-2xl font-bold">{stats.approvedRelays}</p>
         </div>
-        <div className="bg-card border rounded-lg p-3">
+        <div className="surface rounded-lg p-3">
           <p className="text-xs text-muted-foreground">Total Relay Scans</p>
           <p className="text-2xl font-bold">{stats.totalRelayScans}</p>
         </div>
@@ -198,7 +198,7 @@ export function RelayApprovalPanel({
           {pendingDevices.length > 0 && (
             <div className="space-y-3">
               <h4 className="font-semibold flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <AlertCircle className="h-4 w-4 text-muted-foreground" />
                 Pending Approval ({pendingDevices.length})
               </h4>
               <div className="space-y-2">
@@ -221,7 +221,7 @@ export function RelayApprovalPanel({
                       <button
                         onClick={() => handleApprove(device.id)}
                         disabled={approving === device.id}
-                        className="flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:opacity-50 text-sm"
+                        className="flex items-center gap-1 rounded bg-primary px-3 py-1 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                       >
                         {approving === device.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -253,14 +253,14 @@ export function RelayApprovalPanel({
           {approvedDevices.length > 0 && (
             <div className="space-y-3">
               <h4 className="font-semibold flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                <CheckCircle2 className="h-4 w-4 text-foreground" />
                 Active Relays ({approvedDevices.length})
               </h4>
               <div className="space-y-2">
                 {approvedDevices.map((device) => (
                   <div
                     key={device.id}
-                    className="border border-green-200 bg-green-50 rounded-lg p-4 flex items-between gap-4"
+                    className="status-panel-subtle flex items-between gap-4 rounded-lg"
                   >
                     <div className="flex-1">
                       <p className="font-medium">{device.studentName}</p>
@@ -303,7 +303,7 @@ export function RelayApprovalPanel({
                 {rejectedDevices.map((device) => (
                   <div
                     key={device.id}
-                    className="border border-red-200 bg-red-50 rounded-lg p-4"
+                    className="rounded-lg border border-destructive/30 bg-destructive/10 p-4"
                   >
                     <p className="font-medium">{device.studentName}</p>
                     <p className="text-sm text-muted-foreground">

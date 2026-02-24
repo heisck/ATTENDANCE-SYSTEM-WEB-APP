@@ -192,10 +192,10 @@ export function QrScanner({ onScan }: QrScannerProps) {
 
   if (scanned) {
     return (
-      <div className="flex flex-col items-center gap-4 rounded-lg border border-green-200 bg-green-50 p-8">
-        <CheckCircle2 className="h-12 w-12 text-green-600" />
-        <p className="font-medium text-green-800">QR Code Scanned!</p>
-        <p className="text-sm text-green-600">Processing your attendance...</p>
+      <div className="status-panel flex flex-col items-center gap-4 p-8 text-center">
+        <CheckCircle2 className="h-12 w-12" />
+        <p className="font-medium">QR Code Scanned</p>
+        <p className="text-sm text-muted-foreground">Processing your attendance...</p>
       </div>
     );
   }
@@ -240,7 +240,7 @@ export function QrScanner({ onScan }: QrScannerProps) {
               </div>
             )}
             <div className="pointer-events-none absolute inset-0">
-              <div className="absolute left-1/2 top-1/2 h-48 w-48 sm:h-56 sm:w-56 -translate-x-1/2 -translate-y-1/2 rounded-xl border-4 border-cyan-300/95" />
+              <div className="absolute left-1/2 top-1/2 h-48 w-48 sm:h-56 sm:w-56 -translate-x-1/2 -translate-y-1/2 rounded-xl border-4 border-white/85" />
               <div className="absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-black/50 to-transparent" />
               <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/50 to-transparent" />
               <p className="absolute bottom-16 left-1/2 -translate-x-1/2 rounded-md bg-black/55 px-2 py-1 text-xs text-white whitespace-nowrap">
@@ -261,7 +261,7 @@ export function QrScanner({ onScan }: QrScannerProps) {
                 step={zoomStep}
                 value={zoomValue}
                 onChange={(e) => handleZoomChange(Number(e.target.value))}
-                className="mt-1 w-full accent-cyan-500"
+                className="mt-1 w-full accent-primary"
               />
             </div>
             <button

@@ -129,7 +129,7 @@ function DockItem({
           onClick?.();
         }
       }}
-      className={`relative inline-flex items-center justify-center rounded-full border border-gray-200/80 bg-gray-100/90 text-black shadow-sm shadow-gray-200/60 dark:border-gray-700 dark:bg-[#0b0b0c] dark:text-gray-100 dark:shadow-black/30 ${className}`}
+      className={`relative inline-flex items-center justify-center rounded-full border border-transparent bg-transparent text-black transition-colors duration-150 hover:border-black/15 hover:bg-gray-100/85 focus-visible:border-black/15 focus-visible:bg-gray-100/85 dark:border-gray-700 dark:bg-[#0b0b0c] dark:text-gray-100 dark:shadow-sm dark:shadow-black/30 dark:hover:border-gray-700 dark:hover:bg-[#0b0b0c] dark:focus-visible:border-gray-700 dark:focus-visible:bg-[#0b0b0c] ${className}`}
       tabIndex={0}
       role="button"
       aria-haspopup="true"
@@ -232,7 +232,7 @@ export default function Dock({
         onTouchCancel={() => {
           resetInteraction();
         }}
-        className={`${className} absolute bottom-2 left-1/2 transform -translate-x-1/2 flex items-end w-fit gap-4 rounded-2xl border border-gray-200/70 bg-white/80 pb-2 px-4 shadow-sm shadow-gray-300/35 backdrop-blur-md supports-[backdrop-filter]:bg-white/75 dark:border-gray-700/70 dark:bg-[#0b0b0c]/90 dark:shadow-black/35 dark:supports-[backdrop-filter]:bg-black/10`}
+        className={`${className} absolute bottom-2 left-1/2 transform -translate-x-1/2 flex items-end w-fit gap-4 rounded-2xl border border-black/10 bg-white pb-2 px-4 shadow-sm shadow-black/5 backdrop-blur-md supports-[backdrop-filter]:bg-white/90 dark:border-gray-700/70 dark:bg-[#0b0b0c]/90 dark:shadow-black/35 dark:supports-[backdrop-filter]:bg-black/10`}
         style={{ height: panelHeight, touchAction: "none" }}
         role="toolbar"
         aria-label="Application dock"

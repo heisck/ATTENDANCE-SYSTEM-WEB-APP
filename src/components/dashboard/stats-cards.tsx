@@ -10,31 +10,36 @@ interface StatCardProps {
 
 export function StatCard({ title, value, subtitle, icon, trend }: StatCardProps) {
   return (
-    <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-muted-foreground">{title}</p>
-        <div className="text-muted-foreground">{icon}</div>
-      </div>
-      <p className="mt-2 text-3xl font-bold">{value}</p>
-      {subtitle && (
-        <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
-      )}
-      {trend && (
-        <p
-          className={cn(
-            "mt-1 text-xs font-medium",
-            trend.positive ? "text-green-600" : "text-red-500"
-          )}
-        >
-          {trend.positive ? "+" : ""}{trend.value}
+    <div className="surface p-4 sm:p-5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+          {title}
         </p>
+        <div className="rounded-full border border-border/70 bg-muted/60 p-2 text-foreground/80">
+          {icon}
+        </div>
+      </div>
+      <div className="mt-4 flex items-end justify-between gap-2">
+        <p className="text-3xl font-semibold tracking-tight tabular-nums">{value}</p>
+        {trend && (
+          <p
+            className={cn(
+              "text-xs font-medium",
+              trend.positive ? "text-foreground/80" : "text-muted-foreground"
+            )}
+          >
+            {trend.positive ? "Up " : "Down "}
+            {trend.value}
+          </p>
+        )}
+      </div>
+      {subtitle && (
+        <p className="mt-2 text-xs text-muted-foreground leading-relaxed">{subtitle}</p>
       )}
     </div>
   );
 }
 
 export function StatsGrid({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{children}</div>
-  );
+  return <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{children}</div>;
 }

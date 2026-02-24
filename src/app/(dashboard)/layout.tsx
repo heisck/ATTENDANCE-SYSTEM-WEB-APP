@@ -19,7 +19,7 @@ export default async function DashboardLayout({
         className="min-w-0 pt-16"
         style={{ paddingBottom: "calc(6.5rem + env(safe-area-inset-bottom))" }}
       >
-        <div className="p-4 sm:p-6 lg:p-8">{children}</div>
+        <div className="mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8 xl:p-10">{children}</div>
       </main>
     </div>
   );

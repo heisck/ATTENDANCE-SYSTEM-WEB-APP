@@ -145,8 +145,8 @@ export default function SessionMonitorPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="surface flex items-center justify-between p-6">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold">
             {data.course.code} - {data.course.name}
           </h1>
@@ -166,7 +166,7 @@ export default function SessionMonitorPage() {
             <span
               className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                 isActive
-                  ? "bg-green-100 text-green-700"
+                  ? "border border-border/70 bg-muted text-foreground"
                   : "bg-gray-100 text-gray-600"
               }`}
             >
@@ -175,9 +175,9 @@ export default function SessionMonitorPage() {
             <span
               className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                 data.phase === "INITIAL"
-                  ? "bg-blue-100 text-blue-700"
+                  ? "border border-border/70 bg-muted text-foreground"
                   : data.phase === "REVERIFY"
-                    ? "bg-amber-100 text-amber-700"
+                    ? "border border-border/70 bg-muted text-foreground"
                     : "bg-slate-100 text-slate-700"
               }`}
             >
@@ -209,7 +209,7 @@ export default function SessionMonitorPage() {
       )}
 
       {isReverify && (
-        <div className="grid gap-3 rounded-lg border border-border bg-card p-4 sm:grid-cols-4">
+        <div className="surface grid gap-3 p-4 sm:grid-cols-4">
           <div>
             <p className="text-xs text-muted-foreground">Selected</p>
             <p className="text-lg font-semibold">{data.reverifySelectedCount}</p>
@@ -243,10 +243,7 @@ export default function SessionMonitorPage() {
           </h2>
           <div className="space-y-2 max-h-[600px] overflow-y-auto">
             {data.records.map((record) => (
-              <div
-                key={record.id}
-                className="flex items-center justify-between rounded-lg border border-border bg-card p-3"
-              >
+              <div key={record.id} className="surface flex items-center justify-between rounded-lg p-3">
                 <div>
                   <p className="text-sm font-medium">{record.student.name}</p>
                   <p className="text-xs text-muted-foreground">
@@ -266,7 +263,7 @@ export default function SessionMonitorPage() {
                     {Math.round(record.gpsDistance)}m
                   </span>
                   {record.flagged && (
-                    <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                    <AlertTriangle className="h-4 w-4 text-muted-foreground" />
                   )}
                   {(record.reverifyStatus === "MISSED" || record.reverifyStatus === "FAILED") && isReverify && (
                     <div className="flex items-center gap-2">
@@ -285,7 +282,7 @@ export default function SessionMonitorPage() {
                       <button
                         onClick={() => handleManualMark(record.student.id)}
                         disabled={actionBusyFor === record.student.id}
-                        className="inline-flex items-center gap-1 rounded-md bg-green-100 px-2 py-1 text-[11px] font-medium text-green-700 hover:bg-green-200 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-foreground hover:bg-muted/80 disabled:opacity-50"
                       >
                         {actionBusyFor === record.student.id ? (
                           <Loader2 className="h-3 w-3 animate-spin" />
