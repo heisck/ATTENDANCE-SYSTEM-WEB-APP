@@ -578,20 +578,17 @@ export default function AttendPage() {
             </div>
           )}
           <div
-            className={`flex flex-col items-center gap-3 rounded-lg border p-8 ${
+            className={`rounded-lg border p-4 ${
               result.success
-                ? "border-green-200 bg-green-50"
+                ? "border-green-300 bg-green-50"
                 : "border-red-200 bg-red-50"
             }`}
           >
             {result.success ? (
-              <>
-                <CheckCircle2 className="h-16 w-16 text-green-600" />
-                <p className="text-xl font-bold text-green-800">Initial Attendance Marked</p>
-                <p className="text-sm text-green-700">
-                  Confidence: {result.confidence}% {result.flagged ? "(Flagged for review)" : ""}
-                </p>
-              </>
+              <div className="flex items-center gap-2 font-medium text-green-800">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                Initial complete
+              </div>
             ) : (
               <>
                 <XCircle className="h-16 w-16 text-red-600" />
