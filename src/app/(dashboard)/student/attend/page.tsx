@@ -387,9 +387,9 @@ export default function AttendPage() {
     const attendance = syncState.attendance;
     if (!attendance.reverifyRequired) {
       return {
-        tone: "green",
-        title: "Initial attendance confirmed",
-        body: "You were not selected for reverification. No further action is required.",
+        tone: "neutral",
+        title: "Hold on for reverification",
+        body: "You were not selected for reverification this time. Stay on this page until the session ends—you may still be selected. Do not close the window.",
       };
     }
 
@@ -567,36 +567,27 @@ export default function AttendPage() {
               </span>
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ${
-                  isPendingReverify ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-700"
+                  reverifyStatus === "PASSED" || reverifyStatus === "MANUAL_PRESENT"
+                    ? "bg-green-100 text-green-700"
+                    : isPendingReverify
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-muted text-muted-foreground"
                 }`}
               >
                 Phase 2
-                {(reverifyStatus === "PASSED" || reverifyStatus === "MANUAL_PRESENT" || reverifyStatus === "NOT_REQUIRED") && (
+                {(reverifyStatus === "PASSED" || reverifyStatus === "MANUAL_PRESENT") && (
                   <CheckCircle2 className="h-3.5 w-3.5" />
                 )}
               </span>
             </div>
           )}
-          <div
-            className={`rounded-lg border p-4 ${
-              result.success
-                ? "border-green-300 bg-green-50"
-                : "border-red-200 bg-red-50"
-            }`}
-          >
-            {result.success ? (
-              <div className="flex items-center gap-2 font-medium text-green-800">
-                <CheckCircle2 className="h-4 w-4 shrink-0" />
-                Initial complete
-              </div>
-            ) : (
-              <>
-                <XCircle className="h-16 w-16 text-red-600" />
-                <p className="text-xl font-bold text-red-800">Attendance Failed</p>
-                <p className="text-sm text-red-600">{result.error}</p>
-              </>
-            )}
-          </div>
+          {!result.success && (
+            <div className="rounded-lg border p-4 border-red-200 bg-red-50">
+              <XCircle className="h-16 w-16 text-red-600" />
+              <p className="text-xl font-bold text-red-800">Attendance Failed</p>
+              <p className="text-sm text-red-600">{result.error}</p>
+            </div>
+          )}
 
           {result.success && (
             <div className="rounded-lg border border-border p-4">
@@ -606,19 +597,19 @@ export default function AttendPage() {
                   icon={<Fingerprint className="h-4 w-4" />}
                   label="WebAuthn Biometric"
                   passed={result.layers.webauthn}
-                  points={40}
+                  points={34}
                 />
                 <LayerRow
                   icon={<MapPin className="h-4 w-4" />}
                   label={`GPS Proximity (${Math.round(result.gpsDistance)}m)`}
                   passed={result.layers.gps}
-                  points={30}
+                  points={33}
                 />
                 <LayerRow
                   icon={<QrCode className="h-4 w-4" />}
                   label="QR Token"
                   passed={result.layers.qr}
-                  points={20}
+                  points={33}
                 />
               </div>
             </div>
@@ -659,13 +650,15 @@ export default function AttendPage() {
               {syncState?.attendance && reverifyMessage && (
                 <div
                   className={`rounded-md border p-3 text-sm ${
-                    reverifyMessage.tone === "green"
-                      ? "border-green-300 bg-green-50 text-green-800"
-                      : reverifyMessage.tone === "amber"
-                        ? "border-amber-300 bg-amber-50 text-amber-800"
-                        : reverifyMessage.tone === "yellow"
-                          ? "border-yellow-300 bg-yellow-50 text-yellow-800"
-                          : "border-red-300 bg-red-50 text-red-800"
+                    reverifyMessage.tone === "neutral"
+                      ? "border-border bg-muted/50 text-foreground"
+                      : reverifyMessage.tone === "green"
+                        ? "border-green-300 bg-green-50 text-green-800"
+                        : reverifyMessage.tone === "amber"
+                          ? "border-amber-300 bg-amber-50 text-amber-800"
+                          : reverifyMessage.tone === "yellow"
+                            ? "border-yellow-300 bg-yellow-50 text-yellow-800"
+                            : "border-red-300 bg-red-50 text-red-800"
                   }`}
                 >
                   <p className="font-medium">{reverifyMessage.title}</p>
@@ -735,7 +728,7 @@ export default function AttendPage() {
                 </div>
               )}
 
-              {(reverifyStatus === "PASSED" || reverifyStatus === "MANUAL_PRESENT" || reverifyStatus === "NOT_REQUIRED") && (
+              {(reverifyStatus === "PASSED" || reverifyStatus === "MANUAL_PRESENT") && (
                 <div className="rounded-md border border-green-300 bg-green-50 p-4 text-center">
                   <CheckCircle2 className="mx-auto h-10 w-10 text-green-600" />
                   <p className="mt-2 font-semibold text-green-800">Fully done!</p>
@@ -750,13 +743,6 @@ export default function AttendPage() {
               )}
             </div>
           )}
-
-          <button
-            onClick={resetFlow}
-            className="w-full rounded-md border border-border py-2 text-sm font-medium hover:bg-accent transition-colors"
-          >
-            Reset Attendance Flow
-          </button>
         </div>
       )}
     </div>
