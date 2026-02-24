@@ -226,6 +226,12 @@ model AttendanceRecord {
   reverifyManualOverriddenAt DateTime?
   confidence   Int
   flagged      Boolean  @default(false)
+  // New device and security fields
+  deviceToken  String?  // Which device submitted this
+  bleSignalStrength Int? // RSSI value (-100 to -20, higher is stronger)
+  deviceConsistency Float? // 0-100 score
+  gpsVelocity  Float?   // Movement speed in m/s
+  anomalyScore Float?   // 0-100, higher = more suspicious
   markedAt     DateTime @default(now())
 
   session AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -236,6 +242,8 @@ model AttendanceRecord {
   @@index([studentId])
   @@index([flagged])
   @@index([reverifyStatus])
+  @@index([anomalyScore])
+  @@index([deviceToken])
 }
 
 model AuditLog {
@@ -362,4 +370,124 @@ model UserNotification {
   @@index([userId])
   @@index([createdAt])
   @@index([type])
+}
+
+// Device linking for multi-device attendance and BLE verification
+model UserDevice {
+  id               String   @id @default(cuid())
+  userId           String
+  deviceToken      String   @unique // Device identifier (Android/iOS)
+  deviceName       String   // e.g., "iPhone 14 Pro"
+  deviceType       String   // "iOS" | "Android" | "Web"
+  osVersion        String?
+  appVersion       String?
+  bleSignature     String?  // BLE advertiser identifier (platform-specific)
+  bleLastSeen      DateTime?
+  fingerprint      String?  // Hardware fingerprint for spoofing detection
+  lastUsedAt       DateTime @default(now())
+  trustedAt        DateTime? // Manually verified by admin
+  revokedAt        DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([deviceToken])
+  @@index([revokedAt])
+  @@index([bleSignature])
+}
+
+// Enhanced attendance records with device and velocity info
+model AttendanceRecordExtended {
+  id                String   @id @default(cuid())
+  attendanceRecordId String  @unique // References AttendanceRecord.id
+  deviceToken       String?  // Which device was used
+  bleSignalStrength Int?     // RSSI value from source device (-100 to -20)
+  deviceConsistency Float?   // Historical device match score (0-100)
+  gpsVelocity       Float?   // Calculated movement speed (m/s)
+  lastLocationLat   Float?   // Last known location for velocity
+  lastLocationLng   Float?
+  lastLocationTime  DateTime?
+  anomalyScore      Float?   // 0-100, higher = more suspicious
+  anomalyFlags      String[] // Array of detected anomalies
+  locationJump      Boolean @default(false) // Teleportation detected
+  velocityAnomaly   Boolean @default(false) // Movement too fast
+  deviceMismatch    Boolean @default(false) // Different device than usual
+  createdAt         DateTime @default(now())
+
+  @@index([attendanceRecordId])
+  @@index([anomalyScore])
+}
+
+// Anomaly detection and security monitoring
+enum AnomalyType {
+  LOCATION_JUMP      // Distance/time impossible
+  VELOCITY_ANOMALY   // Moving too fast
+  DEVICE_MISMATCH    // Different device than normal
+  RAPID_SUBMISSIONS  // Too many attempts in short time
+  GPS_SPOOFING       // Invalid movement pattern
+  QR_REUSE           // Same QR used by multiple students
+  IP_MISMATCH        // IP doesn't match student location
+  TIMEZONE_ANOMALY   // Timestamp doesn't match timezone
+  BEHAVIORAL_CHANGE  // Unusual attendance pattern
+}
+
+model AttendanceAnomaly {
+  id          String     @id @default(cuid())
+  studentId   String
+  sessionId   String?
+  anomalyType AnomalyType
+  severity    Int        @default(50) // 0-100
+  confidence  Float      @default(0.5) // 0.0-1.0
+  details     Json       @default("{}")
+  flaggedAt   DateTime   @default(now())
+  reviewedAt  DateTime?
+  reviewedBy  String?    // Admin user ID
+  action      String?    // "none" | "flag" | "invalidate" | "investigate"
+  actionReason String?
+  createdAt   DateTime   @default(now())
+
+  student    User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([sessionId])
+  @@index([anomalyType])
+  @@index([severity])
+  @@index([reviewedAt])
+  @@index([flaggedAt])
+}
+
+// Session monitoring for real-time admin dashboard
+model SessionMonitoring {
+  id          String   @id @default(cuid())
+  sessionId   String   @unique
+  totalEnrolled    Int     @default(0)
+  totalAttempted   Int     @default(0)
+  totalVerified    Int     @default(0)
+  flaggedCount     Int     @default(0)
+  anomalyCount     Int     @default(0)
+  lastUpdated      DateTime @default(now())
+  estimatedCompletion DateTime? // Projected completion time
+  
+  createdAt DateTime @default(now())
+
+  @@index([sessionId])
+}
+
+// BLE device signature storage for proximity verification
+model BleDeviceSignature {
+  id             String   @id @default(cuid())
+  userDeviceId   String   @unique
+  bleAddress     String   // BLE MAC or permanent address
+  bleUuid        String?  // BLE UUID if using
+  txPower        Int?     // Transmission power (calibration)
+  lastVerified   DateTime @default(now())
+  verificationCount Int   @default(0)
+  createdAt      DateTime @default(now())
+
+  userDevice UserDevice @relation(fields: [userDeviceId], references: [id], onDelete: Cascade)
+
+  @@index([bleAddress])
+  @@index([userDeviceId])
 }
