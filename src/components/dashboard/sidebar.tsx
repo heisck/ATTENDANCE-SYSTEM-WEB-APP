@@ -43,6 +43,7 @@ const navByRole: Record<string, NavItem[]> = {
   ],
   LECTURER: [
     { label: "Dashboard", href: "/lecturer", icon: <LayoutDashboard className="h-4 w-4" /> },
+    { label: "Courses", href: "/lecturer/courses", icon: <BookOpen className="h-4 w-4" /> },
     { label: "New Session", href: "/lecturer/session/new", icon: <Play className="h-4 w-4" /> },
     { label: "Reports", href: "/lecturer/reports", icon: <FileText className="h-4 w-4" /> },
   ],

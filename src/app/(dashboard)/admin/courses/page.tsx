@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
 
 export default async function AdminCoursesPage() {
@@ -24,7 +25,7 @@ export default async function AdminCoursesPage() {
       <div>
         <h1 className="text-2xl font-bold">Courses</h1>
         <p className="text-muted-foreground">
-          All courses in your university
+          All courses in your university. Manage enrollments to add or remove students.
         </p>
       </div>
 
@@ -35,6 +36,7 @@ export default async function AdminCoursesPage() {
           { key: "lecturer", label: "Lecturer" },
           { key: "students", label: "Students" },
           { key: "sessions", label: "Sessions" },
+          { key: "manage", label: "" },
         ]}
         data={courses.map((c) => ({
           code: c.code,
@@ -42,6 +44,14 @@ export default async function AdminCoursesPage() {
           lecturer: c.lecturer.name,
           students: c._count.enrollments,
           sessions: c._count.sessions,
+          manage: (
+            <Link
+              href={`/admin/courses/${c.id}`}
+              className="text-primary hover:underline text-sm font-medium"
+            >
+              Manage enrollments
+            </Link>
+          ),
         }))}
         emptyMessage="No courses created yet."
       />
