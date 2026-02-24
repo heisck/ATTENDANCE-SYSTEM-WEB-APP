@@ -14,11 +14,9 @@ import {
   Fingerprint,
   MapPin,
   QrCode,
-  Wifi,
   AlertTriangle,
   Clock,
   RefreshCcw,
-  Share2,
 } from "lucide-react";
 
 type Step = "session" | "webauthn" | "gps" | "qr" | "submitting" | "result";
@@ -624,12 +622,6 @@ export default function AttendPage() {
                   label="QR Token"
                   passed={result.layers.qr}
                   points={20}
-                />
-                <LayerRow
-                  icon={<Wifi className="h-4 w-4" />}
-                  label="Campus Network"
-                  passed={result.layers.ip}
-                  points={10}
                 />
               </div>
             </div>
