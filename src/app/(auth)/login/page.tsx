@@ -1,14 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getSession, signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Shield, Loader2, Mail, Lock, Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -25,6 +23,38 @@ export default function LoginPage() {
       });
     }
   }, []);
+
+  async function resolveRedirectTarget(): Promise<string | null> {
+    const maxAttempts = 5;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const res = await fetch("/api/auth/redirect-target", {
+          method: "GET",
+          cache: "no-store",
+          credentials: "include",
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (
+            typeof data.redirectTo === "string" &&
+            data.redirectTo.startsWith("/")
+          ) {
+            return data.redirectTo;
+          }
+        }
+      } catch {
+        // Retry below
+      }
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, 150 * (attempt + 1))
+      );
+    }
+
+    return null;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -47,44 +77,16 @@ export default function LoginPage() {
         toast.success("Sign in successful", {
           description: "Redirecting...",
         });
-        const session = await getSession();
-        if (!session?.user) {
+        const redirectTo = await resolveRedirectTarget();
+        if (!redirectTo) {
           const message =
-            "Sign-in did not create a session. Check AUTH_URL, AUTH_TRUST_HOST, and AUTH_SECRET.";
+            "Signed in, but session redirect could not be resolved. Check AUTH_SECRET and AUTH_URL in production.";
           setServerError(message);
           toast.error(message);
           return;
         }
 
-        const role = (session.user as any).role as string | undefined;
-        if (role === "STUDENT") {
-          const statusRes = await fetch("/api/auth/student-status");
-          if (statusRes.ok) {
-            const status = await statusRes.json();
-            if (status.requiresProfileCompletion || !status.personalEmailVerified) {
-              router.push("/student/complete-profile");
-              router.refresh();
-              return;
-            }
-            if (!status.hasPasskey) {
-              router.push("/setup-device");
-              router.refresh();
-              return;
-            }
-          }
-        }
-
-        const dashboard =
-          role === "SUPER_ADMIN"
-            ? "/super-admin"
-            : role === "ADMIN"
-              ? "/admin"
-              : role === "LECTURER"
-                ? "/lecturer"
-                : "/student";
-
-        router.push(dashboard);
-        router.refresh();
+        window.location.assign(redirectTo);
       }
     } catch {
       const message = "Something went wrong. Please try again.";

@@ -21,13 +21,23 @@ export default async function middleware(req: NextRequest) {
     req,
     secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
   });
-  const user = token
-    ? {
-        id: String((token as any).id || ""),
-        role: String((token as any).role || ""),
-        organizationId: ((token as any).organizationId ?? null) as string | null,
-      }
-    : null;
+  const rawRole = typeof (token as any)?.role === "string" ? (token as any).role : "";
+  const hasKnownRole = rawRole in roleRoutes;
+  const resolvedId =
+    typeof (token as any)?.id === "string" && (token as any).id.length > 0
+      ? (token as any).id
+      : typeof (token as any)?.sub === "string"
+        ? (token as any).sub
+        : "";
+
+  const user =
+    token && resolvedId && hasKnownRole
+      ? {
+          id: resolvedId,
+          role: rawRole,
+          organizationId: ((token as any).organizationId ?? null) as string | null,
+        }
+      : null;
 
   const isAuthPage = pathname.startsWith("/login") || pathname.startsWith("/register");
   const isDashboard =

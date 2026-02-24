@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { getSession, signIn } from "next-auth/react";
+import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -35,6 +35,38 @@ export default function RegisterPage() {
 
   function update(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  async function resolveRedirectTarget(): Promise<string | null> {
+    const maxAttempts = 5;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const res = await fetch("/api/auth/redirect-target", {
+          method: "GET",
+          cache: "no-store",
+          credentials: "include",
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (
+            typeof data.redirectTo === "string" &&
+            data.redirectTo.startsWith("/")
+          ) {
+            return data.redirectTo;
+          }
+        }
+      } catch {
+        // Retry below
+      }
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, 150 * (attempt + 1))
+      );
+    }
+
+    return null;
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -79,48 +111,19 @@ export default function RegisterPage() {
         return;
       }
 
-      const session = await getSession();
-      if (!session?.user) {
-        const message = "Account created, but no session was created. Please sign in manually.";
-        setServerError(message);
-        toast.error(message);
-        router.push("/login?registered=true");
-        return;
-      }
-
       toast.success("Sign in successful", {
         description: "Redirecting to your dashboard...",
       });
-
-      const role = (session.user as any).role as string | undefined;
-      if (role === "STUDENT") {
-        const statusRes = await fetch("/api/auth/student-status");
-        if (statusRes.ok) {
-          const status = await statusRes.json();
-          if (status.requiresProfileCompletion || !status.personalEmailVerified) {
-            router.push("/student/complete-profile");
-            router.refresh();
-            return;
-          }
-          if (!status.hasPasskey) {
-            router.push("/setup-device");
-            router.refresh();
-            return;
-          }
-        }
+      const redirectTo = await resolveRedirectTarget();
+      if (!redirectTo) {
+        const message =
+          "Signed in, but session redirect could not be resolved. Check AUTH_SECRET and AUTH_URL in production.";
+        setServerError(message);
+        toast.error(message);
+        return;
       }
 
-      const dashboard =
-        role === "SUPER_ADMIN"
-          ? "/super-admin"
-          : role === "ADMIN"
-            ? "/admin"
-            : role === "LECTURER"
-              ? "/lecturer"
-              : "/student";
-
-      router.push(dashboard);
-      router.refresh();
+      window.location.assign(redirectTo);
     } catch {
       const message = "Something went wrong. Please try again.";
       setServerError(message);
