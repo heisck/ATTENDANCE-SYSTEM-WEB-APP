@@ -21,7 +21,13 @@ import {
   Share2,
 } from "lucide-react";
 
-type Step = "webauthn" | "gps" | "qr" | "submitting" | "result";
+type Step = "session" | "webauthn" | "gps" | "qr" | "submitting" | "result";
+
+interface ActiveSession {
+  id: string;
+  radiusMeters: number;
+  course: { code: string; name: string };
+}
 
 interface LayerResult {
   webauthn: boolean;
@@ -73,12 +79,15 @@ interface SessionSyncResponse {
 
 export default function AttendPage() {
   const router = useRouter();
-  const [step, setStep] = useState<Step>("webauthn");
+  const [step, setStep] = useState<Step>("session");
   const [webauthnVerified, setWebauthnVerified] = useState(false);
   const [gps, setGps] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [result, setResult] = useState<AttendanceResult | null>(null);
   const [hasDevice, setHasDevice] = useState<boolean | null>(null);
 
+  const [sessions, setSessions] = useState<ActiveSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [selectedSession, setSelectedSession] = useState<ActiveSession | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [syncState, setSyncState] = useState<SessionSyncResponse | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -124,6 +133,38 @@ export default function AttendPage() {
 
     checkDevice();
   }, [router]);
+
+  useEffect(() => {
+    if (hasDevice !== true) return;
+    let cancelled = false;
+    async function loadSessions() {
+      setSessionsLoading(true);
+      try {
+        const res = await fetch("/api/attendance/sessions?status=ACTIVE");
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to load sessions");
+        if (!cancelled) {
+          setSessions(
+            Array.isArray(data)
+              ? data.map((s: any) => ({
+                  id: s.id,
+                  radiusMeters: s.radiusMeters ?? 50,
+                  course: s.course ?? { code: s.courseCode ?? "", name: s.courseName ?? "" },
+                }))
+              : []
+          );
+        }
+      } catch {
+        if (!cancelled) setSessions([]);
+      } finally {
+        if (!cancelled) setSessionsLoading(false);
+      }
+    }
+    loadSessions();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasDevice]);
 
   useEffect(() => {
     if (!activeSessionId) return;
@@ -184,6 +225,18 @@ export default function AttendPage() {
 
   async function handleInitialQrScan(data: { sessionId: string; token: string; ts: number }) {
     if (!gps) return;
+    if (selectedSession && data.sessionId !== selectedSession.id) {
+      setResult({
+        success: false,
+        confidence: 0,
+        flagged: true,
+        gpsDistance: 0,
+        layers: { webauthn: false, gps: false, qr: false, ip: false },
+        error: "This QR belongs to a different session. Please scan the QR for your selected course.",
+      });
+      setStep("result");
+      return;
+    }
 
     setStep("submitting");
 
@@ -377,7 +430,8 @@ export default function AttendPage() {
   }, [syncState]);
 
   function resetFlow() {
-    setStep("webauthn");
+    setStep("session");
+    setSelectedSession(null);
     setWebauthnVerified(false);
     setGps(null);
     setResult(null);
@@ -428,36 +482,63 @@ export default function AttendPage() {
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ${
-                ["webauthn", "gps", "qr", "submitting"].includes(step)
+                ["session", "webauthn", "gps", "qr", "submitting"].includes(step)
                   ? step === "qr"
                     ? "bg-primary text-primary-foreground"
-                    : ["webauthn", "gps", "qr", "submitting"].indexOf(step) > 2
+                    : ["session", "webauthn", "gps", "qr", "submitting"].indexOf(step) > 2
                       ? "bg-green-100 text-green-700"
                       : "bg-muted text-muted-foreground"
                   : "bg-green-100 text-green-700"
               }`}
             >
               Phase 1
-              {!result && step !== "webauthn" && step !== "gps" && step !== "qr" && step !== "submitting" ? null : result?.success ? (
+              {["qr", "submitting"].includes(step) ? (
                 <CheckCircle2 className="h-3.5 w-3.5" />
               ) : null}
             </span>
-            {result?.success && (
-              <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ${
-                  isPendingReverify ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-700"
-                }`}
-              >
-                Phase 2
-                {!isPendingReverify && (reverifyStatus === "PASSED" || reverifyStatus === "MANUAL_PRESENT" || reverifyStatus === "NOT_REQUIRED") ? (
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                ) : null}
-              </span>
-            )}
           </div>
 
+          {step === "session" && (
+            <div className="rounded-lg border border-border p-4 space-y-3">
+              <p className="text-sm font-medium">Select an active session</p>
+              <p className="text-xs text-muted-foreground">
+                Only sessions for courses you are enrolled in are shown.
+              </p>
+              {sessionsLoading ? (
+                <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading sessions...
+                </div>
+              ) : sessions.length === 0 ? (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                  No active sessions for your courses right now. Ask your lecturer to start a session.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {sessions.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => {
+                        setSelectedSession(s);
+                        setStep("webauthn");
+                      }}
+                      className="w-full rounded-md border border-border px-4 py-3 text-left hover:bg-accent transition-colors"
+                    >
+                      <span className="font-medium">{s.course.code}</span>
+                      <span className="text-muted-foreground"> — {s.course.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {step === "webauthn" && <WebAuthnPrompt onVerified={handleWebAuthnVerified} />}
-          {step === "gps" && <GpsCheck onLocationReady={handleGpsReady} />}
+          {step === "gps" && (
+            <GpsCheck
+              onLocationReady={handleGpsReady}
+              maxAccuracyMeters={selectedSession?.radiusMeters ?? 50}
+            />
+          )}
           {step === "qr" && (
             <div
               className="flex min-h-[60dvh] flex-col justify-center py-4 md:min-h-0 md:py-0"
