@@ -18,6 +18,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head><meta name="apple-mobile-web-app-title" content="attendanceIQ" /></head>
       <body className={inter.className}>
         <Providers>
           {children}
