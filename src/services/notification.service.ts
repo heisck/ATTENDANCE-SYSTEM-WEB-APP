@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import type { Prisma } from "@prisma/client";
 
 type CourseStat = {
   courseId: string;
@@ -127,9 +128,7 @@ export async function runReminderEngine() {
   }
 
   // Batch all notifications to create
-  const notificationsToCreate: typeof db.userNotification.create extends (args: infer P) => any
-    ? P["data"][]
-    : never[] = [];
+  const notificationsToCreate: Prisma.UserNotificationCreateManyInput[] = [];
 
   // Process each student
   for (const student of students) {

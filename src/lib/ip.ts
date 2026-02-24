@@ -17,19 +17,34 @@
  * @param headers - Request headers object
  * @returns Real client IP address, or "unknown" if unable to determine
  */
+function getHeaderValue(
+  headers: Headers | Record<string, string | string[] | undefined>,
+  headerName: string
+): string | undefined {
+  if (headers instanceof Headers) {
+    return headers.get(headerName) ?? undefined;
+  }
+
+  const value = headers[headerName];
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+
+  return value;
+}
+
 export function getClientIp(headers: Headers | Record<string, string | string[] | undefined>): string {
   // For typical cloud deployments (Vercel, Render, Netlify), x-forwarded-for is trusted
-  const xForwardedFor = headers["x-forwarded-for"];
+  const xForwardedFor = getHeaderValue(headers, "x-forwarded-for");
   if (xForwardedFor) {
     // Take the first IP in the chain (the real client)
-    const ip = Array.isArray(xForwardedFor) ? xForwardedFor[0] : xForwardedFor.split(",")[0];
+    const ip = xForwardedFor.split(",")[0];
     return ip.trim();
   }
 
-  const xRealIp = headers["x-real-ip"];
+  const xRealIp = getHeaderValue(headers, "x-real-ip");
   if (xRealIp) {
-    const ip = Array.isArray(xRealIp) ? xRealIp[0] : xRealIp;
-    return ip.trim();
+    return xRealIp.trim();
   }
 
   return "unknown";
@@ -67,7 +82,7 @@ function ipv6ToBigInt(ip: string): bigint | null {
     const parts = normalized.split(":");
     if (parts.length < 3 || parts.length > 8) return null;
 
-    let result = 0n;
+    let result = BigInt(0);
     let zeroGroupsSeen = false;
 
     for (let i = 0; i < parts.length; i++) {
@@ -83,7 +98,7 @@ function ipv6ToBigInt(ip: string): bigint | null {
 
       const value = parseInt(part, 16);
       if (isNaN(value) || value < 0 || value > 0xffff) return null;
-      result = (result << 16n) | BigInt(value);
+      result = (result << BigInt(16)) | BigInt(value);
     }
 
     return result;

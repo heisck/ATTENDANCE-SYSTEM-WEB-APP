@@ -128,6 +128,10 @@ src/
 docker compose -f docker-compose.prod.yml up --build -d
 ```
 
+## Vercel + Neon Deployment
+
+See [Vercel + Neon Deployment Guide](docs/VERCEL_NEON_DEPLOY.md) for the exact production setup commands and required environment variables.
+
 ## Environment Variables
 
 See `.env.example` for all required variables.

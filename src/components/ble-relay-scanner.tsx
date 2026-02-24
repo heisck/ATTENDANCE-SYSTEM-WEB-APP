@@ -89,7 +89,7 @@ export function BleRelayScanner({
 
     try {
       // Check Web Bluetooth support
-      if (!navigator.bluetooth) {
+      if (!(navigator as any).bluetooth) {
         throw new Error("Web Bluetooth not supported on this device");
       }
 

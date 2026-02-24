@@ -22,8 +22,6 @@ export function getRedis(): Redis | null {
           const delay = Math.min(times * 50, 2000);
           return delay;
         },
-        // Connection pooling
-        connectionPoolSize: 10,
       });
 
       redis.on("error", (err) => {

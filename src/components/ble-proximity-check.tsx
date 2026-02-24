@@ -40,8 +40,13 @@ export function BleProximityCheck({
   }, []);
 
   const startProximityVerification = async () => {
-    if (!supported || !secureContext || !sourceDeviceId) {
-      setError("Web Bluetooth not available or missing device info");
+    if (!supported) {
+      setError("Web Bluetooth is not available on this device/browser.");
+      return;
+    }
+
+    if (!secureContext) {
+      setError("Web Bluetooth requires a secure context (HTTPS or localhost).");
       return;
     }
 
@@ -52,15 +57,21 @@ export function BleProximityCheck({
     setDistance(null);
 
     try {
-      const options = {
-        filters: [
-          {
-            // Could filter by service UUID if available
-            name: "attendance-device",
-          },
-        ],
-        optionalServices: ["battery_service"],
-      };
+      const options = sourceDeviceId
+        ? {
+            filters: [
+              {
+                // In production, this should match the known source device identity.
+                name: `attendance-device-${sourceDeviceId.slice(0, 8)}`,
+              },
+            ],
+            optionalServices: ["battery_service"],
+          }
+        : {
+            // Fallback mode for environments where source device metadata is not provided yet.
+            acceptAllDevices: true,
+            optionalServices: ["battery_service"],
+          };
 
       // @ts-ignore - Web Bluetooth API not in TypeScript yet
       const device = await navigator.bluetooth.requestDevice(options);
@@ -136,6 +147,15 @@ export function BleProximityCheck({
       {/* Scan button */}
       {supported && secureContext && (
         <div className="space-y-3">
+          {!sourceDeviceId && (
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+              <p className="text-xs text-blue-700">
+                Running in generic BLE scan mode. Device-specific proximity matching
+                will be available after source device details are provided.
+              </p>
+            </div>
+          )}
+
           <button
             onClick={startProximityVerification}
             disabled={scanning || deviceFound}

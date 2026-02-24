@@ -1,5 +1,5 @@
 import { AttendancePhase, Role, SessionStatus } from "@prisma/client";
-import type { DefaultSession, JWT } from "next-auth";
+import type { DefaultSession } from "next-auth";
 
 export type { AttendancePhase, Role, SessionStatus };
 

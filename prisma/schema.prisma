@@ -105,6 +105,8 @@ model User {
   passwordResetTokens PasswordResetToken[]
   pushSubscriptions PushSubscription[]
   notifications UserNotification[]
+  userDevices UserDevice[]
+  attendanceAnomalies AttendanceAnomaly[]
   relayDevices BleRelayDevice[] @relation("RelayDevices")
 
   @@index([email])
@@ -401,6 +403,8 @@ model UserDevice {
   updatedAt        DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bleDeviceSignature BleDeviceSignature?
+  bleRelayDevice     BleRelayDevice?
 
   @@index([userId])
   @@index([deviceToken])
@@ -539,6 +543,7 @@ model BleRelayDevice {
   session         AttendanceSession @relation("RelayDevices", fields: [sessionId], references: [id], onDelete: Cascade)
   student         User              @relation("RelayDevices", fields: [studentId], references: [id], onDelete: Cascade)
   userDevice      UserDevice        @relation(fields: [userDeviceId], references: [id], onDelete: Cascade)
+  relayAttendanceRecords RelayAttendanceRecord[]
 
   @@unique([sessionId, studentId])
   @@index([sessionId])
