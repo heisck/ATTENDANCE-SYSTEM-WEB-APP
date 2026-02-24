@@ -134,10 +134,22 @@ export async function GET(request: NextRequest) {
     include: {
       course: true,
       _count: { select: { records: true } },
+      ...(user.role === "STUDENT"
+        ? { records: { where: { studentId: user.id }, select: { id: true } } }
+        : {}),
     },
     orderBy: { startedAt: "desc" },
     take: 20,
   });
+
+  if (user.role === "STUDENT") {
+    return NextResponse.json(
+      sessions.map((s) => {
+        const { records, ...rest } = s as any;
+        return { ...rest, hasMarked: Array.isArray(records) && records.length > 0 };
+      })
+    );
+  }
 
   return NextResponse.json(sessions);
 }

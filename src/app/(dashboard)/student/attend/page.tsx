@@ -27,13 +27,14 @@ interface ActiveSession {
   id: string;
   radiusMeters: number;
   course: { code: string; name: string };
+  hasMarked?: boolean;
 }
 
 interface LayerResult {
   webauthn: boolean;
   gps: boolean;
   qr: boolean;
-  ip: boolean;
+  ip?: boolean;
 }
 
 interface AttendanceResult {
@@ -150,6 +151,7 @@ export default function AttendPage() {
                   id: s.id,
                   radiusMeters: s.radiusMeters ?? 50,
                   course: s.course ?? { code: s.courseCode ?? "", name: s.courseName ?? "" },
+                  hasMarked: s.hasMarked ?? false,
                 }))
               : []
           );
