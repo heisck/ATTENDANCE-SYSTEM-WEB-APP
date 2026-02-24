@@ -20,6 +20,7 @@ export default async function middleware(req: NextRequest) {
   const token = await getToken({
     req,
     secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+    secureCookie: req.nextUrl.protocol === "https:",
   });
   const rawRole = typeof (token as any)?.role === "string" ? (token as any).role : "";
   const hasKnownRole = rawRole in roleRoutes;

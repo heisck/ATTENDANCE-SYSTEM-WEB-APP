@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { z } from "zod";
 import { buildAppUrl, sendEmail } from "@/lib/email";
+import { verificationEmailHtml } from "@/lib/email-templates";
 import { createExpiryDate, createRawToken, hashToken } from "@/lib/tokens";
 
 const updateStudentProfileSchema = z.object({
@@ -104,12 +105,12 @@ export async function PATCH(request: NextRequest) {
     await sendEmail({
       to: personalEmail,
       subject: "Verify your AttendanceIQ personal email",
-      html: `
-        <p>Hello ${user.name},</p>
-        <p>Use this link to verify your personal email:</p>
-        <p><a href="${verifyUrl}">Verify personal email</a></p>
-        <p>This link expires on ${expiresAt.toUTCString()}.</p>
-      `,
+      html: verificationEmailHtml({
+        recipientName: user.name ?? "there",
+        verifyUrl,
+        expiresAt,
+        context: "profile",
+      }),
       text: `Verify your personal email: ${verifyUrl}`,
     });
 

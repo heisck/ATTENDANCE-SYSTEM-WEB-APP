@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Shield, Loader2, Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { Shield, Loader2, Mail, Lock, Eye, EyeOff, AlertCircle } from "lucide-react";
 
-export default function LoginPage() {
+function LoginForm() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -14,15 +17,23 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const searchParams = new URLSearchParams(window.location.search);
-      if (searchParams.get("registered") !== "true") return;
+    const error = searchParams.get("error");
+    const registered = searchParams.get("registered");
 
+    if (registered === "true") {
       toast.success("Account created successfully!", {
         description: "Sign in to continue.",
       });
+      return;
     }
-  }, []);
+
+    if (error === "CredentialsSignin" || error === "credentials") {
+      const message = "Invalid email or password. Please try again.";
+      setServerError(message);
+      toast.error(message);
+      router.replace("/login", { scroll: false });
+    }
+  }, [searchParams, router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -53,97 +64,122 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm space-y-8">
-        <div className="text-center">
-          <Link href="/" className="inline-flex items-center gap-2">
-            <Shield className="h-10 w-10 text-primary" />
-          </Link>
-          <h1 className="mt-4 text-2xl font-bold">Welcome back</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Sign in to your AttendanceIQ account
+    <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-muted/50 via-background to-primary/5">
+      <div className="w-full max-w-[400px]">
+        <div className="rounded-2xl border border-border/60 bg-card/95 shadow-xl shadow-black/5 backdrop-blur-sm p-8 space-y-8">
+          <div className="text-center space-y-3">
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary transition-colors hover:bg-primary/20"
+            >
+              <Shield className="h-7 w-7" />
+            </Link>
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Sign in to your AttendanceIQ account
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {serverError && (
+              <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 flex items-center gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-destructive/20">
+                  <AlertCircle className="h-4 w-4 text-destructive" />
+                </div>
+                <p className="text-sm text-destructive font-medium">{serverError}</p>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div className="group relative">
+                <label htmlFor="email" className="sr-only">Email</label>
+                <Mail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
+                <input
+                  id="email"
+                  type="email"
+                  aria-label="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Email address"
+                  required
+                  className="flex h-12 w-full rounded-xl border border-input bg-background/80 pl-12 pr-4 py-3 text-base placeholder:text-muted-foreground/80 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 transition-all"
+                />
+              </div>
+
+              <div className="group relative">
+                <label htmlFor="password" className="sr-only">Password</label>
+                <Lock className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
+                <input
+                  id="password"
+                  aria-label="Password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Password"
+                  required
+                  className="flex h-12 w-full rounded-xl border border-input bg-background/80 pl-12 pr-12 py-3 text-base placeholder:text-muted-foreground/80 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((value) => !value)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-2 text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
+              <div className="flex justify-end -mt-1">
+                <Link
+                  href="/forgot-password"
+                  className="text-sm text-primary hover:underline font-medium"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-base font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 hover:shadow-primary/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                "Sign in"
+              )}
+            </button>
+          </form>
+
+          <p className="text-center text-sm text-muted-foreground">
+            Don&apos;t have an account?{" "}
+            <Link href="/register" className="font-semibold text-primary hover:underline">
+              Create one
+            </Link>
           </p>
         </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {serverError && (
-            <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4">
-              <p className="text-sm text-red-700">{serverError}</p>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium">
-              Email
-            </label>
-            <div className="relative">
-              <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@university.edu"
-                required
-                className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label htmlFor="password" className="text-sm font-medium">
-              Password
-            </label>
-            <div className="relative">
-              <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                required
-                className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-10 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((value) => !value)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-            <div className="text-right">
-              <Link href="/forgot-password" className="text-xs text-primary hover:underline font-medium">
-                Forgot password?
-              </Link>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-50 transition-colors"
-          >
-            {loading ? (
-              <span className="inline-flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Signing in...
-              </span>
-            ) : (
-              "Sign In"
-            )}
-          </button>
-        </form>
-
-        <p className="text-center text-sm text-muted-foreground">
-          Don&apos;t have an account?{" "}
-          <Link href="/register" className="text-primary hover:underline font-medium">
-            Register
-          </Link>
-        </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-muted/50 via-background to-primary/5">
+        <div className="w-full max-w-[400px]">
+          <div className="rounded-2xl border border-border/60 bg-card/95 shadow-xl shadow-black/5 backdrop-blur-sm p-8 flex items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        </div>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

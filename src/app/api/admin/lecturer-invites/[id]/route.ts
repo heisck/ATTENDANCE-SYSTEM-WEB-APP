@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { buildAppUrl, sendEmail } from "@/lib/email";
+import { lecturerInviteEmailHtml } from "@/lib/email-templates";
 import { createRawToken, hashToken } from "@/lib/tokens";
 
 function resolveOrganizationIdForStaff(
@@ -83,11 +84,12 @@ export async function POST(
     await sendEmail({
       to: invite.invitedEmail,
       subject: `Updated lecturer invite for ${invite.organization.name}`,
-      html: `
-        <p>Your lecturer invite has been refreshed.</p>
-        <p><a href="${acceptUrl}">Accept lecturer invite</a></p>
-        <p>This invite expires on ${expiresAt.toUTCString()}.</p>
-      `,
+      html: lecturerInviteEmailHtml({
+        organizationName: invite.organization.name,
+        acceptUrl,
+        expiresAt,
+        isResend: true,
+      }),
       text: `Accept your lecturer invite: ${acceptUrl}`,
     });
 

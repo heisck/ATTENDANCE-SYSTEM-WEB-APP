@@ -2,19 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { forgotPasswordSchema } from "@/lib/validators";
 import { buildAppUrl, sendEmail } from "@/lib/email";
+import { passwordResetEmailHtml } from "@/lib/email-templates";
 import { createExpiryDate, createRawToken, hashToken } from "@/lib/tokens";
 
 async function sendResetEmail(targetEmail: string, name: string, resetUrl: string, expiresAt: Date) {
   await sendEmail({
     to: targetEmail,
-    subject: "AttendanceIQ password reset",
-    html: `
-      <p>Hello ${name},</p>
-      <p>Use this secure link to reset your password:</p>
-      <p><a href="${resetUrl}">Reset password</a></p>
-      <p>This link expires on ${expiresAt.toUTCString()}.</p>
-      <p>If you did not request this, ignore this email.</p>
-    `,
+    subject: "Reset your AttendanceIQ password",
+    html: passwordResetEmailHtml({
+      recipientName: name,
+      resetUrl,
+      expiresAt,
+    }),
     text: `Reset your password: ${resetUrl}`,
   });
 }

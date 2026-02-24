@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { lecturerInviteSchema } from "@/lib/validators";
 import { buildAppUrl, sendEmail } from "@/lib/email";
+import { lecturerInviteEmailHtml } from "@/lib/email-templates";
 import { createRawToken, hashToken } from "@/lib/tokens";
 
 function resolveOrganizationIdForStaff(
@@ -92,13 +93,13 @@ export async function POST(request: NextRequest) {
     const acceptUrl = buildAppUrl(`/accept-invite?token=${encodeURIComponent(rawToken)}`);
     await sendEmail({
       to: invitedEmail,
-      subject: `Lecturer invite for ${organization.name}`,
-      html: `
-        <p>You have been invited as a lecturer on AttendanceIQ (${organization.name}).</p>
-        <p>Use this link to activate your lecturer account:</p>
-        <p><a href="${acceptUrl}">Accept lecturer invite</a></p>
-        <p>This invite expires on ${expiresAt.toUTCString()}.</p>
-      `,
+      subject: `You're invited to join ${organization.name} on AttendanceIQ`,
+      html: lecturerInviteEmailHtml({
+        organizationName: organization.name,
+        acceptUrl,
+        expiresAt,
+        isResend: false,
+      }),
       text: `Accept your lecturer invite: ${acceptUrl}`,
     });
 

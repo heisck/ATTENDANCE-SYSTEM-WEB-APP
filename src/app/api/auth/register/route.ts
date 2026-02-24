@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { registerSchema } from "@/lib/validators";
 import { createExpiryDate, createRawToken, hashToken } from "@/lib/tokens";
 import { buildAppUrl, sendEmail } from "@/lib/email";
+import { verificationEmailHtml } from "@/lib/email-templates";
 
 export async function POST(request: NextRequest) {
   try {
@@ -114,12 +115,12 @@ export async function POST(request: NextRequest) {
       await sendEmail({
         to: personalEmail,
         subject: "Verify your AttendanceIQ personal email",
-        html: `
-          <p>Hello ${createdUser.name},</p>
-          <p>Verify your personal email to activate attendance features:</p>
-          <p><a href="${verifyUrl}">Verify personal email</a></p>
-          <p>This link expires on ${expiresAt.toUTCString()}.</p>
-        `,
+        html: verificationEmailHtml({
+          recipientName: createdUser.name,
+          verifyUrl,
+          expiresAt,
+          context: "register",
+        }),
         text: `Hello ${createdUser.name}, verify your personal email: ${verifyUrl}`,
       });
     } catch (emailError) {
