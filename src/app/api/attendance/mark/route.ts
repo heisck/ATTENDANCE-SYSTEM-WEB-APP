@@ -4,10 +4,20 @@ import { db } from "@/lib/db";
 import { syncAttendanceSessionState } from "@/lib/attendance";
 import { markAttendanceSchema } from "@/lib/validators";
 import { verifyQrTokenStrict } from "@/lib/qr";
-import { isWithinRadius } from "@/lib/gps";
+import { isWithinRadius, checkGpsVelocityAnomaly, checkLocationJumpPattern } from "@/lib/gps";
 import { getClientIp, isIpTrusted } from "@/lib/ip";
-import { calculateConfidence, isFlagged } from "@/lib/confidence";
+import { calculateConfidence, isFlagged, getConfidenceBreakdown } from "@/lib/confidence";
 import { logError, ApiErrorMessages } from "@/lib/api-error";
+import {
+  checkRateLimit,
+  cacheGet,
+  cacheSet,
+  cacheDel,
+  CACHE_KEYS,
+  CACHE_TTL,
+} from "@/lib/cache";
+import { linkDevice, getDeviceConsistencyScore } from "@/lib/device-linking";
+import { getDeviceBleStats } from "@/lib/ble-verification";
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -19,32 +29,61 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Only students can mark attendance" }, { status: 403 });
   }
 
-  const [studentState, credentialCount] = await Promise.all([
-    db.user.findUnique({
-      where: { id: session.user.id },
-      select: { personalEmail: true, personalEmailVerifiedAt: true },
-    }),
-    db.webAuthnCredential.count({
-      where: { userId: session.user.id },
-    }),
-  ]);
-  if (!studentState?.personalEmail || !studentState.personalEmailVerifiedAt) {
-    return NextResponse.json(
-      { error: "Complete and verify your personal email before attendance." },
-      { status: 403 }
-    );
-  }
-  if (credentialCount === 0) {
-    return NextResponse.json(
-      { error: "Register a passkey before attendance." },
-      { status: 403 }
-    );
-  }
-
   try {
     const body = await request.json();
     const parsed = markAttendanceSchema.parse(body);
     const now = new Date();
+
+    // Rate limiting check: max 10 submissions per minute per student per session
+    const { allowed, remaining } = await checkRateLimit(
+      session.user.id,
+      parsed.sessionId,
+      10,
+      60
+    );
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Too many submission attempts. Please wait before trying again." },
+        { status: 429 }
+      );
+    }
+
+    // Get student state with caching
+    const cacheKey = CACHE_KEYS.USER_CREDENTIALS(session.user.id);
+    let studentState = await cacheGet<any>(cacheKey);
+
+    if (!studentState) {
+      const result = await db.user.findUnique({
+        where: { id: session.user.id },
+        select: {
+          personalEmail: true,
+          personalEmailVerifiedAt: true,
+        },
+      });
+      studentState = result;
+      if (studentState) {
+        await cacheSet(cacheKey, studentState, CACHE_TTL.USER_CREDENTIALS);
+      }
+    }
+
+    if (!studentState?.personalEmail || !studentState.personalEmailVerifiedAt) {
+      return NextResponse.json(
+        { error: "Complete and verify your personal email before attendance." },
+        { status: 403 }
+      );
+    }
+
+    const credentialCount = await db.webAuthnCredential.count({
+      where: { userId: session.user.id },
+    });
+
+    if (credentialCount === 0) {
+      return NextResponse.json(
+        { error: "Register a passkey before attendance." },
+        { status: 403 }
+      );
+    }
+
     const scanTimestamp = Number(parsed.qrTimestamp);
 
     if (!Number.isFinite(scanTimestamp)) {
@@ -152,17 +191,61 @@ export async function POST(request: NextRequest) {
     }
 
     const webauthnUsed = body.webauthnVerified === true;
+    const deviceToken = body.deviceToken || "web";
 
+    // Device linking and consistency check
+    const deviceLinkResult = await linkDevice(session.user.id, deviceToken, {
+      deviceName: body.deviceName || "Unknown Device",
+      deviceType: (body.deviceType || "Web") as "iOS" | "Android" | "Web",
+      osVersion: body.osVersion,
+      appVersion: body.appVersion,
+      fingerprint: body.deviceFingerprint,
+      bleSignature: body.bleSignature,
+    });
+
+    // Get device consistency score (cached)
+    const deviceConsistency = await getDeviceConsistencyScore(session.user.id, deviceToken);
+    const deviceMismatch = deviceConsistency < 50 && !deviceLinkResult.trustedAt;
+
+    // GPS velocity anomaly detection
+    const velocityCheck = await checkGpsVelocityAnomaly(
+      session.user.id,
+      parsed.gpsLat,
+      parsed.gpsLng,
+      now
+    );
+
+    // Location jump detection
+    const jumpCheck = await checkLocationJumpPattern(
+      session.user.id,
+      parsed.gpsLat,
+      parsed.gpsLng
+    );
+
+    // Get BLE stats if available
+    const bleStats = body.deviceToken
+      ? await getDeviceBleStats(deviceLinkResult.id)
+      : { averageRssi: 0, verificationCount: 0, lastVerified: null, distanceMeters: 0 };
+
+    // Enhanced confidence calculation with all security layers
     const confidence = calculateConfidence({
       webauthnVerified: webauthnUsed,
       gpsWithinRadius: gpsResult.within,
       qrTokenValid: qrValid,
       ipTrusted: ipCheck,
+      bleProximityVerified: bleStats.verificationCount > 0,
+      bleSignalStrength: body.bleSignalStrength,
+      gpsVelocityAnomaly: velocityCheck.anomalyDetected,
+      deviceConsistency,
+      deviceMismatch,
+      locationJump: jumpCheck.jump,
     });
 
     const settings = attendanceSession.course.organization.settings as any;
     const threshold = settings?.confidenceThreshold || 70;
-    const flagged = isFlagged(confidence, threshold);
+    const hasAnomalies =
+      velocityCheck.anomalyDetected || jumpCheck.jump || deviceMismatch;
+    const flagged = isFlagged(confidence, threshold, hasAnomalies);
 
     const record = await db.attendanceRecord.create({
       data: {
@@ -179,8 +262,67 @@ export async function POST(request: NextRequest) {
         reverifyStatus: "NOT_REQUIRED",
         confidence,
         flagged,
+        // New security fields
+        deviceToken,
+        bleSignalStrength: body.bleSignalStrength,
+        deviceConsistency,
+        gpsVelocity: velocityCheck.velocity,
+        anomalyScore: hasAnomalies ? Math.max(0, 100 - confidence) : 0,
       },
     });
+
+    // Create anomaly records if detected
+    if (hasAnomalies && flagged) {
+      const anomalies = [];
+      if (velocityCheck.anomalyDetected) {
+        anomalies.push({
+          studentId: session.user.id,
+          sessionId: parsed.sessionId,
+          anomalyType: "VELOCITY_ANOMALY",
+          severity: velocityCheck.severity === "high" ? 80 : 50,
+          confidence: 0.85,
+          details: {
+            velocity: velocityCheck.velocity,
+            reason: velocityCheck.reason,
+          },
+        });
+      }
+      if (jumpCheck.jump) {
+        anomalies.push({
+          studentId: session.user.id,
+          sessionId: parsed.sessionId,
+          anomalyType: "LOCATION_JUMP",
+          severity: 75,
+          confidence: 0.9,
+          details: {
+            maxDistance: jumpCheck.maxDistanceMeters,
+            message: "Unusual location jump from historical average",
+          },
+        });
+      }
+      if (deviceMismatch) {
+        anomalies.push({
+          studentId: session.user.id,
+          sessionId: parsed.sessionId,
+          anomalyType: "DEVICE_MISMATCH",
+          severity: 40,
+          confidence: deviceConsistency / 100,
+          details: {
+            consistency: deviceConsistency,
+            isNewDevice: deviceLinkResult.isNewDevice,
+          },
+        });
+      }
+
+      if (anomalies.length > 0) {
+        await db.attendanceAnomaly.createMany({
+          data: anomalies as any,
+        });
+      }
+    }
+
+    // Invalidate session cache to update monitoring
+    await cacheDel(CACHE_KEYS.SESSION_STATE(parsed.sessionId));
 
     return NextResponse.json({
       success: true,
@@ -194,6 +336,13 @@ export async function POST(request: NextRequest) {
           gps: gpsResult.within,
           qr: qrValid,
           ip: ipCheck,
+          ble: bleStats.verificationCount > 0,
+          deviceConsistent: !deviceMismatch,
+        },
+        anomalies: {
+          velocityAnomaly: velocityCheck.anomalyDetected,
+          locationJump: jumpCheck.jump,
+          deviceMismatch,
         },
       },
     });
