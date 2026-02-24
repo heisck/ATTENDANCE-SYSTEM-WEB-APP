@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { QrScanner } from "@/components/qr-scanner";
 import { GpsCheck } from "@/components/gps-check";
@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   Clock,
   RefreshCcw,
+  Share2,
 } from "lucide-react";
 
 type Step = "webauthn" | "gps" | "qr" | "submitting" | "result";
@@ -67,6 +68,7 @@ interface SessionSyncResponse {
     flagged: boolean;
     canRequestRetry: boolean;
   } | null;
+  qrPortStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
 }
 
 export default function AttendPage() {
@@ -85,6 +87,7 @@ export default function AttendPage() {
   const [reverifyPasskeyVerified, setReverifyPasskeyVerified] = useState(false);
   const [reverifySubmitting, setReverifySubmitting] = useState(false);
   const [reverifyError, setReverifyError] = useState<string | null>(null);
+  const [reverifyCountdown, setReverifyCountdown] = useState<number | null>(null);
 
   const reverifyStatus = syncState?.attendance?.reverifyStatus;
   const isPendingReverify =
@@ -156,8 +159,18 @@ export default function AttendPage() {
     if (!isPendingReverify) {
       setReverifyPasskeyVerified(false);
       setReverifySubmitting(false);
+      setReverifyCountdown(null);
     }
   }, [isPendingReverify]);
+
+  useEffect(() => {
+    if (!reverifyPasskeyVerified || !isPendingReverify) return;
+    setReverifyCountdown(6);
+    const t = setInterval(() => {
+      setReverifyCountdown((c) => (c === null || c <= 1 ? null : c - 1));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [reverifyPasskeyVerified, isPendingReverify]);
 
   function handleWebAuthnVerified() {
     setWebauthnVerified(true);
@@ -412,40 +425,49 @@ export default function AttendPage() {
 
       {hasDevice && !result && (
         <>
-          <div className="flex items-center gap-2">
-            {["webauthn", "gps", "qr", "result"].map((s, i) => (
-              <div key={s} className="flex items-center gap-2">
-                <div
-                  className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium ${
-                    step === s
-                      ? "bg-primary text-primary-foreground"
-                      : ["webauthn", "gps", "qr", "submitting", "result"].indexOf(step) > i
-                        ? "bg-green-100 text-green-700"
-                        : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {["webauthn", "gps", "qr", "submitting", "result"].indexOf(step) > i ? (
-                    <CheckCircle2 className="h-4 w-4" />
-                  ) : (
-                    i + 1
-                  )}
-                </div>
-                {i < 3 && (
-                  <div
-                    className={`h-0.5 w-8 ${
-                      ["webauthn", "gps", "qr", "submitting", "result"].indexOf(step) > i
-                        ? "bg-green-300"
-                        : "bg-muted"
-                    }`}
-                  />
-                )}
-              </div>
-            ))}
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ${
+                ["webauthn", "gps", "qr", "submitting"].includes(step)
+                  ? step === "qr"
+                    ? "bg-primary text-primary-foreground"
+                    : ["webauthn", "gps", "qr", "submitting"].indexOf(step) > 2
+                      ? "bg-green-100 text-green-700"
+                      : "bg-muted text-muted-foreground"
+                  : "bg-green-100 text-green-700"
+              }`}
+            >
+              Phase 1
+              {!result && step !== "webauthn" && step !== "gps" && step !== "qr" && step !== "submitting" ? null : result?.success ? (
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              ) : null}
+            </span>
+            {result?.success && (
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ${
+                  isPendingReverify ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-700"
+                }`}
+              >
+                Phase 2
+                {!isPendingReverify && (reverifyStatus === "PASSED" || reverifyStatus === "MANUAL_PRESENT" || reverifyStatus === "NOT_REQUIRED") ? (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                ) : null}
+              </span>
+            )}
           </div>
 
           {step === "webauthn" && <WebAuthnPrompt onVerified={handleWebAuthnVerified} />}
           {step === "gps" && <GpsCheck onLocationReady={handleGpsReady} />}
-          {step === "qr" && <QrScanner onScan={handleInitialQrScan} />}
+          {step === "qr" && (
+            <div
+              className="flex min-h-[60dvh] flex-col justify-center py-4 md:min-h-0 md:py-0"
+              ref={(el) => {
+                if (el && step === "qr") el.scrollIntoView({ behavior: "smooth", block: "center" });
+              }}
+            >
+              <QrScanner onScan={handleInitialQrScan} />
+            </div>
+          )}
           {step === "submitting" && (
             <div className="flex flex-col items-center gap-4 py-12">
               <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -457,6 +479,23 @@ export default function AttendPage() {
 
       {hasDevice && step === "result" && result && (
         <div className="space-y-4">
+          {result.success && (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-1 text-green-700">
+                Phase 1 <CheckCircle2 className="h-3.5 w-3.5" />
+              </span>
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ${
+                  isPendingReverify ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-700"
+                }`}
+              >
+                Phase 2
+                {(reverifyStatus === "PASSED" || reverifyStatus === "MANUAL_PRESENT" || reverifyStatus === "NOT_REQUIRED") && (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                )}
+              </span>
+            </div>
+          )}
           <div
             className={`flex flex-col items-center gap-3 rounded-lg border p-8 ${
               result.success
@@ -584,18 +623,32 @@ export default function AttendPage() {
               {isPendingReverify && (
                 <div className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
                   <div className="flex items-start gap-2 text-amber-800">
-                    <AlertTriangle className="mt-0.5 h-4 w-4" />
-                    <p className="text-sm font-medium">
-                      Complete reverification now: passkey verification, then scan the current live QR sequence.
-                    </p>
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium">
+                        Reverification about to start. Verify your passkey again.
+                      </p>
+                      <p className="mt-1 text-xs text-amber-700">
+                        After verification, you&apos;ll get a 6-second heads-up before the scan window.
+                      </p>
+                    </div>
                   </div>
 
                   {!reverifyPasskeyVerified ? (
                     <WebAuthnPrompt onVerified={() => setReverifyPasskeyVerified(true)} />
+                  ) : reverifyCountdown !== null && reverifyCountdown > 0 ? (
+                    <div className="rounded-md border border-amber-200 bg-white p-4 text-center">
+                      <p className="text-lg font-semibold text-amber-800">
+                        Scan in {reverifyCountdown} second{reverifyCountdown !== 1 ? "s" : ""}
+                      </p>
+                      <p className="mt-1 text-xs text-amber-600">
+                        Point your camera at the QR when the countdown ends.
+                      </p>
+                    </div>
                   ) : (
                     <div className="space-y-2">
-                      <p className="text-xs text-amber-800">
-                        Passkey verified. Scan the reverification QR before your deadline.
+                      <p className="text-xs font-medium text-amber-800">
+                        Passkey verified. Scan the reverification QR now.
                       </p>
                       {reverifySubmitting ? (
                         <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-white p-3 text-sm">
@@ -607,6 +660,14 @@ export default function AttendPage() {
                       )}
                     </div>
                   )}
+                </div>
+              )}
+
+              {(reverifyStatus === "PASSED" || reverifyStatus === "MANUAL_PRESENT" || reverifyStatus === "NOT_REQUIRED") && (
+                <div className="rounded-md border border-green-300 bg-green-50 p-4 text-center">
+                  <CheckCircle2 className="mx-auto h-10 w-10 text-green-600" />
+                  <p className="mt-2 font-semibold text-green-800">Fully done!</p>
+                  <p className="text-sm text-green-700">You can close this window.</p>
                 </div>
               )}
 

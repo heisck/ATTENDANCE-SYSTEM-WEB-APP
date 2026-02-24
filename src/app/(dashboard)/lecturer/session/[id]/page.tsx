@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { QrDisplay } from "@/components/qr-display";
+import { QrPortApprovalPanel } from "@/components/qr-port-approval-panel";
 import { Users, Clock, StopCircle, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 interface SessionData {
@@ -308,6 +309,12 @@ export default function SessionMonitorPage() {
           </div>
         </div>
       </div>
+
+      {isActive && (
+        <div className="max-w-2xl">
+          <QrPortApprovalPanel sessionId={sessionId} isLive />
+        </div>
+      )}
     </div>
   );
 }

@@ -108,6 +108,7 @@ model User {
   userDevices UserDevice[]
   attendanceAnomalies AttendanceAnomaly[]
   relayDevices BleRelayDevice[] @relation("RelayDevices")
+  qrPortRequests QrPortRequest[] @relation("QrPortRequests")
 
   @@index([email])
   @@index([personalEmail])
@@ -206,6 +207,7 @@ model AttendanceSession {
   records  AttendanceRecord[]
   relayDevices BleRelayDevice[]  @relation("RelayDevices")
   broadcastState RelayBroadcastState? @relation("BroadcastState")
+  qrPortRequests QrPortRequest[] @relation("SessionQrPortRequests")
 
   @@index([courseId])
   @@index([lecturerId])
@@ -571,6 +573,31 @@ model RelayAttendanceRecord {
 
   @@index([relayDeviceId])
   @@index([attendanceRecordId])
+}
+
+// QR Port - Student requests to display live QR on their device for friends with bad cameras
+enum QrPortStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model QrPortRequest {
+  id        String       @id @default(cuid())
+  sessionId String
+  studentId String
+  status    QrPortStatus  @default(PENDING)
+  requestedAt DateTime   @default(now())
+  reviewedAt  DateTime?
+  reviewedBy  String?    // Lecturer user ID
+
+  session AttendanceSession @relation("SessionQrPortRequests", fields: [sessionId], references: [id], onDelete: Cascade)
+  student User              @relation("QrPortRequests", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, studentId])
+  @@index([sessionId])
+  @@index([studentId])
+  @@index([status])
 }
 
 // Real-time relay broadcast state - tracks active relay nodes

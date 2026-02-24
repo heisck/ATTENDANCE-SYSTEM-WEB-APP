@@ -221,8 +221,8 @@ export function QrScanner({ onScan }: QrScannerProps) {
           </span>
         </button>
       ) : (
-        <div className="relative overflow-hidden rounded-lg border border-border bg-black">
-          <div className="relative aspect-[4/3] w-full">
+        <div className="flex flex-col items-center w-full">
+          <div className="relative w-full max-w-[min(100vw-2rem,420px)] mx-auto min-h-[min(50vh,320px)] aspect-[4/3] rounded-xl overflow-hidden border-2 border-border bg-black shadow-lg [aspect-ratio:4/3]">
             <video
               ref={videoRef}
               className="absolute inset-0 h-full w-full object-cover"
@@ -240,34 +240,36 @@ export function QrScanner({ onScan }: QrScannerProps) {
               </div>
             )}
             <div className="pointer-events-none absolute inset-0">
-              <div className="absolute left-1/2 top-1/2 h-56 w-56 -translate-x-1/2 -translate-y-1/2 rounded-xl border-4 border-cyan-300/95" />
-              <div className="absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-black/50 to-transparent" />
+              <div className="absolute left-1/2 top-1/2 h-48 w-48 sm:h-56 sm:w-56 -translate-x-1/2 -translate-y-1/2 rounded-xl border-4 border-cyan-300/95" />
+              <div className="absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-black/50 to-transparent" />
               <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/50 to-transparent" />
-              <p className="absolute bottom-16 left-1/2 -translate-x-1/2 rounded-md bg-black/55 px-2 py-1 text-xs text-white">
+              <p className="absolute bottom-16 left-1/2 -translate-x-1/2 rounded-md bg-black/55 px-2 py-1 text-xs text-white whitespace-nowrap">
                 Align QR within frame
               </p>
             </div>
           </div>
-          <button
-            onClick={stopCamera}
-            className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-md bg-black/60 px-4 py-2 text-sm text-white hover:bg-black/80 transition-colors"
-          >
-            Cancel
-          </button>
-          <div className="absolute left-3 right-3 top-3 z-10 rounded-md bg-black/55 px-3 py-2 text-white">
-            <div className="flex items-center justify-between text-xs">
-              <span>{zoomSupported ? "Camera zoom" : "Digital zoom fallback"}</span>
-              <span>{zoomValue.toFixed(1)}x</span>
+          <div className="mt-3 flex w-full max-w-[min(100vw-2rem,400px)] flex-col gap-2">
+            <div className="rounded-lg bg-muted/50 px-3 py-2">
+              <div className="flex items-center justify-between text-xs">
+                <span>{zoomSupported ? "Camera zoom" : "Digital zoom"}</span>
+                <span>{zoomValue.toFixed(1)}x</span>
+              </div>
+              <input
+                type="range"
+                min={zoomMin}
+                max={zoomMax}
+                step={zoomStep}
+                value={zoomValue}
+                onChange={(e) => handleZoomChange(Number(e.target.value))}
+                className="mt-1 w-full accent-cyan-500"
+              />
             </div>
-            <input
-              type="range"
-              min={zoomMin}
-              max={zoomMax}
-              step={zoomStep}
-              value={zoomValue}
-              onChange={(e) => handleZoomChange(Number(e.target.value))}
-              className="mt-2 w-full accent-cyan-300"
-            />
+            <button
+              onClick={stopCamera}
+              className="w-full rounded-md border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}

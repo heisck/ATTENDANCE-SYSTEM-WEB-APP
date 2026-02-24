@@ -6,6 +6,7 @@ import {
   getPhaseEndsAt,
   syncAttendanceSessionState,
 } from "@/lib/attendance";
+import { getQrPortStatus } from "@/lib/qr-port";
 import { db } from "@/lib/db";
 import { getQrSequence } from "@/lib/qr";
 
@@ -87,6 +88,7 @@ export async function GET(
     record.reverifyAttemptCount < REVERIFY_MAX_ATTEMPTS;
 
   const currentSequence = getQrSequence(Date.now(), syncedSession.qrRotationMs);
+  const qrPortStatus = await getQrPortStatus(id, user.id);
 
   return NextResponse.json({
     session: {
@@ -112,5 +114,6 @@ export async function GET(
           canRequestRetry,
         }
       : null,
+    qrPortStatus,
   });
 }
