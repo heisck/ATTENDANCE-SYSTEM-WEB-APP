@@ -15,7 +15,7 @@ export default async function DashboardLayout({
   return (
     <div className="min-h-svh bg-background md:flex md:h-svh md:overflow-hidden">
       <Sidebar role={user.role} userName={user.name || user.email || ""} />
-      <main className="min-w-0 flex-1 md:overflow-y-auto">
+      <main className="min-w-0 flex-1 pb-20 md:pb-0 md:overflow-y-auto">
         <div className="p-4 sm:p-6 lg:p-8">{children}</div>
       </main>
     </div>
