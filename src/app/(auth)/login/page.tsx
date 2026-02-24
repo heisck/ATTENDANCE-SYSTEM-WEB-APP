@@ -24,38 +24,6 @@ export default function LoginPage() {
     }
   }, []);
 
-  async function resolveRedirectTarget(): Promise<string | null> {
-    const maxAttempts = 5;
-
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      try {
-        const res = await fetch("/api/auth/redirect-target", {
-          method: "GET",
-          cache: "no-store",
-          credentials: "include",
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (
-            typeof data.redirectTo === "string" &&
-            data.redirectTo.startsWith("/")
-          ) {
-            return data.redirectTo;
-          }
-        }
-      } catch {
-        // Retry below
-      }
-
-      await new Promise((resolve) =>
-        setTimeout(resolve, 150 * (attempt + 1))
-      );
-    }
-
-    return null;
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setServerError("");
@@ -65,29 +33,16 @@ export default function LoginPage() {
       const result = await signIn("credentials", {
         email: email.trim(),
         password,
-        redirect: false,
-        callbackUrl: "/",
+        redirect: true,
+        callbackUrl: "/api/auth/signed-in-redirect",
       });
 
       if (result?.error) {
         const message = "Invalid email or password";
         setServerError(message);
         toast.error(message);
-      } else {
-        toast.success("Sign in successful", {
-          description: "Redirecting...",
-        });
-        const redirectTo = await resolveRedirectTarget();
-        if (!redirectTo) {
-          const message =
-            "Signed in, but session redirect could not be resolved. Check AUTH_SECRET and AUTH_URL in production.";
-          setServerError(message);
-          toast.error(message);
-          return;
-        }
-
-        window.location.assign(redirectTo);
       }
+      // With redirect: true, signIn navigates away on success; we only reach here on error
     } catch {
       const message = "Something went wrong. Please try again.";
       setServerError(message);
