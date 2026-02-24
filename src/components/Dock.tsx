@@ -38,7 +38,6 @@ type DockItemProps = {
   className?: string;
   children: React.ReactNode;
   onClick?: () => void;
-  onActivate?: () => void;
   mouseX: MotionValue<number>;
   isInteracting: MotionValue<number>;
   spring: SpringOptions;
@@ -51,7 +50,6 @@ function DockItem({
   children,
   className = "",
   onClick,
-  onActivate,
   mouseX,
   isInteracting,
   spring,
@@ -124,14 +122,10 @@ function DockItem({
         const isNear = Number.isFinite(distanceValue) && Math.abs(distanceValue) <= baseItemSize * 0.75;
         isHovered.set(isInteracting.get() === 1 && isNear ? 1 : 0);
       }}
-      onClick={() => {
-        onActivate?.();
-        onClick?.();
-      }}
+      onClick={onClick}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          onActivate?.();
           onClick?.();
         }
       }}
@@ -247,7 +241,6 @@ export default function Dock({
           <DockItem
             key={index}
             onClick={item.onClick}
-            onActivate={resetInteraction}
             className={item.className}
             mouseX={mouseX}
             isInteracting={isInteracting}
