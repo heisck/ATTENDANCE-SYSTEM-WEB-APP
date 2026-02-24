@@ -16,6 +16,7 @@ Confidence score (0-100) determines if attendance is flagged for review.
 ## Updated Security Workflow
 
 - Student public signup is student-only (institutional email + personal email).
+- Student institutional email must be exactly `@st.knust.edu.gh`.
 - Lecturer onboarding is invite-only by Admin/Super Admin.
 - Student personal email verification is required before attendance actions.
 - Student passkey setup is required before student dashboard attendance features.
@@ -130,6 +131,22 @@ docker compose -f docker-compose.prod.yml up --build -d
 ## Environment Variables
 
 See `.env.example` for all required variables.
+
+Add environment variables in your local project file: `.env` (project root).
+
+### Gmail SMTP Setup
+
+```env
+GMAIL_SMTP_USER="yourgmail@gmail.com"
+GMAIL_SMTP_APP_PASSWORD="your-16-char-gmail-app-password"
+GMAIL_FROM_EMAIL="AttendanceIQ <yourgmail@gmail.com>"
+GMAIL_SMTP_HOST="smtp.gmail.com"
+GMAIL_SMTP_PORT="465"
+```
+
+Notes:
+- Use a Gmail App Password (Google Account with 2FA enabled), not your normal Gmail password.
+- For Docker/production, set the same keys in your deployment environment (for this repo, `docker-compose.prod.yml` already passes them into the app container).
 
 ### Supabase Production Notes
 

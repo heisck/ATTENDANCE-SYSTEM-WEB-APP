@@ -5,7 +5,21 @@ type SendEmailInput = {
   text?: string;
 };
 
-const RESEND_API_URL = "https://api.resend.com/emails";
+const GMAIL_SMTP_HOST = process.env.GMAIL_SMTP_HOST || "smtp.gmail.com";
+const GMAIL_SMTP_PORT = Number(process.env.GMAIL_SMTP_PORT || 465);
+const GMAIL_SMTP_SECURE = GMAIL_SMTP_PORT === 465;
+
+let cachedTransporter:
+  | {
+      sendMail: (options: {
+        from: string;
+        to: string;
+        subject: string;
+        html: string;
+        text?: string;
+      }) => Promise<unknown>;
+    }
+  | null = null;
 
 function getAppUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL || process.env.AUTH_URL || "http://localhost:3000";
@@ -15,36 +29,46 @@ export function buildAppUrl(path: string): string {
   return `${getAppUrl().replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-export async function sendEmail(input: SendEmailInput): Promise<void> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM_EMAIL || "AttendanceIQ <no-reply@attendanceiq.local>";
+function getGmailConfig() {
+  const user = process.env.GMAIL_SMTP_USER?.trim() || "";
+  const pass = process.env.GMAIL_SMTP_APP_PASSWORD?.trim() || "";
+  const from = process.env.GMAIL_FROM_EMAIL?.trim() || (user ? `AttendanceIQ <${user}>` : "");
+  return { user, pass, from };
+}
 
-  if (!apiKey) {
-    // Keep local/dev flow operational even without a provider key.
-    console.warn("[email] RESEND_API_KEY is missing; skipping outbound email.", {
+function getTransporter(user: string, pass: string) {
+  if (!cachedTransporter) {
+    // Intentionally using require to avoid type coupling on optional package typings.
+    const nodemailer = require("nodemailer");
+    cachedTransporter = nodemailer.createTransport({
+      host: GMAIL_SMTP_HOST,
+      port: GMAIL_SMTP_PORT,
+      secure: GMAIL_SMTP_SECURE,
+      auth: { user, pass },
+    });
+  }
+
+  return cachedTransporter!;
+}
+
+export async function sendEmail(input: SendEmailInput): Promise<void> {
+  const { user, pass, from } = getGmailConfig();
+
+  if (!user || !pass || !from) {
+    // Keep local/dev flow operational even without SMTP credentials.
+    console.warn("[email] Gmail SMTP vars are missing; skipping outbound email.", {
       to: input.to,
       subject: input.subject,
     });
     return;
   }
 
-  const response = await fetch(RESEND_API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [input.to],
-      subject: input.subject,
-      html: input.html,
-      text: input.text,
-    }),
+  const transporter = getTransporter(user, pass);
+  await transporter.sendMail({
+    from,
+    to: input.to,
+    subject: input.subject,
+    html: input.html,
+    text: input.text,
   });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Email send failed (${response.status}): ${body}`);
-  }
 }

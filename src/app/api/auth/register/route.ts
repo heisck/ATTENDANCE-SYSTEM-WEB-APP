@@ -6,34 +6,6 @@ import { registerSchema } from "@/lib/validators";
 import { createExpiryDate, createRawToken, hashToken } from "@/lib/tokens";
 import { buildAppUrl, sendEmail } from "@/lib/email";
 
-function getEmailDomain(email: string): string {
-  const parts = email.split("@");
-  return parts[parts.length - 1].toLowerCase();
-}
-
-function getAllowedStudentDomains(orgDomain: string | null, settings: any): string[] {
-  const fromSettings = Array.isArray(settings?.studentEmailDomains)
-    ? settings.studentEmailDomains
-        .filter((v: unknown) => typeof v === "string")
-        .map((v: string) => v.toLowerCase().trim())
-        .filter(Boolean)
-    : [];
-
-  if (fromSettings.length > 0) return fromSettings;
-  if (!orgDomain) return [];
-  return [orgDomain.toLowerCase(), `st.${orgDomain.toLowerCase()}`];
-}
-
-function isDomainAllowed(emailDomain: string, patterns: string[]): boolean {
-  return patterns.some((pattern) => {
-    if (pattern.startsWith("*.")) {
-      const suffix = pattern.slice(2);
-      return emailDomain === suffix || emailDomain.endsWith(`.${suffix}`);
-    }
-    return emailDomain === pattern;
-  });
-}
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -91,27 +63,12 @@ export async function POST(request: NextRequest) {
 
     const org = await db.organization.findUnique({
       where: { slug: organizationSlug },
-      select: { id: true, domain: true, settings: true },
+      select: { id: true },
     });
     if (!org) {
       return NextResponse.json(
         { error: "University not found. Check the organization code." },
         { status: 404 }
-      );
-    }
-
-    const institutionalDomain = getEmailDomain(institutionalEmail);
-    const allowedStudentDomains = getAllowedStudentDomains(org.domain, org.settings);
-    if (
-      allowedStudentDomains.length === 0 ||
-      !isDomainAllowed(institutionalDomain, allowedStudentDomains)
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Your institutional email domain is not allowed for this university. Contact your admin.",
-        },
-        { status: 400 }
       );
     }
 

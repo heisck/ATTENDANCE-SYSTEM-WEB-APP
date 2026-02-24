@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { getSession, signIn } from "next-auth/react";
 import Link from "next/link";
 import {
   Shield,
@@ -28,7 +29,9 @@ export default function RegisterPage() {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [submitStage, setSubmitStage] = useState<"creating" | "signing-in" | null>(null);
 
   function update(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -37,7 +40,9 @@ export default function RegisterPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setSuccess("");
     setLoading(true);
+    setSubmitStage("creating");
 
     try {
       const res = await fetch("/api/auth/register", {
@@ -53,11 +58,65 @@ export default function RegisterPage() {
         return;
       }
 
-      router.push("/login?registered=true");
+      setSuccess(data.message || "Account created successfully.");
+      setSubmitStage("signing-in");
+
+      const signInResult = await signIn("credentials", {
+        email: form.institutionalEmail.trim().toLowerCase(),
+        password: form.password,
+        redirect: false,
+        callbackUrl: "/",
+      });
+
+      if (signInResult?.error) {
+        setError("Account created, but automatic sign-in failed. Please sign in manually.");
+        router.push("/login?registered=true");
+        return;
+      }
+
+      const session = await getSession();
+      if (!session?.user) {
+        setError("Account created, but no session was created. Please sign in manually.");
+        router.push("/login?registered=true");
+        return;
+      }
+
+      setSuccess("Sign-up successful. Redirecting...");
+
+      const role = (session.user as any).role as string | undefined;
+      if (role === "STUDENT") {
+        const statusRes = await fetch("/api/auth/student-status");
+        if (statusRes.ok) {
+          const status = await statusRes.json();
+          if (status.requiresProfileCompletion || !status.personalEmailVerified) {
+            router.push("/student/complete-profile");
+            router.refresh();
+            return;
+          }
+          if (!status.hasPasskey) {
+            router.push("/setup-device");
+            router.refresh();
+            return;
+          }
+        }
+      }
+
+      const dashboard =
+        role === "SUPER_ADMIN"
+          ? "/super-admin"
+          : role === "ADMIN"
+            ? "/admin"
+            : role === "LECTURER"
+              ? "/lecturer"
+              : "/student";
+
+      router.push(dashboard);
+      router.refresh();
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
+      setSubmitStage(null);
     }
   }
 
@@ -75,6 +134,12 @@ export default function RegisterPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {success && (
+            <div className="rounded-md border border-green-300 bg-green-50 p-3 text-sm text-green-800">
+              {success}
+            </div>
+          )}
+
           {error && (
             <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
               {error}
@@ -109,11 +174,14 @@ export default function RegisterPage() {
                 type="email"
                 value={form.institutionalEmail}
                 onChange={(e) => update("institutionalEmail", e.target.value)}
-                placeholder="you@school.edu"
+                placeholder="yourname@st.knust.edu.gh"
                 required
                 className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
+            <p className="text-xs text-muted-foreground">
+              Must end with @st.knust.edu.gh
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -222,7 +290,10 @@ export default function RegisterPage() {
             className="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {submitStage === "signing-in" ? "Signing you in..." : "Creating account..."}
+              </span>
             ) : (
               "Create Account"
             )}

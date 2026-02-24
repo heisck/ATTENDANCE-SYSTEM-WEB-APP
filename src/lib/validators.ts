@@ -14,7 +14,18 @@ export const registerSchema = z.object({
   indexNumber: z.string().min(1, "Index Number is required"),
   organizationSlug: z.string().min(1, "Organization is required"),
 }).superRefine((data, ctx) => {
-  if (data.institutionalEmail.toLowerCase().trim() === data.personalEmail.toLowerCase().trim()) {
+  const institutionalEmail = data.institutionalEmail.toLowerCase().trim();
+  const personalEmail = data.personalEmail.toLowerCase().trim();
+
+  if (!/^[^@\s]+@st\.knust\.edu\.gh$/i.test(institutionalEmail)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["institutionalEmail"],
+      message: "Institutional email must be in the format name@st.knust.edu.gh",
+    });
+  }
+
+  if (institutionalEmail === personalEmail) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["personalEmail"],
