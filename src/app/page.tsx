@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { Shield, QrCode, MapPin, Fingerprint } from "lucide-react";
+import Image from "next/image";
+import { QrCode, MapPin, Fingerprint } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 export default function HomePage() {
   return (
@@ -8,10 +10,11 @@ export default function HomePage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center gap-2">
-              <Shield className="h-8 w-8 text-primary" />
-              <span className="text-xl font-bold">AttendanceIQ</span>
+              <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={32} height={32} className="rounded" />
+              <span className="text-xl font-bold [font-family:var(--font-silkscreen)] tracking-tight">attendanceIQ</span>
             </div>
             <div className="flex items-center gap-4">
+              <ThemeToggle />
               <Link
                 href="/login"
                 className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
@@ -88,7 +91,7 @@ export default function HomePage() {
                 score="+20 pts"
               />
               <FeatureCard
-                icon={<Shield className="h-8 w-8" />}
+                icon={<Image src="/web-app-manifest-192x192.png" alt="" width={32} height={32} className="rounded" />}
                 title="Network Validation"
                 description="Campus WiFi IP range verification adds contextual trust evidence."
                 score="+10 pts"

@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { toast } from "sonner";
+import Image from "next/image";
 import {
-  Shield,
   Loader2,
   User,
   Mail,
@@ -15,7 +15,9 @@ import {
   EyeOff,
   BadgeCheck,
   GraduationCap,
+  Building2,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -91,10 +93,13 @@ export default function RegisterPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
           <Link href="/" className="inline-flex items-center gap-2">
-            <Shield className="h-10 w-10 text-primary" />
+            <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={40} height={40} className="rounded" />
           </Link>
           <h1 className="mt-4 text-2xl font-bold">Create student account</h1>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -232,7 +237,7 @@ export default function RegisterPage() {
               University Code
             </label>
             <div className="relative">
-              <Shield className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Building2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 id="org"
                 value={form.organizationSlug}

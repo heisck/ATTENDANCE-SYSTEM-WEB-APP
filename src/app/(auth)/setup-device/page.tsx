@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { startRegistration } from "@simplewebauthn/browser";
-import { Fingerprint, Loader2, CheckCircle2, Shield, AlertCircle } from "lucide-react";
+import Image from "next/image";
+import { Fingerprint, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 export default function SetupDevicePage() {
   const router = useRouter();
@@ -109,12 +111,15 @@ export default function SetupDevicePage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-md">
         <div className="rounded-lg border border-border bg-card p-8 space-y-6">
           <div className="text-center space-y-2">
             <div className="flex justify-center">
               <div className="rounded-full bg-primary/10 p-4">
-                <Shield className="h-8 w-8 text-primary" />
+                <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={32} height={32} className="rounded" />
               </div>
             </div>
             <h1 className="text-2xl font-bold">Register Your Device</h1>

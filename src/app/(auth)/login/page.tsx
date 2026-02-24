@@ -5,7 +5,9 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Shield, Loader2, Mail, Lock, Eye, EyeOff, AlertCircle } from "lucide-react";
+import Image from "next/image";
+import { Loader2, Mail, Lock, Eye, EyeOff, AlertCircle } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -65,14 +67,17 @@ function LoginForm() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-muted/50 via-background to-primary/5">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-[400px]">
         <div className="rounded-2xl border border-border/60 bg-card/95 shadow-xl shadow-black/5 backdrop-blur-sm p-8 space-y-8">
           <div className="text-center space-y-3">
             <Link
               href="/"
-              className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary transition-colors hover:bg-primary/20"
+              className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary transition-colors hover:bg-primary/20 overflow-hidden"
             >
-              <Shield className="h-7 w-7" />
+              <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={32} height={32} className="rounded-lg" />
             </Link>
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>

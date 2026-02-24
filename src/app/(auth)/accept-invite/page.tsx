@@ -3,7 +3,9 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, Mail, Lock, Eye, EyeOff, User, Shield } from "lucide-react";
+import Image from "next/image";
+import { Loader2, Mail, Lock, Eye, EyeOff, User } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 type InviteMeta = {
   invitedEmail: string;
@@ -80,9 +82,12 @@ export default function AcceptInvitePage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-sm space-y-6 rounded-lg border border-border bg-card p-6">
         <div className="text-center">
-          <Shield className="mx-auto h-10 w-10 text-primary" />
+          <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={40} height={40} className="mx-auto rounded" />
           <h1 className="mt-3 text-2xl font-bold">Accept Lecturer Invite</h1>
         </div>
 

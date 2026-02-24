@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { StatsGrid, StatCard } from "@/components/dashboard/stats-cards";
-import { Users, BookOpen, BarChart3, Shield } from "lucide-react";
+import { Users, BookOpen, BarChart3 } from "lucide-react";
 
 export default async function AdminDashboard() {
   const session = await auth();

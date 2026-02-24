@@ -2,7 +2,8 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { StatsGrid, StatCard } from "@/components/dashboard/stats-cards";
-import { Building2, Users, BarChart3, Shield } from "lucide-react";
+import Image from "next/image";
+import { Building2, Users, BarChart3 } from "lucide-react";
 
 export default async function SuperAdminDashboard() {
   const session = await auth();
@@ -51,7 +52,7 @@ export default async function SuperAdminDashboard() {
         <StatCard
           title="Attendance Records"
           value={totalRecords}
-          icon={<Shield className="h-5 w-5" />}
+          icon={<Image src="/web-app-manifest-192x192.png" alt="" width={20} height={20} className="rounded" />}
         />
       </StatsGrid>
 

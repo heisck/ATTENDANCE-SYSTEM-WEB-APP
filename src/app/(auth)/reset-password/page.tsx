@@ -3,7 +3,9 @@
 import { FormEvent, Suspense, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, Lock, Eye, EyeOff, Shield } from "lucide-react";
+import Image from "next/image";
+import { Loader2, Lock, Eye, EyeOff } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
@@ -54,6 +56,9 @@ function ResetPasswordForm() {
   if (!token) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4">
+        <div className="absolute top-4 right-4">
+          <ThemeToggle />
+        </div>
         <div className="w-full max-w-sm rounded-lg border border-border bg-card p-6 text-center space-y-3">
           <h1 className="text-xl font-semibold">Invalid reset link</h1>
           <p className="text-sm text-muted-foreground">Missing password reset token.</p>
@@ -67,9 +72,12 @@ function ResetPasswordForm() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-sm rounded-lg border border-border bg-card p-6 space-y-6">
         <div className="text-center">
-          <Shield className="mx-auto h-10 w-10 text-primary" />
+          <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={40} height={40} className="mx-auto rounded" />
           <h1 className="mt-3 text-2xl font-bold">Reset password</h1>
           <p className="mt-2 text-sm text-muted-foreground">Set a new secure password.</p>
         </div>

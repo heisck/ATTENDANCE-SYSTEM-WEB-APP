@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   Loader2,
   Radio,
-  Shield,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -187,7 +186,7 @@ export function BleProximityCheck({
           {deviceFound && rssi !== null && (
             <div className="bg-green-50 border border-green-200 rounded-md p-3">
               <div className="flex items-center gap-2 mb-2">
-                <Shield className="h-4 w-4 text-green-600" />
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
                 <span className="font-medium text-sm text-green-900">
                   Proximity Verified
                 </span>

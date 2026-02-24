@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
@@ -19,7 +20,6 @@ import {
   Play,
   QrCode,
   Settings,
-  Shield,
   User,
   UserPlus,
   Users,
@@ -76,8 +76,8 @@ export function Sidebar({ role, userName }: { role: string; userName: string }) 
     <>
       <div className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-card px-4 md:hidden">
         <Link href={rolePath} className="flex items-center gap-2">
-          <Shield className="h-5 w-5 text-primary" />
-          <span className="text-base font-bold">AttendanceIQ</span>
+          <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={24} height={24} className="rounded" />
+          <span className="text-base font-bold font-[family-name:var(--font-silkscreen)] tracking-tight">attendanceIQ</span>
         </Link>
         <button
           type="button"
@@ -107,8 +107,8 @@ export function Sidebar({ role, userName }: { role: string; userName: string }) 
         )}
       >
         <div className="flex h-16 items-center gap-2 border-b border-border px-6">
-          <Shield className="h-6 w-6 text-primary" />
-          <span className="text-lg font-bold">AttendanceIQ</span>
+          <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={28} height={28} className="rounded" />
+          <span className="text-lg font-bold font-[family-name:var(--font-silkscreen)] tracking-tight">attendanceIQ</span>
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto p-4">
