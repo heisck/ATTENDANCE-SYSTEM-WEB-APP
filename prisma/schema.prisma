@@ -105,6 +105,7 @@ model User {
   passwordResetTokens PasswordResetToken[]
   pushSubscriptions PushSubscription[]
   notifications UserNotification[]
+  relayDevices BleRelayDevice[] @relation("RelayDevices")
 
   @@index([email])
   @@index([personalEmail])
@@ -192,15 +193,23 @@ model AttendanceSession {
   qrSecret     String
   startedAt    DateTime      @default(now())
   closedAt     DateTime?
-
-  course   Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  lecturer User               @relation("LecturerSessions", fields: [lecturerId], references: [id])
+  
+  // BLE relay configuration
+  relayEnabled  Boolean       @default(false) // Lecturer enables relay functionality
+  relayOpenTime DateTime?     // When relay mode was opened to approved devices
+  relayAutoApprove Boolean    @default(false) // Auto-approve relay requests (less strict mode)
+  
+  course   Course                @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lecturer User                  @relation("LecturerSessions", fields: [lecturerId], references: [id])
   records  AttendanceRecord[]
+  relayDevices BleRelayDevice[]  @relation("RelayDevices")
+  broadcastState RelayBroadcastState? @relation("BroadcastState")
 
   @@index([courseId])
   @@index([lecturerId])
   @@index([status])
   @@index([phase])
+  @@index([relayEnabled])
 }
 
 model AttendanceRecord {
@@ -236,6 +245,7 @@ model AttendanceRecord {
 
   session AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   student User              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  relayRecord RelayAttendanceRecord?
 
   @@unique([sessionId, studentId])
   @@index([sessionId])
@@ -490,4 +500,84 @@ model BleDeviceSignature {
 
   @@index([bleAddress])
   @@index([userDeviceId])
+}
+
+// BLE Relay System - Students who pass verification become relay nodes
+enum RelayStatus {
+  PENDING        // Awaiting lecturer approval
+  APPROVED       // Approved to broadcast QR
+  REJECTED       // Rejected by lecturer
+  REVOKED        // Revoked after being approved
+}
+
+model BleRelayDevice {
+  id              String        @id @default(cuid())
+  sessionId       String
+  studentId       String
+  userDeviceId    String        @unique // One device per student
+  status          RelayStatus   @default(PENDING)
+  
+  // Relay broadcasting info
+  bleBeaconUuid   String?       // UUID for this relay broadcast
+  qrDataEncrypted String?       // Encrypted QR data for relay
+  broadcastPower  Int           @default(-5) // TX power in dBm
+  broadcastRangeMeters Int      @default(15) // Approximate range
+  
+  // Timestamps
+  verifiedAt      DateTime      // When student marked attendance
+  approvedAt      DateTime?     // When lecturer approved
+  rejectedAt      DateTime?
+  revokedAt       DateTime?
+  lastBroadcasted DateTime?     // Last time BLE was broadcasting
+  expiresAt       DateTime?     // Auto-expire after session closes
+  
+  // Tracking
+  relayScansCount Int           @default(0) // How many students scanned via this relay
+  approvalMessage String?       // Message from lecturer
+  createdAt       DateTime      @default(now())
+
+  session         AttendanceSession @relation("RelayDevices", fields: [sessionId], references: [id], onDelete: Cascade)
+  student         User              @relation("RelayDevices", fields: [studentId], references: [id], onDelete: Cascade)
+  userDevice      UserDevice        @relation(fields: [userDeviceId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, studentId])
+  @@index([sessionId])
+  @@index([studentId])
+  @@index([status])
+  @@index([approvedAt])
+  @@index([verifiedAt])
+}
+
+// Track students who scanned QR from relay device instead of direct
+model RelayAttendanceRecord {
+  id              String   @id @default(cuid())
+  attendanceRecordId String @unique // Reference to main attendance record
+  relayDeviceId   String   // Which relay device provided the QR
+  
+  // BLE proximity data from relay scan
+  bleSignalRssi   Int?     // RSSI when scanning the relay
+  bleDistance     Float?   // Estimated distance to relay device
+  scanTimestamp   DateTime @default(now())
+  
+  createdAt       DateTime @default(now())
+
+  attendanceRecord AttendanceRecord @relation(fields: [attendanceRecordId], references: [id], onDelete: Cascade)
+  relayDevice     BleRelayDevice   @relation(fields: [relayDeviceId], references: [id], onDelete: Cascade)
+
+  @@index([relayDeviceId])
+  @@index([attendanceRecordId])
+}
+
+// Real-time relay broadcast state - tracks active relay nodes
+model RelayBroadcastState {
+  id            String   @id @default(cuid())
+  sessionId     String   @unique
+  activeRelays  Int      @default(0) // Count of currently broadcasting relays
+  totalApproved Int      @default(0) // Total approved relays for this session
+  lastUpdated   DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  session AttendanceSession @relation("BroadcastState", fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
 }
