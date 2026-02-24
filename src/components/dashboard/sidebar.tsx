@@ -5,24 +5,27 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
-  Shield,
-  LayoutDashboard,
-  QrCode,
-  History,
-  Users,
-  BookOpen,
-  Settings,
-  LogOut,
   BarChart3,
+  BookOpen,
   Building2,
-  Play,
   FileText,
   Fingerprint,
-  UserPlus,
+  History,
+  LayoutDashboard,
+  LogOut,
   Menu,
+  Play,
+  QrCode,
+  Settings,
+  Shield,
+  User,
+  UserPlus,
+  Users,
   X,
 } from "lucide-react";
+
 
 interface NavItem {
   label: string;
@@ -36,6 +39,7 @@ const navByRole: Record<string, NavItem[]> = {
     { label: "Mark Attendance", href: "/student/attend", icon: <QrCode className="h-4 w-4" /> },
     { label: "History", href: "/student/history", icon: <History className="h-4 w-4" /> },
     { label: "Devices", href: "/student/devices", icon: <Fingerprint className="h-4 w-4" /> },
+    { label: "Profile", href: "/student/profile", icon: <User className="h-4 w-4" /> },
   ],
   LECTURER: [
     { label: "Dashboard", href: "/lecturer", icon: <LayoutDashboard className="h-4 w-4" /> },
@@ -136,6 +140,10 @@ export function Sidebar({ role, userName }: { role: string; userName: string }) 
             <p className="text-xs text-muted-foreground capitalize">
               {role.toLowerCase().replace("_", " ")}
             </p>
+          </div>
+          <div className="flex items-center justify-between px-3 mb-2">
+            <span className="text-sm font-medium">Theme</span>
+            <ThemeToggle />
           </div>
           <button
             onClick={() => signOut({ callbackUrl: "/login" })}

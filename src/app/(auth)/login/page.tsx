@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getSession, signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { toast } from "sonner";
 import { Shield, Loader2, Mail, Lock, Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
@@ -12,20 +13,20 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [serverError, setServerError] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("registered") === "true") {
-      setMessage("Account created successfully. Sign in to continue.");
+      toast.success("Account created successfully!", {
+        description: "Sign in to continue.",
+      });
     }
   }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
-    setMessage("");
+    setServerError("");
     setLoading(true);
 
     try {
@@ -37,12 +38,19 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError("Invalid email or password");
+        const message = "Invalid email or password";
+        setServerError(message);
+        toast.error(message);
       } else {
-        setMessage("Sign-in successful. Redirecting...");
+        toast.success("Sign in successful", {
+          description: "Redirecting...",
+        });
         const session = await getSession();
         if (!session?.user) {
-          setError("Sign-in did not create a session. Check AUTH_URL, AUTH_TRUST_HOST, and AUTH_SECRET.");
+          const message =
+            "Sign-in did not create a session. Check AUTH_URL, AUTH_TRUST_HOST, and AUTH_SECRET.";
+          setServerError(message);
+          toast.error(message);
           return;
         }
 
@@ -77,7 +85,9 @@ export default function LoginPage() {
         router.refresh();
       }
     } catch {
-      setError("Something went wrong. Please try again.");
+      const message = "Something went wrong. Please try again.";
+      setServerError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -97,15 +107,9 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {message && (
-            <div className="rounded-md border border-green-300 bg-green-50 p-3 text-sm text-green-800">
-              {message}
-            </div>
-          )}
-
-          {error && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
+          {serverError && (
+            <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4">
+              <p className="text-sm text-red-700">{serverError}</p>
             </div>
           )}
 

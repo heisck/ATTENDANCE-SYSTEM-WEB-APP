@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSession, signIn } from "next-auth/react";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
   Shield,
   Loader2,
@@ -28,8 +29,7 @@ export default function RegisterPage() {
     organizationSlug: "",
   });
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [serverError, setServerError] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitStage, setSubmitStage] = useState<"creating" | "signing-in" | null>(null);
 
@@ -39,8 +39,7 @@ export default function RegisterPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
-    setSuccess("");
+    setServerError("");
     setLoading(true);
     setSubmitStage("creating");
 
@@ -54,11 +53,15 @@ export default function RegisterPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Registration failed");
+        const message = data?.error || "Sign up failed. Please try again.";
+        setServerError(message);
+        toast.error(message);
         return;
       }
 
-      setSuccess(data.message || "Account created successfully.");
+      toast.success("Account created successfully!", {
+        description: `Welcome, ${data?.name || form.name || "student"}!`,
+      });
       setSubmitStage("signing-in");
 
       const signInResult = await signIn("credentials", {
@@ -69,19 +72,25 @@ export default function RegisterPage() {
       });
 
       if (signInResult?.error) {
-        setError("Account created, but automatic sign-in failed. Please sign in manually.");
+        const message = "Account created, but automatic sign-in failed. Please sign in manually.";
+        setServerError(message);
+        toast.error(message);
         router.push("/login?registered=true");
         return;
       }
 
       const session = await getSession();
       if (!session?.user) {
-        setError("Account created, but no session was created. Please sign in manually.");
+        const message = "Account created, but no session was created. Please sign in manually.";
+        setServerError(message);
+        toast.error(message);
         router.push("/login?registered=true");
         return;
       }
 
-      setSuccess("Sign-up successful. Redirecting...");
+      toast.success("Sign in successful", {
+        description: "Redirecting to your dashboard...",
+      });
 
       const role = (session.user as any).role as string | undefined;
       if (role === "STUDENT") {
@@ -113,7 +122,9 @@ export default function RegisterPage() {
       router.push(dashboard);
       router.refresh();
     } catch {
-      setError("Something went wrong. Please try again.");
+      const message = "Something went wrong. Please try again.";
+      setServerError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
       setSubmitStage(null);
@@ -134,15 +145,9 @@ export default function RegisterPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {success && (
-            <div className="rounded-md border border-green-300 bg-green-50 p-3 text-sm text-green-800">
-              {success}
-            </div>
-          )}
-
-          {error && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
+          {serverError && (
+            <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4">
+              <p className="text-sm text-red-700">{serverError}</p>
             </div>
           )}
 

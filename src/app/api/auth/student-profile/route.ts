@@ -20,9 +20,14 @@ export async function GET() {
     select: {
       id: true,
       role: true,
+      name: true,
       email: true,
+      studentId: true,
+      indexNumber: true,
       personalEmail: true,
       personalEmailVerifiedAt: true,
+      createdAt: true,
+      updatedAt: true,
     },
   });
 
