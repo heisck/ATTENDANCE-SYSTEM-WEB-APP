@@ -89,12 +89,12 @@ function LoginForm() {
               href="/"
               className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary transition-colors hover:bg-primary/20 overflow-hidden"
             >
-              <Image src="/web-app-manifest-192x192.png" alt="ATTENDANCE IQ" width={32} height={32} className="rounded-lg logo-mark" />
+              <Image src="/web-app-manifest-192x192.png" alt="App logo" width={32} height={32} className="rounded-lg logo-mark" />
             </Link>
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Sign in to your ATTENDANCE IQ account
+                Sign in to your account
               </p>
             </div>
           </div>

@@ -10,10 +10,7 @@ export default function HomePage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center gap-3">
-              <Image src="/web-app-manifest-192x192.png" alt="ATTENDANCE IQ" width={36} height={36} className="rounded logo-mark" />
-              <span className="brand-wordmark text-[1rem] sm:text-[1.06rem]">
-                ATTENDANCE IQ
-              </span>
+              <Image src="/web-app-manifest-192x192.png" alt="App logo" width={36} height={36} className="rounded logo-mark" />
             </div>
             <div className="flex items-center gap-4">
               <ThemeToggle />
@@ -106,7 +103,7 @@ export default function HomePage() {
       <footer className="border-t border-border">
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <p className="text-center text-sm text-muted-foreground">
-            ATTENDANCE IQ &mdash; Smart attendance for modern universities.
+            Smart attendance for modern universities.
           </p>
         </div>
       </footer>

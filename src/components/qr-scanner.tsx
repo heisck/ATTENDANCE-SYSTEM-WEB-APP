@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Camera, CheckCircle2, Loader2 } from "lucide-react";
+import { Camera, CheckCircle2, Loader2, ZoomIn, ZoomOut } from "lucide-react";
 import { toast } from "sonner";
+import ElasticSlider from "@/components/ui/elastic-slider";
 
 interface QrScannerProps {
   onScan: (data: { sessionId: string; token: string; ts: number }) => void;
@@ -247,19 +248,25 @@ export function QrScanner({ onScan }: QrScannerProps) {
             </div>
           </div>
           <div className="mt-3 flex w-full max-w-[min(100vw-2rem,400px)] flex-col gap-2">
-            <div className="rounded-lg bg-muted/50 px-3 py-2">
+            <div className="rounded-lg bg-muted/50 px-3 py-3">
               <div className="flex items-center justify-between text-xs">
                 <span>{zoomSupported ? "Camera zoom" : "Digital zoom"}</span>
                 <span>{zoomValue.toFixed(1)}x</span>
               </div>
-              <input
-                type="range"
-                min={zoomMin}
-                max={zoomMax}
-                step={zoomStep}
+              <ElasticSlider
+                className="mt-1 pb-4"
+                leftIcon={<ZoomOut className="h-4 w-4" />}
+                rightIcon={<ZoomIn className="h-4 w-4" />}
+                startingValue={zoomMin}
+                defaultValue={zoomValue}
                 value={zoomValue}
-                onChange={(e) => handleZoomChange(Number(e.target.value))}
-                className="mt-1 w-full accent-primary"
+                maxValue={zoomMax}
+                isStepped={zoomStep > 0}
+                stepSize={zoomStep}
+                valueFormatter={(value) => `${value.toFixed(1)}x`}
+                onValueChange={(value) => {
+                  void handleZoomChange(Number(value.toFixed(2)));
+                }}
               />
             </div>
             <button

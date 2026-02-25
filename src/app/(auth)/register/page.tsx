@@ -115,7 +115,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
           <Link href="/" className="inline-flex items-center gap-2">
-            <Image src="/web-app-manifest-192x192.png" alt="ATTENDANCE IQ" width={40} height={40} className="rounded logo-mark" />
+            <Image src="/web-app-manifest-192x192.png" alt="App logo" width={40} height={40} className="rounded logo-mark" />
           </Link>
           <h1 className="mt-4 text-2xl font-bold">Create student account</h1>
           <p className="mt-2 text-sm text-muted-foreground">

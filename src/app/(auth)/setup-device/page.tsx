@@ -119,7 +119,7 @@ export default function SetupDevicePage() {
           <div className="text-center space-y-2">
             <div className="flex justify-center">
               <div className="rounded-full bg-primary/10 p-4">
-                <Image src="/web-app-manifest-192x192.png" alt="ATTENDANCE IQ" width={32} height={32} className="rounded logo-mark" />
+                <Image src="/web-app-manifest-192x192.png" alt="App logo" width={32} height={32} className="rounded logo-mark" />
               </div>
             </div>
             <h1 className="text-2xl font-bold">Register Your Device</h1>

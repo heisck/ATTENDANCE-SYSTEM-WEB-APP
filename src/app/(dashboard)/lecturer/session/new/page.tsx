@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { GpsCheck } from "@/components/gps-check";
 import { Loader2, Play } from "lucide-react";
 import { toast } from "sonner";
+import ElasticSlider from "@/components/ui/elastic-slider";
 
 interface Course {
   id: string;
@@ -98,14 +99,16 @@ export default function NewSessionPage() {
           <label className="text-sm font-medium">
             Radius &amp; GPS accuracy: {radius}m
           </label>
-          <input
-            type="range"
-            min={50}
-            max={2000}
-            step={50}
+          <ElasticSlider
+            className="pb-4"
+            startingValue={50}
+            defaultValue={radius}
             value={radius}
-            onChange={(e) => setRadius(Number(e.target.value))}
-            className="w-full"
+            maxValue={2000}
+            isStepped
+            stepSize={50}
+            valueFormatter={(value) => `${Math.round(value)}m`}
+            onValueChange={(value) => setRadius(Math.round(value))}
           />
           <p className="text-xs text-muted-foreground">
             Students must be within this distance, and both you and students must calibrate GPS until accuracy is ≤{radius}m
