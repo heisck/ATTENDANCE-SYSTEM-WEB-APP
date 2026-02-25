@@ -69,7 +69,7 @@ export default function RegisterPage() {
       const signInResult = (await signIn("credentials", {
         email: form.institutionalEmail.trim().toLowerCase(),
         password: form.password,
-        redirect: true,
+        redirect: false,
         callbackUrl: "/api/auth/signed-in-redirect",
       })) as { error?: string } | undefined;
 
@@ -80,7 +80,23 @@ export default function RegisterPage() {
         router.push("/login?registered=true");
         return;
       }
-      // With redirect: true, signIn navigates away on success
+
+      toast.success("Signed in successfully.", {
+        description: "Redirecting to your dashboard.",
+      });
+
+      const redirectRes = await fetch("/api/auth/redirect-target", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (redirectRes.ok) {
+        const redirectData = (await redirectRes.json()) as { redirectTo?: string };
+        router.replace(redirectData.redirectTo || "/student");
+        return;
+      }
+
+      router.replace("/api/auth/signed-in-redirect");
     } catch {
       const message = "Something went wrong. Please try again.";
       setServerError(message);
@@ -99,7 +115,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
           <Link href="/" className="inline-flex items-center gap-2">
-            <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={40} height={40} className="rounded logo-mark" />
+            <Image src="/web-app-manifest-192x192.png" alt="ATTENDANCE IQ" width={40} height={40} className="rounded logo-mark" />
           </Link>
           <h1 className="mt-4 text-2xl font-bold">Create student account</h1>
           <p className="mt-2 text-sm text-muted-foreground">

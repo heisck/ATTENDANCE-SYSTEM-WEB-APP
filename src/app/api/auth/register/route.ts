@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
     try {
       await sendEmail({
         to: personalEmail,
-        subject: "Verify your AttendanceIQ personal email",
+        subject: "Verify your ATTENDANCE IQ personal email",
         html: verificationEmailHtml({
           recipientName: createdUser.name,
           verifyUrl,

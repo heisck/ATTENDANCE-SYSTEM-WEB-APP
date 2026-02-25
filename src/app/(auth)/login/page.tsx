@@ -25,15 +25,15 @@ function LoginForm() {
       toast.success("Account created successfully!", {
         description: "Sign in to continue.",
       });
+      window.history.replaceState(null, "", "/login");
       return;
     }
 
     if (error === "CredentialsSignin" || error === "credentials") {
-      const message = "Invalid email or password. Please try again.";
-      toast.error(message);
-      router.replace("/login", { scroll: false });
+      toast.error("Invalid email or password. Please try again.");
+      window.history.replaceState(null, "", "/login");
     }
-  }, [searchParams, router]);
+  }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -43,15 +43,32 @@ function LoginForm() {
       const result = (await signIn("credentials", {
         email: email.trim(),
         password,
-        redirect: true,
+        redirect: false,
         callbackUrl: "/api/auth/signed-in-redirect",
       })) as { error?: string } | undefined;
 
       if (result?.error) {
         const message = "Invalid email or password";
         toast.error(message);
+        return;
       }
-      // With redirect: true, signIn navigates away on success; we only reach here on error
+
+      toast.success("Signed in successfully.", {
+        description: "Redirecting to your dashboard.",
+      });
+
+      const redirectRes = await fetch("/api/auth/redirect-target", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (redirectRes.ok) {
+        const data = (await redirectRes.json()) as { redirectTo?: string };
+        router.replace(data.redirectTo || "/student");
+        return;
+      }
+
+      router.replace("/api/auth/signed-in-redirect");
     } catch {
       const message = "Something went wrong. Please try again.";
       toast.error(message);
@@ -72,12 +89,12 @@ function LoginForm() {
               href="/"
               className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary transition-colors hover:bg-primary/20 overflow-hidden"
             >
-              <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={32} height={32} className="rounded-lg logo-mark" />
+              <Image src="/web-app-manifest-192x192.png" alt="ATTENDANCE IQ" width={32} height={32} className="rounded-lg logo-mark" />
             </Link>
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Sign in to your AttendanceIQ account
+                Sign in to your ATTENDANCE IQ account
               </p>
             </div>
           </div>

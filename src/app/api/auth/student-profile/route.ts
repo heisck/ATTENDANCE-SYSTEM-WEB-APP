@@ -104,7 +104,7 @@ export async function PATCH(request: NextRequest) {
     const verifyUrl = buildAppUrl(`/verify-email?token=${encodeURIComponent(rawToken)}`);
     await sendEmail({
       to: personalEmail,
-      subject: "Verify your AttendanceIQ personal email",
+      subject: "Verify your ATTENDANCE IQ personal email",
       html: verificationEmailHtml({
         recipientName: user.name ?? "there",
         verifyUrl,

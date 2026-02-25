@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
     const acceptUrl = buildAppUrl(`/accept-invite?token=${encodeURIComponent(rawToken)}`);
     await sendEmail({
       to: invitedEmail,
-      subject: `You're invited to join ${organization.name} on AttendanceIQ`,
+      subject: `You're invited to join ${organization.name} on ATTENDANCE IQ`,
       html: lecturerInviteEmailHtml({
         organizationName: organization.name,
         acceptUrl,

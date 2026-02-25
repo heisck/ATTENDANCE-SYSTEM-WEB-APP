@@ -115,8 +115,20 @@
   * {
     @apply border-border;
   }
+  html,
+  body {
+    min-height: 100%;
+    background-color: var(--background);
+  }
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
   body {
     @apply bg-background text-foreground overflow-x-hidden;
+    overscroll-behavior-y: none;
     background-image:
       radial-gradient(circle at 20% -10%, oklch(0.96 0.01 255 / 0.8), transparent 42%),
       radial-gradient(circle at 100% 0%, oklch(0.97 0.005 255 / 0.9), transparent 38%);
@@ -160,5 +172,34 @@
   }
   .logo-mark {
     @apply transition duration-200 dark:invert dark:brightness-125;
+  }
+  .brand-wordmark {
+    font-family: var(--font-brand), "Segoe UI", sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    line-height: 1;
+    white-space: nowrap;
+    background: linear-gradient(180deg, #f7f9ff 0%, #b9c8f4 48%, #7486bf 100%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    -webkit-text-stroke: 1px rgba(22, 33, 88, 0.92);
+    text-shadow:
+      0 1px 0 rgba(170, 186, 244, 0.35),
+      0 0 8px rgba(55, 80, 170, 0.3),
+      0 2px 8px rgba(11, 18, 52, 0.45);
+  }
+  .dark .brand-wordmark {
+    background: linear-gradient(180deg, #f8faff 0%, #cad5fb 44%, #8395d2 100%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    -webkit-text-stroke: 1px rgba(45, 67, 148, 0.96);
+    text-shadow:
+      0 0 10px rgba(102, 136, 255, 0.45),
+      0 2px 10px rgba(0, 0, 0, 0.68);
   }
 }

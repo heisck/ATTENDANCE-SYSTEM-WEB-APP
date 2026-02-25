@@ -16,7 +16,7 @@ function baseLayout(content: string): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AttendanceIQ</title>
+  <title>ATTENDANCE IQ</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6; color: ${TEXT_COLOR}; line-height: 1.6;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f3f4f6; padding: 40px 20px;">
@@ -26,7 +26,7 @@ function baseLayout(content: string): string {
           <tr>
             <td style="background: linear-gradient(135deg, ${BRAND_COLOR} 0%, #2d4a6f 100%); padding: 32px 40px; text-align: center;">
               <h1 style="margin: 0; font-size: 24px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px;">
-                AttendanceIQ
+                ATTENDANCE IQ
               </h1>
               <p style="margin: 6px 0 0 0; font-size: 13px; color: rgba(255,255,255,0.85);">
                 Smart attendance for modern universities
@@ -41,7 +41,7 @@ function baseLayout(content: string): string {
           <tr>
             <td style="padding: 24px 40px; background-color: #f9fafb; border-top: 1px solid ${BORDER_COLOR};">
               <p style="margin: 0; font-size: 12px; color: ${MUTED_COLOR}; text-align: center;">
-                This email was sent by AttendanceIQ. If you didn&apos;t request this, you can safely ignore it.
+                This email was sent by ATTENDANCE IQ. If you didn&apos;t request this, you can safely ignore it.
               </p>
             </td>
           </tr>
@@ -112,7 +112,7 @@ export function passwordResetEmailHtml(params: {
   Hello ${recipientName},
 </p>
 <p style="margin: 0 0 20px 0; font-size: 15px; color: ${MUTED_COLOR};">
-  We received a request to reset your AttendanceIQ password. Click the button below to choose a new password.
+  We received a request to reset your ATTENDANCE IQ password. Click the button below to choose a new password.
 </p>
 <p style="margin: 0 0 8px 0; font-size: 14px; color: ${MUTED_COLOR};">
   This link expires on <strong style="color: ${TEXT_COLOR};">${expiresAt.toUTCString()}</strong>.
@@ -144,7 +144,7 @@ export function lecturerInviteEmailHtml(params: {
 
   const content = `
 <p style="margin: 0 0 16px 0; font-size: 16px; color: ${TEXT_COLOR};">
-  ${isResend ? "Your lecturer invite has been refreshed." : "You have been invited to join AttendanceIQ as a lecturer."}
+  ${isResend ? "Your lecturer invite has been refreshed." : "You have been invited to join ATTENDANCE IQ as a lecturer."}
 </p>
 <p style="margin: 0 0 20px 0; font-size: 15px; color: ${MUTED_COLOR};">
   ${isResend ? "Use the link below to accept your updated invite." : `You&apos;ve been invited by <strong style="color: ${TEXT_COLOR};">${organizationName}</strong>. Click below to create your lecturer account and get started.`}

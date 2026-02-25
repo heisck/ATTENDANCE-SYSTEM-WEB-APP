@@ -32,7 +32,7 @@ export function buildAppUrl(path: string): string {
 function getGmailConfig() {
   const user = process.env.GMAIL_SMTP_USER?.trim() || "";
   const pass = process.env.GMAIL_SMTP_APP_PASSWORD?.trim() || "";
-  const from = process.env.GMAIL_FROM_EMAIL?.trim() || (user ? `AttendanceIQ <${user}>` : "");
+  const from = process.env.GMAIL_FROM_EMAIL?.trim() || (user ? `ATTENDANCE IQ <${user}>` : "");
   return { user, pass, from };
 }
 

@@ -149,10 +149,10 @@ export function Sidebar({
     <>
       <header className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between border-b border-border/70 bg-background/90 px-3 sm:px-4 lg:px-6 backdrop-blur-xl supports-[backdrop-filter]:bg-background/75">
         <div className="flex min-w-0 items-center gap-3">
-          <Link href={rolePath} className="flex items-center gap-2">
-            <Image src="/web-app-manifest-192x192.png" alt="attendanceIQ" width={24} height={24} className="rounded logo-mark" />
-            <span className="text-base font-bold font-[family-name:var(--font-silkscreen)] tracking-tight">
-              attendanceIQ
+          <Link href={rolePath} className="flex items-center gap-2.5">
+            <Image src="/web-app-manifest-192x192.png" alt="ATTENDANCE IQ" width={28} height={28} className="rounded logo-mark" />
+            <span className="brand-wordmark text-[0.68rem] sm:text-[0.76rem]">
+              ATTENDANCE IQ
             </span>
           </Link>
           <span className="hidden h-6 w-px bg-border/70 sm:block" />

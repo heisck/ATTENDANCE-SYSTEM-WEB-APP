@@ -8,7 +8,7 @@ import { createExpiryDate, createRawToken, hashToken } from "@/lib/tokens";
 async function sendResetEmail(targetEmail: string, name: string, resetUrl: string, expiresAt: Date) {
   await sendEmail({
     to: targetEmail,
-    subject: "Reset your AttendanceIQ password",
+    subject: "Reset your ATTENDANCE IQ password",
     html: passwordResetEmailHtml({
       recipientName: name,
       resetUrl,
