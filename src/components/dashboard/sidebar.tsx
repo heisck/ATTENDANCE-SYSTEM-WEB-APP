@@ -138,7 +138,7 @@ export function Sidebar({
           label: item.label,
           onClick: () => router.push(item.href),
           className: isActive
-            ? "border-black/15 bg-gray-100/85 dark:border-gray-500/70 dark:bg-gray-700/45"
+            ? "!border-gray-300/80 !bg-gray-200/75 dark:!border-gray-500/70 dark:!bg-gray-700/45"
             : "",
         };
       }),

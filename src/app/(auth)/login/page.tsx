@@ -6,7 +6,7 @@ import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { toast } from "sonner";
 import Image from "next/image";
-import { Loader2, Mail, Lock, Eye, EyeOff, AlertCircle } from "lucide-react";
+import { Loader2, Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 function LoginForm() {
@@ -15,7 +15,6 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [serverError, setServerError] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -31,7 +30,6 @@ function LoginForm() {
 
     if (error === "CredentialsSignin" || error === "credentials") {
       const message = "Invalid email or password. Please try again.";
-      setServerError(message);
       toast.error(message);
       router.replace("/login", { scroll: false });
     }
@@ -39,7 +37,6 @@ function LoginForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setServerError("");
     setLoading(true);
 
     try {
@@ -52,13 +49,11 @@ function LoginForm() {
 
       if (result?.error) {
         const message = "Invalid email or password";
-        setServerError(message);
         toast.error(message);
       }
       // With redirect: true, signIn navigates away on success; we only reach here on error
     } catch {
       const message = "Something went wrong. Please try again.";
-      setServerError(message);
       toast.error(message);
     } finally {
       setLoading(false);
@@ -88,15 +83,6 @@ function LoginForm() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {serverError && (
-              <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 flex items-center gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-destructive/20">
-                  <AlertCircle className="h-4 w-4 text-destructive" />
-                </div>
-                <p className="text-sm text-destructive font-medium">{serverError}</p>
-              </div>
-            )}
-
             <div className="space-y-4">
               <div className="group relative">
                 <label htmlFor="email" className="sr-only">Email</label>
