@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { QrScanner } from "@/components/qr-scanner";
+import { QrDisplay } from "@/components/qr-display";
 import { GpsCheck } from "@/components/gps-check";
 import { WebAuthnPrompt } from "@/components/webauthn-prompt";
 import { BleProximityCheck } from "@/components/ble-proximity-check";
@@ -18,9 +19,11 @@ import {
   AlertTriangle,
   Clock,
   RefreshCcw,
+  Share2,
 } from "lucide-react";
 
 type Step = "session" | "webauthn" | "gps" | "qr" | "submitting" | "result";
+type QrPortStatus = "PENDING" | "APPROVED" | "REJECTED" | null;
 
 interface ActiveSession {
   id: string;
@@ -74,7 +77,7 @@ interface SessionSyncResponse {
     flagged: boolean;
     canRequestRetry: boolean;
   } | null;
-  qrPortStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
+  qrPortStatus?: QrPortStatus;
 }
 
 const SESSION_REFRESH_MS = 5000;
@@ -94,6 +97,8 @@ export default function AttendPage() {
   const [syncState, setSyncState] = useState<SessionSyncResponse | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [requestingRetry, setRequestingRetry] = useState(false);
+  const [requestingQrPort, setRequestingQrPort] = useState(false);
+  const [qrPortStatusLocal, setQrPortStatusLocal] = useState<QrPortStatus>(null);
 
   const [reverifyPasskeyVerified, setReverifyPasskeyVerified] = useState(false);
   const [reverifySubmitting, setReverifySubmitting] = useState(false);
@@ -103,6 +108,7 @@ export default function AttendPage() {
   const reverifyStatus = syncState?.attendance?.reverifyStatus;
   const isPendingReverify =
     reverifyStatus === "PENDING" || reverifyStatus === "RETRY_PENDING";
+  const qrPortStatus = syncState?.qrPortStatus ?? qrPortStatusLocal ?? null;
 
   const mapSessions = (data: any[]): ActiveSession[] =>
     data.map((s: any) => ({
@@ -224,6 +230,7 @@ export default function AttendPage() {
         }
         if (!cancelled) {
           setSyncState(body);
+          setQrPortStatusLocal(body.qrPortStatus ?? null);
           setSyncError(null);
         }
       } catch (error: any) {
@@ -390,6 +397,39 @@ export default function AttendPage() {
     }
   }
 
+  async function handleRequestQrPort() {
+    if (!activeSessionId) return;
+
+    setRequestingQrPort(true);
+    try {
+      const res = await fetch("/api/attendance/qr-port/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: activeSessionId }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error(body.error || "Failed to request QR port");
+      }
+
+      const nextStatus = (body.status as QrPortStatus) ?? "PENDING";
+      setQrPortStatusLocal(nextStatus);
+      setSyncState((current) =>
+        current
+          ? {
+              ...current,
+              qrPortStatus: nextStatus,
+            }
+          : current
+      );
+      toast.success(body.message || "QR port request sent.");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to request QR port");
+    } finally {
+      setRequestingQrPort(false);
+    }
+  }
+
   async function handleReverifyQrScan(data: { sessionId: string; token: string; ts: number }) {
     if (!activeSessionId) return;
     if (data.sessionId !== activeSessionId) {
@@ -501,6 +541,8 @@ export default function AttendPage() {
     setSyncState(null);
     setSyncError(null);
     setRequestingRetry(false);
+    setRequestingQrPort(false);
+    setQrPortStatusLocal(null);
     setReverifyPasskeyVerified(false);
     setReverifySubmitting(false);
     setReverifyError(null);
@@ -791,6 +833,51 @@ export default function AttendPage() {
                   <p className="text-sm text-muted-foreground">You can close this window.</p>
                 </div>
               )}
+
+              <div className="surface-muted space-y-3 p-3">
+                <div className="flex items-start gap-2">
+                  <Share2 className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold">Share Live QR Stream</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      After lecturer approval, this device mirrors the live QR sequence for nearby classmates with camera issues.
+                    </p>
+                  </div>
+                </div>
+
+                {qrPortStatus === "APPROVED" ? (
+                  <div className="space-y-3">
+                    <div className="status-panel-subtle text-xs">
+                      Approved. Keep this screen visible so friends can scan the same rotating QR sequence.
+                    </div>
+                    <div className="overflow-x-auto">
+                      <QrDisplay sessionId={activeSessionId} mode="port" />
+                    </div>
+                  </div>
+                ) : qrPortStatus === "PENDING" ? (
+                  <div className="status-panel-subtle text-xs">
+                    Request sent. Waiting for lecturer approval.
+                  </div>
+                ) : qrPortStatus === "REJECTED" ? (
+                  <div className="status-panel-subtle text-xs">
+                    Your request was declined for this session.
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleRequestQrPort}
+                    disabled={requestingQrPort}
+                    className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+                  >
+                    {requestingQrPort ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Share2 className="h-4 w-4" />
+                    )}
+                    Request QR Port Access
+                  </button>
+                )}
+              </div>
 
             </div>
           )}

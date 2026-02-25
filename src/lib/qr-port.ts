@@ -10,10 +10,39 @@ import { generateQrPayload, getNextRotationMs } from "./qr";
 export async function requestQrPort(sessionId: string, studentId: string) {
   const session = await db.attendanceSession.findUnique({
     where: { id: sessionId },
-    select: { id: true, status: true },
+    select: {
+      id: true,
+      status: true,
+      course: {
+        select: {
+          enrollments: {
+            where: { studentId },
+            select: { id: true },
+            take: 1,
+          },
+        },
+      },
+    },
   });
   if (!session || session.status !== "ACTIVE") {
     return { success: false, message: "Session not found or closed" };
+  }
+  if (session.course.enrollments.length === 0) {
+    return {
+      success: false,
+      message: "You are not enrolled in this course",
+    };
+  }
+
+  const attendance = await db.attendanceRecord.findUnique({
+    where: { sessionId_studentId: { sessionId, studentId } },
+    select: { id: true },
+  });
+  if (!attendance) {
+    return {
+      success: false,
+      message: "Complete your attendance verification first",
+    };
   }
 
   const existing = await db.qrPortRequest.findUnique({

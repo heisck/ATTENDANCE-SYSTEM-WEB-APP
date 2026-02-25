@@ -6,9 +6,10 @@ import { Loader2, Maximize2, Minimize2, Sun } from "lucide-react";
 
 interface QrDisplayProps {
   sessionId: string;
+  mode?: "lecturer" | "port";
 }
 
-export function QrDisplay({ sessionId }: QrDisplayProps) {
+export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [error, setError] = useState("");
@@ -26,7 +27,8 @@ export function QrDisplay({ sessionId }: QrDisplayProps) {
 
   const fetchAndRender = useCallback(async () => {
     try {
-      const res = await fetch(`/api/attendance/sessions/${sessionId}/qr`);
+      const endpoint = mode === "port" ? "qr-port" : "qr";
+      const res = await fetch(`/api/attendance/sessions/${sessionId}/${endpoint}`);
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Failed to fetch QR");
@@ -68,7 +70,7 @@ export function QrDisplay({ sessionId }: QrDisplayProps) {
       setError(err.message);
       setLoading(false);
     }
-  }, [sessionId]);
+  }, [mode, sessionId]);
 
   useEffect(() => {
     fetchAndRender();
