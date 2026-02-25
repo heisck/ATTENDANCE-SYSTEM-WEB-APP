@@ -11,6 +11,8 @@ interface QrDisplayProps {
 
 export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const nextRotateAtRef = useRef<number>(Date.now() + 5000);
+  const rotationWindowRef = useRef<number>(5000);
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -18,9 +20,7 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
   const [phaseEndsAt, setPhaseEndsAt] = useState<string | null>(null);
   const [sequenceId, setSequenceId] = useState<string>("E000");
   const [nextSequenceId, setNextSequenceId] = useState<string>("E001");
-  const [upcomingSequenceIds, setUpcomingSequenceIds] = useState<string[]>([]);
   const [cueColor, setCueColor] = useState<string>("green");
-  const [rotationMs, setRotationMs] = useState<number>(5000);
   const [countdownMs, setCountdownMs] = useState<number>(5000);
   const [brightnessBoost, setBrightnessBoost] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -41,8 +41,8 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
         phaseEndsAt,
         sequenceId,
         nextSequenceId,
-        upcomingSequenceIds,
         cueColor,
+        rotationMs,
       } = await res.json();
       const payload = JSON.stringify(qr);
 
@@ -60,10 +60,16 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
       setPhaseEndsAt(phaseEndsAt ?? null);
       setSequenceId(sequenceId ?? "E000");
       setNextSequenceId(nextSequenceId ?? "E001");
-      setUpcomingSequenceIds(Array.isArray(upcomingSequenceIds) ? upcomingSequenceIds : []);
       setCueColor(cueColor ?? "green");
-      setRotationMs(nextRotationMs);
-      setCountdownMs(nextRotationMs);
+      const safeRotationMs =
+        typeof rotationMs === "number" && rotationMs > 0 ? rotationMs : 5000;
+      const safeNextRotationMs =
+        typeof nextRotationMs === "number" && nextRotationMs > 0
+          ? nextRotationMs
+          : safeRotationMs;
+      rotationWindowRef.current = safeRotationMs;
+      nextRotateAtRef.current = Date.now() + safeNextRotationMs;
+      setCountdownMs(safeNextRotationMs);
       setError("");
       setLoading(false);
     } catch (err: any) {
@@ -74,18 +80,21 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
 
   useEffect(() => {
     fetchAndRender();
-    const interval = setInterval(fetchAndRender, 5000);
+    const interval = setInterval(fetchAndRender, 2000);
     return () => clearInterval(interval);
   }, [fetchAndRender]);
 
   useEffect(() => {
-    if (!rotationMs) return;
     const ticker = setInterval(() => {
-      setCountdownMs((value) => (value <= 100 ? rotationMs : value - 100));
+      const now = Date.now();
+      while (nextRotateAtRef.current <= now) {
+        nextRotateAtRef.current += rotationWindowRef.current;
+      }
+      setCountdownMs(nextRotateAtRef.current - now);
     }, 100);
 
     return () => clearInterval(ticker);
-  }, [rotationMs]);
+  }, []);
 
   useEffect(() => {
     const onFullScreenChange = () => {
@@ -122,7 +131,7 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
 
   if (loading) {
     return (
-      <div className="flex h-[400px] w-[400px] items-center justify-center rounded-lg border border-border bg-white">
+      <div className="mx-auto flex aspect-square w-full max-w-[560px] items-center justify-center rounded-2xl border border-border bg-white">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
@@ -130,24 +139,27 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
 
   if (error) {
     return (
-      <div className="flex h-[400px] w-[400px] items-center justify-center rounded-lg border border-destructive bg-destructive/5 p-4 text-center">
+      <div className="mx-auto flex aspect-square w-full max-w-[560px] items-center justify-center rounded-2xl border border-destructive bg-destructive/5 p-4 text-center">
         <p className="text-sm text-destructive">{error}</p>
       </div>
     );
   }
 
   return (
-    <div ref={wrapperRef} className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-card p-2">
-        <div className="flex items-center gap-2">
+    <div ref={wrapperRef} className="mx-auto w-full max-w-[760px] space-y-3">
+      <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-md bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground">
-            {sequenceId}
+            Now: {sequenceId}
+          </span>
+          <span className={`rounded-md border px-2 py-1 text-xs font-medium`}>
+            Next: {nextSequenceId}
           </span>
           <span className={`rounded-md border px-2 py-1 text-xs font-medium ${cueStyles}`}>
-            Scan {sequenceId} now
+            Rotates in {(countdownMs / 1000).toFixed(1)}s
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setBrightnessBoost((value) => !value)}
@@ -168,15 +180,15 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
       </div>
 
       <div
-        className="overflow-hidden rounded-lg border-2 border-border bg-white p-2"
+        className="mx-auto w-full max-w-[560px] overflow-hidden rounded-2xl border-2 border-border bg-white p-2"
         style={brightnessBoost ? { filter: "brightness(1.2) contrast(1.15)" } : undefined}
       >
         {qrDataUrl && (
-          <div className="relative mx-auto h-[65vmin] max-h-[900px] w-[65vmin] max-w-[900px]">
+          <div className="relative mx-auto aspect-square w-full">
             <img
               src={qrDataUrl}
               alt={`Attendance QR Code ${sequenceId}`}
-              className="h-full w-full"
+              className="h-full w-full object-contain"
             />
             <div
               className={`pointer-events-none absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow ${cueDotClass}`}
@@ -186,12 +198,6 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
       </div>
 
       <div className="space-y-1 text-center">
-        <p className="text-sm font-medium text-foreground">
-          Next QR: {nextSequenceId} in {(countdownMs / 1000).toFixed(1)}s
-        </p>
-        <p className="text-xs text-muted-foreground">
-          Upcoming: {upcomingSequenceIds.join(" | ") || "--"} (rotation every 5s)
-        </p>
         <p className="text-xs font-medium text-foreground">
           Phase: {phase === "INITIAL" ? "Initial Attendance" : phase === "REVERIFY" ? "Reverification" : "Closed"}
         </p>

@@ -150,12 +150,12 @@ export default function SessionMonitorPage() {
 
   return (
     <div className="space-y-6">
-      <div className="surface flex items-center justify-between p-6">
+      <div className="surface flex flex-col gap-4 p-4 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold">
             {data.course.code} - {data.course.name}
           </h1>
-          <div className="mt-1 flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <span className="flex items-center gap-1">
               <Clock className="h-4 w-4" />
               Started {new Date(data.startedAt).toLocaleTimeString()}
@@ -195,7 +195,7 @@ export default function SessionMonitorPage() {
           <button
             onClick={handleClose}
             disabled={closing}
-            className="inline-flex items-center gap-2 rounded-md bg-destructive px-4 py-2 text-sm font-medium text-white hover:bg-destructive/90 disabled:opacity-50 transition-colors"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-destructive px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-destructive/90 disabled:opacity-50 sm:w-auto"
           >
             {closing ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -228,21 +228,24 @@ export default function SessionMonitorPage() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
         {isActive && (
-          <div className="flex flex-col items-center">
-            <h2 className="mb-4 text-lg font-semibold">Live QR Code</h2>
+          <div className="surface space-y-4 p-4 sm:p-5">
+            <h2 className="text-lg font-semibold">Live QR Code</h2>
             <QrDisplay sessionId={sessionId} />
           </div>
         )}
 
-        <div>
-          <h2 className="mb-4 text-lg font-semibold">
+        <div className="surface space-y-4 p-4 sm:p-5">
+          <h2 className="text-lg font-semibold">
             Attendance ({data.records.length})
           </h2>
-          <div className="space-y-2 max-h-[600px] overflow-y-auto">
+          <div className="space-y-2 max-h-[640px] overflow-y-auto pr-1">
             {data.records.map((record) => (
-              <div key={record.id} className="surface flex items-center justify-between rounded-lg p-3">
+              <div
+                key={record.id}
+                className="rounded-xl border border-border bg-card p-3"
+              >
                 <div>
                   <p className="text-sm font-medium">{record.student.name}</p>
                   <p className="text-xs text-muted-foreground">
@@ -254,45 +257,39 @@ export default function SessionMonitorPage() {
                     {record.reverifyAttemptCount > 0 ? ` (attempt ${record.reverifyAttemptCount})` : ""}
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-mono">
-                    {record.confidence}%
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {Math.round(record.gpsDistance)}m
-                  </span>
-                  {record.flagged && (
-                    <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-                  )}
-                  {(record.reverifyStatus === "MISSED" || record.reverifyStatus === "FAILED") && isReverify && (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleTargetedReverify(record.student.id)}
-                        disabled={actionBusyFor === record.student.id}
-                        className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
-                      >
-                        {actionBusyFor === record.student.id ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <Clock className="h-3 w-3" />
-                        )}
-                        Allow Verify
-                      </button>
-                      <button
-                        onClick={() => handleManualMark(record.student.id)}
-                        disabled={actionBusyFor === record.student.id}
-                        className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-foreground hover:bg-muted/80 disabled:opacity-50"
-                      >
-                        {actionBusyFor === record.student.id ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <CheckCircle2 className="h-3 w-3" />
-                        )}
-                        Mark Present
-                      </button>
-                    </div>
-                  )}
+                <div className="mt-3 flex flex-wrap items-center gap-3 sm:mt-2">
+                  <span className="text-sm font-mono">{record.confidence}%</span>
+                  <span className="text-xs text-muted-foreground">{Math.round(record.gpsDistance)}m</span>
+                  {record.flagged && <AlertTriangle className="h-4 w-4 text-muted-foreground" />}
                 </div>
+                {(record.reverifyStatus === "MISSED" || record.reverifyStatus === "FAILED") && isReverify && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => handleTargetedReverify(record.student.id)}
+                      disabled={actionBusyFor === record.student.id}
+                      className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
+                    >
+                      {actionBusyFor === record.student.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Clock className="h-3 w-3" />
+                      )}
+                      Allow Verify
+                    </button>
+                    <button
+                      onClick={() => handleManualMark(record.student.id)}
+                      disabled={actionBusyFor === record.student.id}
+                      className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-foreground hover:bg-muted/80 disabled:opacity-50"
+                    >
+                      {actionBusyFor === record.student.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-3 w-3" />
+                      )}
+                      Mark Present
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
             {data.records.length === 0 && (
@@ -307,7 +304,7 @@ export default function SessionMonitorPage() {
       </div>
 
       {isActive && (
-        <div className="max-w-2xl">
+        <div className="max-w-3xl">
           <QrPortApprovalPanel sessionId={sessionId} isLive />
         </div>
       )}

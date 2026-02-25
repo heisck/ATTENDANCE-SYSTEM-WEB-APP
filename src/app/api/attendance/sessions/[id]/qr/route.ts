@@ -62,6 +62,7 @@ export async function GET(
     cueColor,
     phase: syncedSession.phase,
     phaseEndsAt: getPhaseEndsAt(syncedSession),
+    rotationMs: syncedSession.qrRotationMs,
     nextRotationMs: nextRotation,
   });
 }

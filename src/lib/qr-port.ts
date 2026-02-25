@@ -111,6 +111,7 @@ export async function getLiveQrForPort(sessionId: string, studentId: string) {
     cueColor,
     phase: syncedSession.phase,
     phaseEndsAt: getPhaseEndsAt(syncedSession),
+    rotationMs: syncedSession.qrRotationMs,
     nextRotationMs: nextRotation,
   };
 }
