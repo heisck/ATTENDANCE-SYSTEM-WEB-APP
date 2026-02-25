@@ -102,7 +102,7 @@ export async function PATCH(request: NextRequest) {
     ]);
 
     const verifyUrl = buildAppUrl(`/verify-email?token=${encodeURIComponent(rawToken)}`);
-    await sendEmail({
+    const sent = await sendEmail({
       to: personalEmail,
       subject: "Verify your ATTENDANCE IQ personal email",
       html: verificationEmailHtml({
@@ -113,6 +113,13 @@ export async function PATCH(request: NextRequest) {
       }),
       text: `Verify your personal email: ${verifyUrl}`,
     });
+
+    if (!sent) {
+      return NextResponse.json(
+        { error: "Personal email updated, but verification email could not be sent." },
+        { status: 503 }
+      );
+    }
 
     return NextResponse.json({
       success: true,

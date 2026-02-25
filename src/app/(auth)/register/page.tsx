@@ -7,43 +7,92 @@ import Link from "next/link";
 import { toast } from "sonner";
 import Image from "next/image";
 import {
-  Loader2,
-  User,
-  Mail,
-  Lock,
+  BadgeCheck,
+  BookOpenCheck,
+  Building2,
   Eye,
   EyeOff,
-  BadgeCheck,
   GraduationCap,
-  Building2,
+  Lock,
+  Mail,
+  ShieldCheck,
+  User,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import Stepper, { Step } from "@/components/ui/stepper";
+
+type RegisterForm = {
+  name: string;
+  institutionalEmail: string;
+  personalEmail: string;
+  password: string;
+  studentId: string;
+  indexNumber: string;
+  organizationSlug: string;
+};
+
+const INITIAL_FORM: RegisterForm = {
+  name: "",
+  institutionalEmail: "",
+  personalEmail: "",
+  password: "",
+  studentId: "",
+  indexNumber: "",
+  organizationSlug: "",
+};
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [form, setForm] = useState({
-    name: "",
-    institutionalEmail: "",
-    personalEmail: "",
-    password: "",
-    studentId: "",
-    indexNumber: "",
-    organizationSlug: "",
-  });
+  const [form, setForm] = useState<RegisterForm>(INITIAL_FORM);
   const [showPassword, setShowPassword] = useState(false);
-  const [serverError, setServerError] = useState("");
+  const [activeStep, setActiveStep] = useState(1);
+  const [agreedToGuidelines, setAgreedToGuidelines] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [submitStage, setSubmitStage] = useState<"creating" | "signing-in" | null>(null);
 
-  function update(field: string, value: string) {
+  function update(field: keyof RegisterForm, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setServerError("");
+  function validateBeforeCreate() {
+    const requiredFields: Array<{ key: keyof RegisterForm; label: string }> = [
+      { key: "name", label: "Full name" },
+      { key: "institutionalEmail", label: "Institutional email" },
+      { key: "personalEmail", label: "Personal email" },
+      { key: "password", label: "Password" },
+      { key: "studentId", label: "Student ID" },
+      { key: "indexNumber", label: "Index number" },
+      { key: "organizationSlug", label: "University code" },
+    ];
+
+    const missingField = requiredFields.find(({ key }) => !form[key].trim());
+    if (missingField) {
+      toast.error(`${missingField.label} is required.`);
+      return false;
+    }
+
+    if (!form.institutionalEmail.trim().toLowerCase().endsWith("@st.knust.edu.gh")) {
+      toast.error("Institutional email must end with @st.knust.edu.gh");
+      return false;
+    }
+
+    if (form.password.trim().length < 8) {
+      toast.error("Password must be at least 8 characters.");
+      return false;
+    }
+
+    if (!agreedToGuidelines) {
+      toast.error("Please confirm you understand the attendance rules.");
+      return false;
+    }
+
+    return true;
+  }
+
+  async function submitRegistration() {
+    if (loading) return false;
+    if (!validateBeforeCreate()) return false;
+
     setLoading(true);
-    setSubmitStage("creating");
 
     try {
       const res = await fetch("/api/auth/register", {
@@ -53,18 +102,21 @@ export default function RegisterPage() {
       });
 
       const data = await res.json();
-
       if (!res.ok) {
         const message = data?.error || "Sign up failed. Please try again.";
-        setServerError(message);
         toast.error(message);
-        return;
+        return false;
       }
 
-      toast.success("Account created successfully!", {
-        description: `Welcome, ${data?.name || form.name || "student"}!`,
-      });
-      setSubmitStage("signing-in");
+      if (data?.emailSent === false) {
+        toast.error("Account created, but we couldn't confirm email delivery yet.", {
+          description: "After sign in, use Resend Verification from your profile.",
+        });
+      } else {
+        toast.success("Account created successfully!", {
+          description: "Check your personal inbox and verify your email.",
+        });
+      }
 
       const signInResult = (await signIn("credentials", {
         email: form.institutionalEmail.trim().toLowerCase(),
@@ -74,11 +126,9 @@ export default function RegisterPage() {
       })) as { error?: string } | undefined;
 
       if (signInResult?.error) {
-        const message = "Account created, but automatic sign-in failed. Please sign in manually.";
-        setServerError(message);
-        toast.error(message);
+        toast.error("Account created, but automatic sign-in failed. Please sign in manually.");
         router.push("/login?registered=true");
-        return;
+        return true;
       }
 
       toast.success("Signed in successfully.", {
@@ -93,204 +143,287 @@ export default function RegisterPage() {
       if (redirectRes.ok) {
         const redirectData = (await redirectRes.json()) as { redirectTo?: string };
         router.replace(redirectData.redirectTo || "/student");
-        return;
+        return true;
       }
 
       router.replace("/api/auth/signed-in-redirect");
+      return true;
     } catch {
-      const message = "Something went wrong. Please try again.";
-      setServerError(message);
-      toast.error(message);
+      toast.error("Something went wrong. Please try again.");
+      return false;
     } finally {
       setLoading(false);
-      setSubmitStage(null);
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="absolute top-4 right-4">
+    <div className="flex min-h-screen items-center justify-center bg-background px-5 py-10 sm:px-8 sm:py-12">
+      <div className="absolute right-4 top-4">
         <ThemeToggle />
       </div>
-      <div className="w-full max-w-sm space-y-8">
+
+      <div className="w-full max-w-4xl space-y-8">
         <div className="text-center">
           <Link href="/" className="inline-flex items-center gap-2">
-            <Image src="/web-app-manifest-192x192.png" alt="App logo" width={40} height={40} className="rounded logo-mark" />
+            <Image
+              src="/web-app-manifest-192x192.png"
+              alt="App logo"
+              width={42}
+              height={42}
+              className="rounded logo-mark"
+            />
           </Link>
-          <h1 className="mt-4 text-2xl font-bold">Create student account</h1>
+          <h1 className="mt-4 text-2xl font-bold">Get Started</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Register with institutional + personal email
+            Step {Math.min(activeStep, 5)} of 5. Learn the rules and create your student account.
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {serverError && (
-            <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4">
-              <p className="text-sm text-red-700">{serverError}</p>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <label htmlFor="name" className="text-sm font-medium">
-              Full Name
-            </label>
-            <div className="relative">
-              <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                id="name"
-                value={form.name}
-                onChange={(e) => update("name", e.target.value)}
-                placeholder="John Doe"
-                required
-                className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label htmlFor="institutionalEmail" className="text-sm font-medium">
-              Institutional Email
-            </label>
-            <div className="relative">
-              <GraduationCap className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                id="institutionalEmail"
-                type="email"
-                value={form.institutionalEmail}
-                onChange={(e) => update("institutionalEmail", e.target.value)}
-                placeholder="yourname@st.knust.edu.gh"
-                required
-                className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Must end with @st.knust.edu.gh
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <label htmlFor="personalEmail" className="text-sm font-medium">
-              Personal Email (for verification/reset)
-            </label>
-            <div className="relative">
-              <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                id="personalEmail"
-                type="email"
-                value={form.personalEmail}
-                onChange={(e) => update("personalEmail", e.target.value)}
-                placeholder="you@gmail.com"
-                required
-                className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label htmlFor="password" className="text-sm font-medium">
-              Password
-            </label>
-            <div className="relative">
-              <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                value={form.password}
-                onChange={(e) => update("password", e.target.value)}
-                placeholder="Min 8 characters"
-                required
-                className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-10 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((value) => !value)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label htmlFor="studentId" className="text-sm font-medium">
-                Student ID
-              </label>
-              <div className="relative">
-                <BadgeCheck className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  id="studentId"
-                  value={form.studentId}
-                  onChange={(e) => update("studentId", e.target.value)}
-                  placeholder="e.g. 20241234"
-                  required
-                  className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
+        <Stepper
+          initialStep={1}
+          onStepChange={(step) => setActiveStep(step)}
+          onFinalStepCompleted={submitRegistration}
+          nextButtonProps={{ disabled: loading }}
+          stepCircleContainerClassName="bg-card/95 backdrop-blur-sm shadow-2xl"
+        >
+          <Step>
+            <div className="space-y-5">
+              <h2 className="text-xl font-semibold">Welcome to guided sign up</h2>
+              <p className="text-sm text-muted-foreground">
+                Before account creation, we walk you through how attendance works so you avoid
+                mistakes that can get records flagged.
+              </p>
+              <div className="space-y-2 rounded-xl border border-border bg-muted/30 p-4">
+                <p className="text-sm font-medium">What this setup includes:</p>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  <li className="flex items-start gap-2">
+                    <BookOpenCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>Platform rules for valid attendance marking.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>Security expectations for your account and passkey.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>Academic identity details required to activate your profile.</span>
+                  </li>
+                </ul>
               </div>
             </div>
+          </Step>
 
-            <div className="space-y-2">
-              <label htmlFor="indexNumber" className="text-sm font-medium">
-                Index Number
-              </label>
-              <div className="relative">
-                <BadgeCheck className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  id="indexNumber"
-                  value={form.indexNumber}
-                  onChange={(e) => update("indexNumber", e.target.value)}
-                  placeholder="e.g. ITC/24/0012"
-                  required
-                  className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
+          <Step>
+            <div className="space-y-5">
+              <h2 className="text-xl font-semibold">Important do&apos;s and don&apos;ts</h2>
+              <p className="text-sm text-muted-foreground">
+                These are the baseline policies for safe and valid use of the system.
+              </p>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-xl border border-border bg-muted/35 p-4">
+                  <p className="mb-2 text-sm font-semibold text-foreground">
+                    Do
+                  </p>
+                  <ul className="space-y-1.5 text-sm text-muted-foreground">
+                    <li>Use your own verified institutional account.</li>
+                    <li>Enable location and follow lecturer session rules.</li>
+                    <li>Complete passkey setup on your own device only.</li>
+                  </ul>
+                </div>
+                <div className="rounded-xl border border-border bg-muted/35 p-4">
+                  <p className="mb-2 text-sm font-semibold text-foreground">
+                    Don&apos;t
+                  </p>
+                  <ul className="space-y-1.5 text-sm text-muted-foreground">
+                    <li>Share credentials, QR tokens, or passkey device access.</li>
+                    <li>Attempt proxy attendance for another student.</li>
+                    <li>Use fake location tools or modified browser environments.</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2 rounded-xl border border-border bg-muted/35 p-4 text-sm text-muted-foreground">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>
+                  Repeated policy violations can lead to attendance flags and administrator review.
+                </p>
               </div>
             </div>
-          </div>
+          </Step>
 
-          <div className="space-y-2">
-            <label htmlFor="org" className="text-sm font-medium">
-              University Code
-            </label>
-            <div className="relative">
-              <Building2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                id="org"
-                value={form.organizationSlug}
-                onChange={(e) => update("organizationSlug", e.target.value)}
-                placeholder="e.g. knust"
-                required
-                className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
+          <Step>
+            <div className="space-y-5">
+              <h2 className="text-xl font-semibold">Account identity</h2>
+              <p className="text-sm text-muted-foreground">
+                Enter your primary account details exactly as used by your institution.
+              </p>
+
+              <div className="space-y-4">
+                <Field>
+                  <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    id="name"
+                    value={form.name}
+                    onChange={(e) => update("name", e.target.value)}
+                    placeholder="Full name"
+                    className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                </Field>
+
+                <Field>
+                  <GraduationCap className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    id="institutionalEmail"
+                    type="email"
+                    value={form.institutionalEmail}
+                    onChange={(e) => update("institutionalEmail", e.target.value)}
+                    placeholder="Institutional email (@st.knust.edu.gh)"
+                    className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                </Field>
+
+                <Field>
+                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    id="personalEmail"
+                    type="email"
+                    value={form.personalEmail}
+                    onChange={(e) => update("personalEmail", e.target.value)}
+                    placeholder="Personal email (for verification/reset)"
+                    className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                </Field>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Lecturer accounts are invite-only and managed by admins.
-            </p>
-          </div>
+          </Step>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-50 transition-colors"
-          >
-            {loading ? (
-              <span className="inline-flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {submitStage === "signing-in" ? "Signing you in..." : "Creating account..."}
-              </span>
-            ) : (
-              "Create Account"
-            )}
-          </button>
-        </form>
+          <Step>
+            <div className="space-y-5">
+              <h2 className="text-xl font-semibold">Academic and security details</h2>
+              <p className="text-sm text-muted-foreground">
+                These details are used to map your account to the correct institution profile.
+              </p>
+
+              <div className="space-y-4">
+                <Field>
+                  <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={form.password}
+                    onChange={(e) => update("password", e.target.value)}
+                    placeholder="Password (minimum 8 characters)"
+                    className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-10 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((value) => !value)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </Field>
+
+                <Field>
+                  <BadgeCheck className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    id="studentId"
+                    value={form.studentId}
+                    onChange={(e) => update("studentId", e.target.value)}
+                    placeholder="Student ID (e.g. 20241234)"
+                    className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                </Field>
+
+                <Field>
+                  <BadgeCheck className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    id="indexNumber"
+                    value={form.indexNumber}
+                    onChange={(e) => update("indexNumber", e.target.value)}
+                    placeholder="Index number (e.g. ITC/24/0012)"
+                    className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                </Field>
+
+                <Field>
+                  <Building2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    id="org"
+                    value={form.organizationSlug}
+                    onChange={(e) => update("organizationSlug", e.target.value)}
+                    placeholder="University code (e.g. knust)"
+                    className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                </Field>
+              </div>
+            </div>
+          </Step>
+
+          <Step>
+            <div className="space-y-5">
+              <h2 className="text-xl font-semibold">Review and finish</h2>
+              <p className="text-sm text-muted-foreground">
+                Confirm your details and acknowledge the attendance integrity rules.
+              </p>
+
+              <div className="rounded-xl border border-border bg-muted/30 p-5 text-sm">
+                <dl className="grid gap-2 sm:grid-cols-2">
+                  <SummaryRow label="Full name" value={form.name || "Not set"} />
+                  <SummaryRow label="Institutional email" value={form.institutionalEmail || "Not set"} />
+                  <SummaryRow label="Personal email" value={form.personalEmail || "Not set"} />
+                  <SummaryRow label="Student ID" value={form.studentId || "Not set"} />
+                  <SummaryRow label="Index number" value={form.indexNumber || "Not set"} />
+                  <SummaryRow label="University code" value={form.organizationSlug || "Not set"} />
+                </dl>
+              </div>
+
+              <label className="flex items-start gap-3 rounded-lg border border-border bg-background p-4">
+                <input
+                  type="checkbox"
+                  checked={agreedToGuidelines}
+                  onChange={(e) => setAgreedToGuidelines(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-input"
+                />
+                <span className="text-sm text-muted-foreground">
+                  I understand the onboarding guidance and I will not attempt proxy attendance,
+                  account sharing, or any location/identity spoofing.
+                </span>
+              </label>
+            </div>
+          </Step>
+        </Stepper>
 
         <p className="text-center text-sm text-muted-foreground">
           Already have an account?{" "}
-          <Link href="/login" className="text-primary hover:underline font-medium">
+          <Link href="/login" className="font-medium text-primary hover:underline">
             Sign In
           </Link>
         </p>
       </div>
+    </div>
+  );
+}
+
+function Field({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="py-0.5">
+      <div className="relative">{children}</div>
+    </div>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="space-y-0.5">
+      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className="font-medium">{value}</dd>
     </div>
   );
 }

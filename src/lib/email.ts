@@ -3,6 +3,19 @@ type SendEmailInput = {
   subject: string;
   html: string;
   text?: string;
+  attachments?: Array<{
+    filename: string;
+    content: Buffer | string;
+    cid?: string;
+    contentType?: string;
+  }>;
+};
+
+type MailAttachment = {
+  filename: string;
+  content: Buffer | string;
+  cid?: string;
+  contentType?: string;
 };
 
 const GMAIL_SMTP_HOST = process.env.GMAIL_SMTP_HOST || "smtp.gmail.com";
@@ -17,9 +30,19 @@ let cachedTransporter:
         subject: string;
         html: string;
         text?: string;
+        attachments?: MailAttachment[];
       }) => Promise<unknown>;
     }
   | null = null;
+let cachedBrandLogo:
+  | {
+      filename: string;
+      content: Buffer;
+      cid: string;
+      contentType: string;
+    }
+  | null
+  | undefined = undefined;
 
 function getAppUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL || process.env.AUTH_URL || "http://localhost:3000";
@@ -51,7 +74,35 @@ function getTransporter(user: string, pass: string) {
   return cachedTransporter!;
 }
 
-export async function sendEmail(input: SendEmailInput): Promise<void> {
+async function getBrandLogoAttachment() {
+  if (cachedBrandLogo !== undefined) {
+    return cachedBrandLogo;
+  }
+
+  try {
+    const fs = require("node:fs/promises");
+    const path = require("node:path");
+    const logoPath = path.join(process.cwd(), "public", "web-app-manifest-192x192.png");
+    const content = await fs.readFile(logoPath);
+
+    cachedBrandLogo = {
+      filename: "attendance-iq-logo.png",
+      content,
+      cid: "attendance-iq-logo",
+      contentType: "image/png",
+    };
+    return cachedBrandLogo;
+  } catch {
+    cachedBrandLogo = null;
+    return null;
+  }
+}
+
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function sendEmail(input: SendEmailInput): Promise<boolean> {
   const { user, pass, from } = getGmailConfig();
 
   if (!user || !pass || !from) {
@@ -60,15 +111,43 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
       to: input.to,
       subject: input.subject,
     });
-    return;
+    return false;
   }
 
-  const transporter = getTransporter(user, pass);
-  await transporter.sendMail({
-    from,
-    to: input.to,
-    subject: input.subject,
-    html: input.html,
-    text: input.text,
-  });
+  const brandLogo = await getBrandLogoAttachment();
+  const hasLogoCid = (input.attachments || []).some(
+    (attachment) => attachment.cid === "attendance-iq-logo"
+  );
+
+  const attachments = [
+    ...(input.attachments || []),
+    ...(brandLogo && !hasLogoCid ? [brandLogo] : []),
+  ];
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const transporter = getTransporter(user, pass);
+      await transporter.sendMail({
+        from,
+        to: input.to,
+        subject: input.subject,
+        html: input.html,
+        text: input.text,
+        attachments,
+      });
+      return true;
+    } catch (error) {
+      console.error(`[email] send attempt ${attempt} failed`, {
+        to: input.to,
+        subject: input.subject,
+        error,
+      });
+      cachedTransporter = null;
+      if (attempt < 2) {
+        await sleep(350);
+      }
+    }
+  }
+
+  return false;
 }

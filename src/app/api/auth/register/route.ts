@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     const verifyUrl = buildAppUrl(`/verify-email?token=${encodeURIComponent(rawToken)}`);
     let emailSent = true;
     try {
-      await sendEmail({
+      emailSent = await sendEmail({
         to: personalEmail,
         subject: "Verify your ATTENDANCE IQ personal email",
         html: verificationEmailHtml({
@@ -131,6 +131,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         ...createdUser,
+        emailSent,
         message: emailSent
           ? "Account created. Check your personal email for verification."
           : "Account created. Email sending failed; request a new verification link.",

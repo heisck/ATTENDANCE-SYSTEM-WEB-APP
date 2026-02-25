@@ -58,7 +58,7 @@ export async function POST() {
   });
 
   const verifyUrl = buildAppUrl(`/verify-email?token=${encodeURIComponent(rawToken)}`);
-  await sendEmail({
+  const sent = await sendEmail({
     to: user.personalEmail,
     subject: "Verify your ATTENDANCE IQ personal email",
     html: verificationEmailHtml({
@@ -69,6 +69,13 @@ export async function POST() {
     }),
     text: `Verify your personal email: ${verifyUrl}`,
   });
+
+  if (!sent) {
+    return NextResponse.json(
+      { error: "Email service is unavailable. Try again shortly." },
+      { status: 503 }
+    );
+  }
 
   return NextResponse.json({ success: true });
 }
