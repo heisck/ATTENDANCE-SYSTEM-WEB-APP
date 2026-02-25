@@ -77,6 +77,8 @@ interface SessionSyncResponse {
   qrPortStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
 }
 
+const SESSION_REFRESH_MS = 5000;
+
 export default function AttendPage() {
   const router = useRouter();
   const [step, setStep] = useState<Step>("session");
@@ -101,6 +103,14 @@ export default function AttendPage() {
   const reverifyStatus = syncState?.attendance?.reverifyStatus;
   const isPendingReverify =
     reverifyStatus === "PENDING" || reverifyStatus === "RETRY_PENDING";
+
+  const mapSessions = (data: any[]): ActiveSession[] =>
+    data.map((s: any) => ({
+      id: s.id,
+      radiusMeters: s.radiusMeters ?? 50,
+      course: s.course ?? { code: s.courseCode ?? "", name: s.courseName ?? "" },
+      hasMarked: s.hasMarked ?? false,
+    }));
 
   useEffect(() => {
     async function checkDevice() {
@@ -144,16 +154,7 @@ export default function AttendPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to load sessions");
         if (!cancelled) {
-          setSessions(
-            Array.isArray(data)
-              ? data.map((s: any) => ({
-                  id: s.id,
-                  radiusMeters: s.radiusMeters ?? 50,
-                  course: s.course ?? { code: s.courseCode ?? "", name: s.courseName ?? "" },
-                  hasMarked: s.hasMarked ?? false,
-                }))
-              : []
-          );
+          setSessions(Array.isArray(data) ? mapSessions(data) : []);
         }
       } catch {
         if (!cancelled) setSessions([]);
@@ -166,6 +167,49 @@ export default function AttendPage() {
       cancelled = true;
     };
   }, [hasDevice]);
+
+  useEffect(() => {
+    if (hasDevice !== true || step !== "session") return;
+
+    let cancelled = false;
+    const refreshSessions = async () => {
+      try {
+        const res = await fetch("/api/attendance/sessions?status=ACTIVE", {
+          cache: "no-store",
+        });
+        const data = await res.json();
+        if (!res.ok) return;
+        if (!cancelled && Array.isArray(data)) {
+          setSessions(mapSessions(data));
+        }
+      } catch {
+        // Keep current list on transient network errors.
+      }
+    };
+
+    void refreshSessions();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void refreshSessions();
+      }
+    }, SESSION_REFRESH_MS);
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === "visible") {
+        void refreshSessions();
+      }
+    };
+
+    window.addEventListener("focus", handleVisibilityOrFocus);
+    document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+    };
+  }, [hasDevice, step]);
 
   useEffect(() => {
     if (!activeSessionId) return;
@@ -511,7 +555,7 @@ export default function AttendPage() {
           </div>
 
           {step === "session" && (
-            <div className="rounded-lg border border-border p-4 space-y-3">
+            <div className="surface space-y-3 p-4 sm:p-5">
               <p className="text-sm font-medium">Select an active session</p>
               <p className="text-xs text-muted-foreground">
                 Only sessions for courses you are enrolled in are shown.

@@ -123,7 +123,7 @@ export function PushNotificationToggle() {
           type="button"
           onClick={enablePush}
           disabled={loading}
-          className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          className="inline-flex w-full items-center justify-start gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 sm:w-auto sm:justify-center"
         >
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bell className="h-3.5 w-3.5" />}
           Enable Push

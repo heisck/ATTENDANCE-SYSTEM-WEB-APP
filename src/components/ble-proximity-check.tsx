@@ -112,7 +112,7 @@ export function BleProximityCheck({
   };
 
   return (
-    <div className="rounded-md border border-border bg-card p-4">
+    <div className="surface space-y-4 p-4 sm:p-5">
       <div className="flex items-center gap-2 font-semibold mb-3">
         <Bluetooth className="h-5 w-5 text-muted-foreground" />
         <span>Multi-Device Proximity Verification (BLE)</span>
@@ -162,9 +162,9 @@ export function BleProximityCheck({
           <button
             onClick={startProximityVerification}
             disabled={scanning || deviceFound}
-            className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-md font-medium transition ${
+            className={`inline-flex w-full items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-colors sm:w-auto ${
               deviceFound
-                ? "border border-border/70 bg-muted text-foreground cursor-default"
+                ? "cursor-default border border-border/70 bg-muted text-foreground"
                 : "bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             }`}
           >

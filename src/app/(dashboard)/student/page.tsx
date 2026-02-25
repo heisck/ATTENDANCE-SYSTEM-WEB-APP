@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
 import { OverviewMetrics } from "@/components/dashboard/overview-metrics";
 import { PushNotificationToggle } from "@/components/push-notification-toggle";
-import { QrCode, AlertTriangle } from "lucide-react";
+import { QrCode, AlertTriangle, User } from "lucide-react";
 import Link from "next/link";
 
 export default async function StudentDashboard() {
@@ -56,7 +56,10 @@ export default async function StudentDashboard() {
     <div className="space-y-6">
       <section className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div>
-          <p className="section-title">Student Workspace</p>
+          <p className="section-title inline-flex items-center gap-2">
+            <User className="h-4 w-4" />
+            Student Workspace
+          </p>
           <p className="section-subtitle">Attendance tracking and verification status in one place.</p>
         </div>
         <Link
@@ -90,6 +93,7 @@ export default async function StudentDashboard() {
 
       <OverviewMetrics
         title="Attendance Snapshot"
+        compact
         items={[
           { key: "courses", label: "Enrolled Courses", value: enrollments },
           { key: "attendance", label: "Total Attendance", value: totalAttendance },

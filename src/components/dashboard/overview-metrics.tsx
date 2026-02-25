@@ -13,9 +13,36 @@ export type OverviewMetric = {
 type OverviewMetricsProps = {
   title: string;
   items: OverviewMetric[];
+  compact?: boolean;
 };
 
-export function OverviewMetrics({ title, items }: OverviewMetricsProps) {
+export function OverviewMetrics({ title, items, compact = false }: OverviewMetricsProps) {
+  if (compact) {
+    return (
+      <section className="surface p-3 sm:p-4">
+        <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">{title}</p>
+        <div className="mt-2 grid gap-2 grid-cols-2 lg:grid-cols-4">
+          {items.map((item) => (
+            <div
+              key={item.key}
+              className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5"
+            >
+              <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                {item.label}
+              </p>
+              <p className="mt-1 text-base font-semibold tabular-nums text-foreground sm:text-lg">
+                {item.value}
+              </p>
+              {item.hint && (
+                <p className="mt-0.5 text-[11px] text-muted-foreground">{item.hint}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
   const firstKey = items[0]?.key ?? "";
   const [selectedKey, setSelectedKey] = useState(firstKey);
 
@@ -74,4 +101,3 @@ export function OverviewMetrics({ title, items }: OverviewMetricsProps) {
     </section>
   );
 }
-

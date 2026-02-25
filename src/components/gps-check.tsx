@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MapPin, Loader2, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
+import { MapPin, Loader2, CheckCircle2, RefreshCw } from "lucide-react";
 
 interface GpsCheckProps {
   onLocationReady: (lat: number, lng: number, accuracy: number) => void;
@@ -77,11 +77,11 @@ export function GpsCheck({ onLocationReady, maxAccuracyMeters = 30 }: GpsCheckPr
   }
 
   return (
-    <div className="rounded-lg border border-border p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+    <div className="space-y-3 rounded-xl border border-border p-4 sm:p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
           <MapPin className="h-5 w-5 text-muted-foreground shrink-0" />
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-medium">GPS Location</p>
             {status === "idle" && (
               <p className="text-xs text-muted-foreground">
@@ -107,27 +107,27 @@ export function GpsCheck({ onLocationReady, maxAccuracyMeters = 30 }: GpsCheckPr
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="w-full sm:w-auto">
           {status === "idle" && (
             <button
               onClick={requestLocation}
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+              className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 sm:w-auto"
             >
               <MapPin className="h-4 w-4" />
               Get Location
             </button>
           )}
           {status === "loading" && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex h-11 w-full items-center justify-center gap-2 rounded-md border border-border bg-muted/30 px-4 text-sm text-muted-foreground sm:w-auto">
               <Loader2 className="h-4 w-4 animate-spin" />
               Calibrating...
             </div>
           )}
           {status === "success" && coords && (
-            <>
+            <div className="grid w-full gap-2 sm:flex sm:w-auto sm:flex-row">
               <button
                 onClick={requestLocation}
-                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent transition-colors"
+                className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-md border border-border px-4 text-sm font-medium transition-colors hover:bg-accent sm:w-auto"
               >
                 <RefreshCw className="h-4 w-4" />
                 Re-measure
@@ -135,17 +135,17 @@ export function GpsCheck({ onLocationReady, maxAccuracyMeters = 30 }: GpsCheckPr
               <button
                 onClick={handleConfirm}
                 disabled={!accuracyOk}
-                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               >
                 <CheckCircle2 className="h-4 w-4" />
                 Use this location
               </button>
-            </>
+            </div>
           )}
           {status === "error" && (
             <button
               onClick={requestLocation}
-              className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent transition-colors"
+              className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-md border border-border px-4 text-sm font-medium transition-colors hover:bg-accent sm:w-auto"
             >
               <RefreshCw className="h-4 w-4" />
               Retry
