@@ -161,9 +161,9 @@ export default function RegisterPage() {
       contentMaxWidthClass="max-w-4xl"
       headerLink={{ href: "/login", label: "Sign In" }}
     >
-      <div className="flex h-full w-full flex-col overflow-hidden">
+      <div className="flex min-h-full w-full flex-col">
         <Stepper
-          className="flex h-full w-full flex-1 flex-col justify-start px-0"
+          className="flex min-h-0 w-full flex-1 flex-col justify-start px-0"
           initialStep={1}
           onStepChange={(step) => setActiveStep(step)}
           onFinalStepCompleted={submitRegistration}

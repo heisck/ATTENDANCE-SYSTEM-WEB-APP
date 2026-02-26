@@ -49,7 +49,9 @@ export function ThemeToggle() {
     mounted && (theme === "light" || theme === "dark" || theme === "system") ? theme : "system";
 
   const currentIcon =
-    activeTheme === "light" ? (
+    !mounted ? (
+      <span className="inline-block h-4 w-4" />
+    ) : activeTheme === "light" ? (
       <Sun className="h-4 w-4" />
     ) : activeTheme === "dark" ? (
       <Moon className="h-4 w-4" />
@@ -72,7 +74,7 @@ export function ThemeToggle() {
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        {currentIcon}
+        <span suppressHydrationWarning>{currentIcon}</span>
         <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
       </button>
 
