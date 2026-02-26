@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { syncAttendanceSessionState } from "@/lib/attendance";
@@ -16,7 +17,11 @@ import {
   CACHE_KEYS,
   CACHE_TTL,
 } from "@/lib/cache";
-import { linkDevice, getDeviceConsistencyScore } from "@/lib/device-linking";
+import {
+  DeviceTokenConflictError,
+  linkDevice,
+  getDeviceConsistencyScore,
+} from "@/lib/device-linking";
 import { getDeviceBleStats } from "@/lib/ble-verification";
 
 export async function POST(request: NextRequest) {
@@ -191,12 +196,35 @@ export async function POST(request: NextRequest) {
     }
 
     const webauthnUsed = body.webauthnVerified === true;
-    const deviceToken = body.deviceToken || "web";
+    const userAgent = request.headers.get("user-agent") ?? "";
+    const rawDeviceToken = typeof body.deviceToken === "string" ? body.deviceToken.trim() : "";
+    const fallbackTokenSource = `${session.user.id}:${userAgent || "unknown-user-agent"}`;
+    const fallbackDeviceToken = `web-${createHash("sha256")
+      .update(fallbackTokenSource)
+      .digest("hex")
+      .slice(0, 40)}`;
+    const deviceToken = rawDeviceToken || fallbackDeviceToken;
+
+    const resolvedDeviceType =
+      body.deviceType === "iOS" || body.deviceType === "Android" || body.deviceType === "Web"
+        ? body.deviceType
+        : /android/i.test(userAgent)
+          ? "Android"
+          : /(iphone|ipad|ipod)/i.test(userAgent)
+            ? "iOS"
+            : "Web";
+
+    const resolvedDeviceName =
+      typeof body.deviceName === "string" && body.deviceName.trim().length > 0
+        ? body.deviceName.trim().slice(0, 120)
+        : userAgent
+          ? userAgent.slice(0, 120)
+          : "Unknown Device";
 
     // Device linking and consistency check
     const deviceLinkResult = await linkDevice(session.user.id, deviceToken, {
-      deviceName: body.deviceName || "Unknown Device",
-      deviceType: (body.deviceType || "Web") as "iOS" | "Android" | "Web",
+      deviceName: resolvedDeviceName,
+      deviceType: resolvedDeviceType,
       osVersion: body.osVersion,
       appVersion: body.appVersion,
       fingerprint: body.deviceFingerprint,
@@ -223,7 +251,7 @@ export async function POST(request: NextRequest) {
     );
 
     // Get BLE stats if available
-    const bleStats = body.deviceToken
+    const bleStats = rawDeviceToken
       ? await getDeviceBleStats(deviceLinkResult.id)
       : { averageRssi: 0, verificationCount: 0, lastVerified: null, distanceMeters: 0 };
 
@@ -349,6 +377,15 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     if (error instanceof Error && error.name === "ZodError") {
       return NextResponse.json({ error: ApiErrorMessages.INVALID_INPUT }, { status: 400 });
+    }
+    if (error instanceof DeviceTokenConflictError) {
+      return NextResponse.json(
+        {
+          error:
+            "This device is already linked to another student account. Use your own device or contact admin to reset device access.",
+        },
+        { status: 409 }
+      );
     }
     logError("attendance/mark", error, { userId: session.user.id });
     return NextResponse.json(

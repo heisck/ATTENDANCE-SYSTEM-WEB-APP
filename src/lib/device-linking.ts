@@ -14,6 +14,13 @@ export interface DeviceFingerprint {
   language: string;
 }
 
+export class DeviceTokenConflictError extends Error {
+  constructor() {
+    super("This device is already linked to another student account.");
+    this.name = "DeviceTokenConflictError";
+  }
+}
+
 export function generateDeviceFingerprint(
   userAgent: string,
   platform: string,
@@ -66,37 +73,48 @@ export async function linkDevice(
   }
 ): Promise<{ id: string; isNewDevice: boolean; trustedAt: Date | null }> {
   try {
-    // Check if device already exists
-    const existing = await db.userDevice.findFirst({
-      where: {
-        userId,
-        deviceToken,
-        revokedAt: null,
-      },
+    const existingByToken = await db.userDevice.findUnique({
+      where: { deviceToken },
       select: {
         id: true,
+        userId: true,
         trustedAt: true,
+        revokedAt: true,
       },
     });
 
-    if (existing) {
-      // Update last used timestamp
-      await db.userDevice.update({
-        where: { id: existing.id },
+    if (existingByToken) {
+      if (existingByToken.userId !== userId) {
+        throw new DeviceTokenConflictError();
+      }
+
+      const updated = await db.userDevice.update({
+        where: { id: existingByToken.id },
         data: {
-          lastUsedAt: new Date(),
+          deviceName: deviceInfo.deviceName,
+          deviceType: deviceInfo.deviceType,
+          osVersion: deviceInfo.osVersion,
+          appVersion: deviceInfo.appVersion,
+          fingerprint: deviceInfo.fingerprint,
           bleSignature: deviceInfo.bleSignature,
+          revokedAt: null,
+          lastUsedAt: new Date(),
+        },
+        select: {
+          id: true,
+          trustedAt: true,
         },
       });
 
+      await cacheDel(CACHE_KEYS.USER_CREDENTIALS(userId));
+
       return {
-        id: existing.id,
+        id: updated.id,
         isNewDevice: false,
-        trustedAt: existing.trustedAt,
+        trustedAt: updated.trustedAt,
       };
     }
 
-    // Create new device registration
     const newDevice = await db.userDevice.create({
       data: {
         userId,
@@ -115,7 +133,6 @@ export async function linkDevice(
       },
     });
 
-    // Invalidate user credentials cache
     await cacheDel(CACHE_KEYS.USER_CREDENTIALS(userId));
 
     return {
@@ -124,6 +141,55 @@ export async function linkDevice(
       trustedAt: newDevice.trustedAt,
     };
   } catch (error) {
+    if (error instanceof DeviceTokenConflictError) {
+      throw error;
+    }
+
+    const code = (error as { code?: string })?.code;
+    if (code === "P2002") {
+      const conflicting = await db.userDevice.findUnique({
+        where: { deviceToken },
+        select: {
+          id: true,
+          userId: true,
+          trustedAt: true,
+          revokedAt: true,
+        },
+      });
+
+      if (conflicting) {
+        if (conflicting.userId !== userId) {
+          throw new DeviceTokenConflictError();
+        }
+
+        const updated = await db.userDevice.update({
+          where: { id: conflicting.id },
+          data: {
+            deviceName: deviceInfo.deviceName,
+            deviceType: deviceInfo.deviceType,
+            osVersion: deviceInfo.osVersion,
+            appVersion: deviceInfo.appVersion,
+            fingerprint: deviceInfo.fingerprint,
+            bleSignature: deviceInfo.bleSignature,
+            revokedAt: null,
+            lastUsedAt: new Date(),
+          },
+          select: {
+            id: true,
+            trustedAt: true,
+          },
+        });
+
+        await cacheDel(CACHE_KEYS.USER_CREDENTIALS(userId));
+
+        return {
+          id: updated.id,
+          isNewDevice: false,
+          trustedAt: updated.trustedAt,
+        };
+      }
+    }
+
     console.error("[v0] Link device error:", error);
     throw error;
   }

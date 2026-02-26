@@ -11,6 +11,16 @@ function base64UrlToUint8Array(base64UrlString: string) {
   return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
 }
 
+async function getPushRegistration(): Promise<ServiceWorkerRegistration> {
+  const existing = await navigator.serviceWorker.getRegistration();
+  if (existing) {
+    return existing;
+  }
+
+  await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+  return navigator.serviceWorker.ready;
+}
+
 export function PushNotificationToggle() {
   const [supported, setSupported] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>("default");
@@ -30,9 +40,13 @@ export function PushNotificationToggle() {
 
     setPermission(Notification.permission);
     void (async () => {
-      const registration = await navigator.serviceWorker.getRegistration("/sw.js");
-      const subscription = await registration?.pushManager.getSubscription();
-      setSubscribed(Boolean(subscription));
+      try {
+        const registration = await getPushRegistration();
+        const subscription = await registration.pushManager.getSubscription();
+        setSubscribed(Boolean(subscription));
+      } catch (error) {
+        console.warn("[push] Unable to initialize push registration", error);
+      }
     })();
   }, []);
 
@@ -50,11 +64,14 @@ export function PushNotificationToggle() {
         throw new Error("Missing NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY");
       }
 
-      const registration = await navigator.serviceWorker.register("/sw.js");
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: base64UrlToUint8Array(publicKey),
-      });
+      const registration = await getPushRegistration();
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: base64UrlToUint8Array(publicKey),
+        });
+      }
 
       const res = await fetch("/api/notifications/subscribe", {
         method: "POST",
@@ -79,7 +96,7 @@ export function PushNotificationToggle() {
     setLoading(true);
 
     try {
-      const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+      const registration = await navigator.serviceWorker.getRegistration();
       const subscription = await registration?.pushManager.getSubscription();
       const endpoint = subscription?.endpoint;
       if (subscription) {

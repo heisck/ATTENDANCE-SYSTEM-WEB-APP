@@ -81,6 +81,29 @@ interface SessionSyncResponse {
 }
 
 const SESSION_REFRESH_MS = 5000;
+const DEVICE_TOKEN_STORAGE_KEY = "attendanceiq:web-device-token:v1";
+
+function getOrCreateBrowserDeviceToken() {
+  if (typeof window === "undefined") return "";
+
+  const existing = window.localStorage.getItem(DEVICE_TOKEN_STORAGE_KEY);
+  if (existing && existing.trim().length > 0) {
+    return existing.trim();
+  }
+
+  const generated =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? `web-${crypto.randomUUID()}`
+      : `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  window.localStorage.setItem(DEVICE_TOKEN_STORAGE_KEY, generated);
+  return generated;
+}
+
+function detectDeviceTypeFromUserAgent(userAgent: string): "iOS" | "Android" | "Web" {
+  if (/android/i.test(userAgent)) return "Android";
+  if (/(iphone|ipad|ipod)/i.test(userAgent)) return "iOS";
+  return "Web";
+}
 
 export default function AttendPage() {
   const router = useRouter();
@@ -308,6 +331,15 @@ export default function AttendPage() {
     setStep("submitting");
 
     try {
+      const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
+      const platform =
+        typeof navigator !== "undefined" && typeof navigator.platform === "string"
+          ? navigator.platform
+          : "Web";
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+      const language = typeof navigator !== "undefined" ? navigator.language || "en-US" : "en-US";
+      const deviceToken = getOrCreateBrowserDeviceToken();
+
       const res = await fetch("/api/attendance/mark", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -319,6 +351,12 @@ export default function AttendPage() {
           gpsLng: gps.lng,
           gpsAccuracy: gps.accuracy,
           webauthnVerified,
+          deviceToken,
+          deviceName: `${platform} Browser`,
+          deviceType: detectDeviceTypeFromUserAgent(userAgent),
+          osVersion: userAgent,
+          appVersion: "web",
+          deviceFingerprint: `${platform}|${language}|${timezone}`,
         }),
       });
 

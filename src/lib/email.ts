@@ -34,6 +34,7 @@ let cachedTransporter:
       }) => Promise<unknown>;
     }
   | null = null;
+let hasLoggedGmailAuthHint = false;
 let cachedBrandLogo:
   | {
       filename: string;
@@ -54,7 +55,8 @@ export function buildAppUrl(path: string): string {
 
 function getGmailConfig() {
   const user = process.env.GMAIL_SMTP_USER?.trim() || "";
-  const pass = process.env.GMAIL_SMTP_APP_PASSWORD?.trim() || "";
+  // Gmail app passwords are often copied with spaces every 4 chars; normalize them.
+  const pass = process.env.GMAIL_SMTP_APP_PASSWORD?.replace(/\s+/g, "").trim() || "";
   const from = process.env.GMAIL_FROM_EMAIL?.trim() || (user ? `ATTENDANCE IQ <${user}>` : "");
   return { user, pass, from };
 }
@@ -102,6 +104,12 @@ async function sleep(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isPermanentAuthFailure(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: string; responseCode?: number };
+  return candidate.code === "EAUTH" || candidate.responseCode === 535;
+}
+
 export async function sendEmail(input: SendEmailInput): Promise<boolean> {
   const { user, pass, from } = getGmailConfig();
 
@@ -137,15 +145,26 @@ export async function sendEmail(input: SendEmailInput): Promise<boolean> {
       });
       return true;
     } catch (error) {
+      const permanentAuthFailure = isPermanentAuthFailure(error);
       console.error(`[email] send attempt ${attempt} failed`, {
         to: input.to,
         subject: input.subject,
+        permanentAuthFailure,
         error,
       });
+      if (permanentAuthFailure) {
+        if (!hasLoggedGmailAuthHint) {
+          console.error(
+            "[email] Gmail authentication failed permanently. Verify GMAIL_SMTP_USER and GMAIL_SMTP_APP_PASSWORD."
+          );
+          hasLoggedGmailAuthHint = true;
+        }
+      }
       cachedTransporter = null;
-      if (attempt < 2) {
+      if (attempt < 2 && !permanentAuthFailure) {
         await sleep(350);
       }
+      if (permanentAuthFailure) break;
     }
   }
 
