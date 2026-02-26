@@ -1,5 +1,11 @@
 import { AttendancePhase, ReverifyStatus, SessionStatus } from "@prisma/client";
 import { db } from "./db";
+import {
+  formatQrSequenceId,
+  getQrSequence,
+  getQrSequenceStartTs,
+} from "./qr";
+import { notifyStudentReverifySlot } from "./reverify-notifications";
 
 export const INITIAL_PHASE_MS = 60_000;
 export const REVERIFY_PHASE_MS = 240_000;
@@ -9,7 +15,7 @@ export const QR_GRACE_MS = 1_000;
 export const REVERIFY_MAX_ATTEMPTS = 3;
 export const REVERIFY_MAX_RETRIES = 2;
 export const REVERIFY_SAFETY_BUFFER_MS = 15_000;
-export const REVERIFY_MIN_SLOT_MS = 12_000;
+export const REVERIFY_SLOT_NOTIFY_LEAD_MS = 10_000;
 export const EXPECTED_RETRY_RATE = 0.35;
 export const EXPECTED_ATTEMPT_P95_MS = 9_000;
 
@@ -28,17 +34,88 @@ type SessionStateRow = {
   reverifySelectedCount: number;
 };
 
+type ReverifySequenceBounds = {
+  startSequence: number;
+  endSequence: number;
+  slotCount: number;
+};
+
+export type ReverifySlot = {
+  sequence: number;
+  sequenceId: string;
+  startsAt: Date;
+  endsAt: Date;
+};
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function shuffleIds(ids: string[]): string[] {
-  const arr = [...ids];
+function shuffleItems<T>(items: T[]): T[] {
+  const arr = [...items];
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;
+}
+
+function getReverifySequenceBounds(
+  now: Date,
+  reverifyEndsAt: Date,
+  rotationMs: number,
+  graceMs: number
+): ReverifySequenceBounds | null {
+  const windowEndTs = reverifyEndsAt.getTime() - REVERIFY_SAFETY_BUFFER_MS;
+  const earliestStartTs = now.getTime() + REVERIFY_SLOT_NOTIFY_LEAD_MS;
+  const latestStartTs = windowEndTs - (rotationMs + graceMs);
+
+  if (latestStartTs < earliestStartTs) return null;
+
+  const startSequence = Math.ceil(earliestStartTs / rotationMs);
+  const endSequence = Math.floor(latestStartTs / rotationMs);
+  if (endSequence < startSequence) return null;
+
+  return {
+    startSequence,
+    endSequence,
+    slotCount: endSequence - startSequence + 1,
+  };
+}
+
+function buildSlotFromSequence(
+  sequence: number,
+  rotationMs: number,
+  graceMs: number
+): ReverifySlot {
+  const slotStartTs = getQrSequenceStartTs(sequence, rotationMs);
+  return {
+    sequence,
+    sequenceId: formatQrSequenceId(sequence),
+    startsAt: new Date(slotStartTs),
+    endsAt: new Date(slotStartTs + rotationMs + graceMs),
+  };
+}
+
+export function getReverifyPromptAt(slotStartsAt: Date): Date {
+  return new Date(slotStartsAt.getTime() - REVERIFY_SLOT_NOTIFY_LEAD_MS);
+}
+
+export function getReverifySlotFromRecord(
+  requestedAt: Date | null,
+  deadlineAt: Date | null,
+  rotationMs: number,
+  graceMs: number
+): ReverifySlot | null {
+  if (!requestedAt) return null;
+
+  const sequence = getQrSequence(requestedAt.getTime(), rotationMs);
+  return {
+    sequence,
+    sequenceId: formatQrSequenceId(sequence),
+    startsAt: requestedAt,
+    endsAt: deadlineAt ?? new Date(requestedAt.getTime() + rotationMs + graceMs),
+  };
 }
 
 export function getDefaultInitialEndsAt(startedAt: Date): Date {
@@ -94,6 +171,15 @@ async function ensureReverifySelection(
   sessionId: string,
   now: Date
 ): Promise<void> {
+  let scheduledNotifications: Array<{
+    studentId: string;
+    sequence: number;
+    slotStartsAt: Date;
+    slotEndsAt: Date;
+    batchNumber: number;
+    totalBatches: number;
+  }> = [];
+
   await db.$transaction(async (tx) => {
     const session = await tx.attendanceSession.findUnique({
       where: { id: sessionId },
@@ -104,6 +190,8 @@ async function ensureReverifySelection(
         reverifySelectionDone: true,
         reverifySelectionRate: true,
         reverifyEndsAt: true,
+        qrRotationMs: true,
+        qrGraceMs: true,
       },
     });
 
@@ -117,7 +205,7 @@ async function ensureReverifySelection(
         sessionId,
         reverifyStatus: "NOT_REQUIRED",
       },
-      select: { id: true },
+      select: { id: true, studentId: true },
     });
 
     const selectedCount = computeAdaptiveSelectionCount(
@@ -136,37 +224,59 @@ async function ensureReverifySelection(
       return;
     }
 
-    const selectedIds = shuffleIds(candidates.map((c) => c.id)).slice(
-      0,
-      selectedCount
+    const sequenceBounds = getReverifySequenceBounds(
+      now,
+      session.reverifyEndsAt,
+      session.qrRotationMs,
+      session.qrGraceMs
     );
+    if (!sequenceBounds) {
+      await tx.attendanceSession.update({
+        where: { id: sessionId },
+        data: {
+          reverifySelectionDone: true,
+          reverifySelectedCount: 0,
+        },
+      });
+      return;
+    }
 
-    const reverifyEndTs = session.reverifyEndsAt.getTime();
-    const usableWindowMs = Math.max(
-      30_000,
-      reverifyEndTs - now.getTime() - REVERIFY_SAFETY_BUFFER_MS
+    const selectedCandidates = shuffleItems(candidates).slice(0, selectedCount);
+    const studentsPerSlot = Math.max(
+      1,
+      Math.ceil(selectedCandidates.length / sequenceBounds.slotCount)
     );
-    const spacingMs = Math.max(
-      REVERIFY_MIN_SLOT_MS,
-      Math.floor(usableWindowMs / selectedIds.length)
-    );
+    const totalBatches = Math.ceil(selectedCandidates.length / studentsPerSlot);
 
-    for (let index = 0; index < selectedIds.length; index++) {
-      const slotDeadlineTs = Math.min(
-        reverifyEndTs - QR_GRACE_MS,
-        now.getTime() + Math.max(20_000, spacingMs * (index + 1))
+    for (let index = 0; index < selectedCandidates.length; index++) {
+      const slotOffset = Math.floor(index / studentsPerSlot);
+      const sequence = sequenceBounds.startSequence + slotOffset;
+      const slot = buildSlotFromSequence(
+        sequence,
+        session.qrRotationMs,
+        session.qrGraceMs
       );
 
       await tx.attendanceRecord.update({
-        where: { id: selectedIds[index] },
+        where: { id: selectedCandidates[index].id },
         data: {
           reverifyRequired: true,
           reverifyStatus: "PENDING",
           reverifyAttemptCount: 1,
-          reverifyRequestedAt: now,
-          reverifyDeadlineAt: new Date(slotDeadlineTs),
+          reverifyRetryCount: 0,
+          reverifyRequestedAt: slot.startsAt,
+          reverifyDeadlineAt: slot.endsAt,
           flagged: false,
         },
+      });
+
+      scheduledNotifications.push({
+        studentId: selectedCandidates[index].studentId,
+        sequence: slot.sequence,
+        slotStartsAt: slot.startsAt,
+        slotEndsAt: slot.endsAt,
+        batchNumber: slotOffset + 1,
+        totalBatches,
       });
     }
 
@@ -174,16 +284,38 @@ async function ensureReverifySelection(
       where: { id: sessionId },
       data: {
         reverifySelectionDone: true,
-        reverifySelectedCount: selectedIds.length,
+        reverifySelectedCount: selectedCandidates.length,
       },
     });
   });
+
+  if (scheduledNotifications.length > 0) {
+    await Promise.allSettled(
+      scheduledNotifications.map((item) =>
+        notifyStudentReverifySlot({
+          studentId: item.studentId,
+          sessionId,
+          sequence: item.sequence,
+          slotStartsAt: item.slotStartsAt,
+          slotEndsAt: item.slotEndsAt,
+          attemptCount: 1,
+          retryCount: 0,
+          batchNumber: item.batchNumber,
+          totalBatches: item.totalBatches,
+          reason: "INITIAL_SELECTION",
+        })
+      )
+    );
+  }
 }
 
-async function expirePendingReverify(sessionId: string, now: Date): Promise<void> {
+async function expirePendingReverify(
+  session: SessionStateRow,
+  now: Date
+): Promise<void> {
   const staleRows = await db.attendanceRecord.findMany({
     where: {
-      sessionId,
+      sessionId: session.id,
       reverifyStatus: {
         in: ["PENDING", "RETRY_PENDING"],
       },
@@ -191,25 +323,97 @@ async function expirePendingReverify(sessionId: string, now: Date): Promise<void
     },
     select: {
       id: true,
+      studentId: true,
       reverifyAttemptCount: true,
+      reverifyRetryCount: true,
     },
+    orderBy: { reverifyDeadlineAt: "asc" },
   });
 
   if (staleRows.length === 0) return;
 
-  await db.$transaction(async (tx) => {
-    for (const row of staleRows) {
-      const exhausted = row.reverifyAttemptCount >= REVERIFY_MAX_ATTEMPTS;
-      await tx.attendanceRecord.update({
-        where: { id: row.id },
-        data: {
-          reverifyStatus: exhausted ? "FAILED" : "MISSED",
-          reverifyDeadlineAt: null,
-          flagged: true,
-        },
-      });
+  const pendingStatuses: ReverifyStatus[] = ["PENDING", "RETRY_PENDING"];
+  const notificationsToSend: Array<{
+    studentId: string;
+    sequence: number;
+    slotStartsAt: Date;
+    slotEndsAt: Date;
+    attemptCount: number;
+    retryCount: number;
+  }> = [];
+
+  for (const row of staleRows) {
+    const canRetry =
+      row.reverifyAttemptCount < REVERIFY_MAX_ATTEMPTS &&
+      row.reverifyRetryCount < REVERIFY_MAX_RETRIES;
+
+    if (canRetry) {
+      const slot = await allocateRetrySlot(session.id, session, now);
+      if (slot) {
+        const promoted = await db.attendanceRecord.updateMany({
+          where: {
+            id: row.id,
+            reverifyStatus: { in: pendingStatuses },
+            reverifyDeadlineAt: { lt: now },
+          },
+          data: {
+            reverifyStatus: "RETRY_PENDING",
+            reverifyRetryCount: { increment: 1 },
+            reverifyAttemptCount: { increment: 1 },
+            reverifyRequestedAt: slot.startsAt,
+            reverifyDeadlineAt: slot.endsAt,
+            flagged: true,
+          },
+        });
+
+        if (promoted.count === 1) {
+          notificationsToSend.push({
+            studentId: row.studentId,
+            sequence: slot.sequence,
+            slotStartsAt: slot.startsAt,
+            slotEndsAt: slot.endsAt,
+            attemptCount: row.reverifyAttemptCount + 1,
+            retryCount: row.reverifyRetryCount + 1,
+          });
+          continue;
+        }
+      }
     }
-  });
+
+    const exhausted =
+      row.reverifyAttemptCount >= REVERIFY_MAX_ATTEMPTS ||
+      row.reverifyRetryCount >= REVERIFY_MAX_RETRIES;
+
+    await db.attendanceRecord.updateMany({
+      where: {
+        id: row.id,
+        reverifyStatus: { in: pendingStatuses },
+        reverifyDeadlineAt: { lt: now },
+      },
+      data: {
+        reverifyStatus: exhausted ? "FAILED" : "MISSED",
+        reverifyDeadlineAt: null,
+        flagged: true,
+      },
+    });
+  }
+
+  if (notificationsToSend.length > 0) {
+    await Promise.allSettled(
+      notificationsToSend.map((item) =>
+        notifyStudentReverifySlot({
+          studentId: item.studentId,
+          sessionId: session.id,
+          sequence: item.sequence,
+          slotStartsAt: item.slotStartsAt,
+          slotEndsAt: item.slotEndsAt,
+          attemptCount: item.attemptCount,
+          retryCount: item.retryCount,
+          reason: "AUTO_RETRY",
+        })
+      )
+    );
+  }
 }
 
 export async function syncAttendanceSessionState(
@@ -284,7 +488,7 @@ export async function syncAttendanceSessionState(
 
   if (session.phase === "REVERIFY" && session.status === "ACTIVE") {
     await ensureReverifySelection(sessionId, now);
-    await expirePendingReverify(sessionId, now);
+    await expirePendingReverify(session, now);
 
     session = await db.attendanceSession.findUnique({
       where: { id: sessionId },
@@ -308,33 +512,50 @@ export async function syncAttendanceSessionState(
   return session;
 }
 
-export async function allocateRetryDeadline(
+export async function allocateRetrySlot(
   sessionId: string,
-  reverifyEndsAt: Date,
+  session: Pick<SessionStateRow, "reverifyEndsAt" | "qrRotationMs" | "qrGraceMs">,
   now: Date
-): Promise<Date | null> {
-  const pendingCount = await db.attendanceRecord.count({
+): Promise<ReverifySlot | null> {
+  if (!session.reverifyEndsAt) return null;
+
+  const bounds = getReverifySequenceBounds(
+    now,
+    session.reverifyEndsAt,
+    session.qrRotationMs,
+    session.qrGraceMs
+  );
+  if (!bounds) return null;
+
+  const latestReserved = await db.attendanceRecord.findFirst({
     where: {
       sessionId,
-      reverifyStatus: "RETRY_PENDING",
+      reverifyStatus: {
+        in: ["PENDING", "RETRY_PENDING"],
+      },
+      reverifyRequestedAt: { not: null },
       reverifyDeadlineAt: { gt: now },
     },
+    select: {
+      reverifyRequestedAt: true,
+    },
+    orderBy: { reverifyRequestedAt: "desc" },
   });
 
-  const remainingMs =
-    reverifyEndsAt.getTime() - now.getTime() - REVERIFY_SAFETY_BUFFER_MS;
-  if (remainingMs <= REVERIFY_MIN_SLOT_MS) {
+  let sequence = bounds.startSequence;
+  if (latestReserved?.reverifyRequestedAt) {
+    const latestSequence = getQrSequence(
+      latestReserved.reverifyRequestedAt.getTime(),
+      session.qrRotationMs
+    );
+    sequence = Math.max(sequence, latestSequence + 1);
+  }
+
+  if (sequence > bounds.endSequence) {
     return null;
   }
 
-  const slotMs = Math.max(
-    REVERIFY_MIN_SLOT_MS,
-    Math.floor(remainingMs / Math.max(2, pendingCount + 2))
-  );
-
-  return new Date(
-    Math.min(reverifyEndsAt.getTime() - QR_GRACE_MS, now.getTime() + slotMs)
-  );
+  return buildSlotFromSequence(sequence, session.qrRotationMs, session.qrGraceMs);
 }
 
 export function getPhaseEndsAt(

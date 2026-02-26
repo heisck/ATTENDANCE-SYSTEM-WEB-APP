@@ -13,6 +13,7 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const nextRotateAtRef = useRef<number>(Date.now() + 5000);
   const rotationWindowRef = useRef<number>(5000);
+  const clockOffsetRef = useRef<number>(0);
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -37,6 +38,8 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
       const {
         qr,
         nextRotationMs,
+        nextRotationAtTs,
+        serverNowTs,
         phase,
         phaseEndsAt,
         sequenceId,
@@ -67,8 +70,17 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
         typeof nextRotationMs === "number" && nextRotationMs > 0
           ? nextRotationMs
           : safeRotationMs;
+
+      if (typeof serverNowTs === "number" && Number.isFinite(serverNowTs)) {
+        clockOffsetRef.current = serverNowTs - Date.now();
+      }
+
       rotationWindowRef.current = safeRotationMs;
-      nextRotateAtRef.current = Date.now() + safeNextRotationMs;
+      if (typeof nextRotationAtTs === "number" && Number.isFinite(nextRotationAtTs)) {
+        nextRotateAtRef.current = nextRotationAtTs - clockOffsetRef.current;
+      } else {
+        nextRotateAtRef.current = Date.now() + safeNextRotationMs;
+      }
       setCountdownMs(safeNextRotationMs);
       setError("");
       setLoading(false);

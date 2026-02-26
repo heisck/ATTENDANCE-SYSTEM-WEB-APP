@@ -3,10 +3,11 @@ import { auth } from "@/lib/auth";
 import {
   REVERIFY_MAX_ATTEMPTS,
   REVERIFY_MAX_RETRIES,
-  allocateRetryDeadline,
+  allocateRetrySlot,
   syncAttendanceSessionState,
 } from "@/lib/attendance";
 import { db } from "@/lib/db";
+import { notifyStudentReverifySlot } from "@/lib/reverify-notifications";
 
 export async function POST(
   _request: NextRequest,
@@ -35,13 +36,6 @@ export async function POST(
     return NextResponse.json(
       { error: "Reverification window is closed" },
       { status: 410 }
-    );
-  }
-
-  if (!syncedSession.reverifyEndsAt) {
-    return NextResponse.json(
-      { error: "Session reverification window is unavailable" },
-      { status: 500 }
     );
   }
 
@@ -94,12 +88,12 @@ export async function POST(
   }
 
   const now = new Date();
-  const retryDeadline = await allocateRetryDeadline(
+  const retrySlot = await allocateRetrySlot(
     id,
-    syncedSession.reverifyEndsAt,
+    syncedSession,
     now
   );
-  if (!retryDeadline) {
+  if (!retrySlot) {
     await db.attendanceRecord.update({
       where: { id: record.id },
       data: {
@@ -120,22 +114,44 @@ export async function POST(
       reverifyStatus: "RETRY_PENDING",
       reverifyRetryCount: { increment: 1 },
       reverifyAttemptCount: { increment: 1 },
-      reverifyRequestedAt: now,
-      reverifyDeadlineAt: retryDeadline,
+      reverifyRequestedAt: retrySlot.startsAt,
+      reverifyDeadlineAt: retrySlot.endsAt,
       flagged: true,
     },
     select: {
+      studentId: true,
       id: true,
       reverifyStatus: true,
       reverifyRetryCount: true,
       reverifyAttemptCount: true,
+      reverifyRequestedAt: true,
       reverifyDeadlineAt: true,
     },
+  });
+
+  await notifyStudentReverifySlot({
+    studentId: updated.studentId,
+    sessionId: id,
+    sequence: retrySlot.sequence,
+    slotStartsAt: retrySlot.startsAt,
+    slotEndsAt: retrySlot.endsAt,
+    attemptCount: updated.reverifyAttemptCount,
+    retryCount: updated.reverifyRetryCount,
+    reason: "MANUAL_RETRY",
+  }).catch((error) => {
+    console.error("[reverify] failed to send manual retry notification", {
+      sessionId: id,
+      studentId: updated.studentId,
+      error,
+    });
   });
 
   return NextResponse.json({
     success: true,
     message: "Retry slot assigned",
+    sequenceId: retrySlot.sequenceId,
+    slotStartsAt: retrySlot.startsAt,
+    slotEndsAt: retrySlot.endsAt,
     record: updated,
   });
 }

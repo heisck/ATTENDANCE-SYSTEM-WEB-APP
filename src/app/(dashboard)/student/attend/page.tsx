@@ -50,6 +50,7 @@ interface AttendanceResult {
 }
 
 interface SessionSyncResponse {
+  serverNow?: string;
   session: {
     id: string;
     status: "ACTIVE" | "CLOSED";
@@ -70,7 +71,16 @@ interface SessionSyncResponse {
       | "PASSED"
       | "FAILED"
       | "MANUAL_PRESENT";
+    reverifyRequestedAt: string | null;
     reverifyDeadlineAt: string | null;
+    reverifySlotStartsAt: string | null;
+    reverifySlotEndsAt: string | null;
+    reverifyTargetSequence: number | null;
+    reverifyTargetSequenceId: string | null;
+    reverifyPromptAt: string | null;
+    reverifyNotifyLeadMs: number;
+    reverifyBatchNumber: number | null;
+    reverifyTotalBatches: number | null;
     reverifyAttemptCount: number;
     reverifyRetryCount: number;
     reverifyMarkedAt: string | null;
@@ -127,12 +137,38 @@ export default function AttendPage() {
   const [reverifyPasskeyVerified, setReverifyPasskeyVerified] = useState(false);
   const [reverifySubmitting, setReverifySubmitting] = useState(false);
   const [reverifyError, setReverifyError] = useState<string | null>(null);
-  const [reverifyCountdown, setReverifyCountdown] = useState<number | null>(null);
+  const [serverClockOffsetMs, setServerClockOffsetMs] = useState(0);
+  const [clockTick, setClockTick] = useState(() => Date.now());
+  const reverifyToastKeyRef = useRef<string | number | null>(null);
 
   const reverifyStatus = syncState?.attendance?.reverifyStatus;
   const isPendingReverify =
     reverifyStatus === "PENDING" || reverifyStatus === "RETRY_PENDING";
   const qrPortStatus = syncState?.qrPortStatus ?? qrPortStatusLocal ?? null;
+  const reverifyNowTs = clockTick + serverClockOffsetMs;
+  const reverifySlotStartsAtTs = syncState?.attendance?.reverifySlotStartsAt
+    ? new Date(syncState.attendance.reverifySlotStartsAt).getTime()
+    : null;
+  const reverifySlotEndsAtTs = syncState?.attendance?.reverifySlotEndsAt
+    ? new Date(syncState.attendance.reverifySlotEndsAt).getTime()
+    : null;
+  const reverifyPromptAtTs = syncState?.attendance?.reverifyPromptAt
+    ? new Date(syncState.attendance.reverifyPromptAt).getTime()
+    : null;
+  const reverifyTargetSequenceId = syncState?.attendance?.reverifyTargetSequenceId ?? null;
+  const reverifyBatchLabel =
+    syncState?.attendance?.reverifyBatchNumber && syncState?.attendance?.reverifyTotalBatches
+      ? `${syncState.attendance.reverifyBatchNumber}/${syncState.attendance.reverifyTotalBatches}`
+      : null;
+  const reverifySlotActive =
+    reverifySlotStartsAtTs !== null &&
+    reverifySlotEndsAtTs !== null &&
+    reverifyNowTs >= reverifySlotStartsAtTs &&
+    reverifyNowTs <= reverifySlotEndsAtTs;
+  const reverifySecondsToStart =
+    reverifySlotStartsAtTs !== null
+      ? Math.max(0, Math.ceil((reverifySlotStartsAtTs - reverifyNowTs) / 1000))
+      : null;
 
   const mapSessions = (data: any[]): ActiveSession[] =>
     data.map((s: any) => ({
@@ -253,6 +289,12 @@ export default function AttendPage() {
           throw new Error(body.error || "Failed to sync session state");
         }
         if (!cancelled) {
+          if (typeof body.serverNow === "string") {
+            const serverNowTs = new Date(body.serverNow).getTime();
+            if (Number.isFinite(serverNowTs)) {
+              setServerClockOffsetMs(serverNowTs - Date.now());
+            }
+          }
           setSyncState(body);
           setQrPortStatusLocal(body.qrPortStatus ?? null);
           setSyncError(null);
@@ -276,18 +318,69 @@ export default function AttendPage() {
     if (!isPendingReverify) {
       setReverifyPasskeyVerified(false);
       setReverifySubmitting(false);
-      setReverifyCountdown(null);
+      if (reverifyToastKeyRef.current) {
+        toast.dismiss(reverifyToastKeyRef.current);
+        reverifyToastKeyRef.current = null;
+      }
     }
   }, [isPendingReverify]);
 
   useEffect(() => {
-    if (!reverifyPasskeyVerified || !isPendingReverify) return;
-    setReverifyCountdown(6);
-    const t = setInterval(() => {
-      setReverifyCountdown((c) => (c === null || c <= 1 ? null : c - 1));
-    }, 1000);
+    if (!isPendingReverify) return;
+    const t = setInterval(() => setClockTick(Date.now()), 250);
     return () => clearInterval(t);
-  }, [reverifyPasskeyVerified, isPendingReverify]);
+  }, [isPendingReverify]);
+
+  useEffect(() => {
+    if (
+      !isPendingReverify ||
+      !reverifyPromptAtTs ||
+      !reverifySlotStartsAtTs ||
+      !reverifyTargetSequenceId ||
+      reverifyNowTs < reverifyPromptAtTs
+    ) {
+      if (reverifyToastKeyRef.current) {
+        toast.dismiss(reverifyToastKeyRef.current);
+        reverifyToastKeyRef.current = null;
+      }
+      return;
+    }
+
+    const toastKey = `reverify-${activeSessionId}-${reverifyTargetSequenceId}-${reverifySlotStartsAtTs}`;
+    if (reverifyToastKeyRef.current === toastKey) {
+      return;
+    }
+    if (reverifyToastKeyRef.current) {
+      toast.dismiss(reverifyToastKeyRef.current);
+    }
+    reverifyToastKeyRef.current = toastKey;
+
+    const startLabel = new Date(reverifySlotStartsAtTs).toLocaleTimeString();
+    const batchPrefix = reverifyBatchLabel ? `Batch ${reverifyBatchLabel}. ` : "";
+
+    toast.info(`${batchPrefix}Scan ${reverifyTargetSequenceId} at ${startLabel}.`, {
+      id: toastKey,
+      duration: Infinity,
+      description: "Complete passkey now and keep this page open for your exact slot.",
+    });
+  }, [
+    activeSessionId,
+    isPendingReverify,
+    reverifyBatchLabel,
+    reverifyNowTs,
+    reverifyPromptAtTs,
+    reverifySlotStartsAtTs,
+    reverifyTargetSequenceId,
+  ]);
+
+  useEffect(
+    () => () => {
+      if (reverifyToastKeyRef.current) {
+        toast.dismiss(reverifyToastKeyRef.current);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     if (syncError) toast.error(syncError);
@@ -422,7 +515,17 @@ export default function AttendPage() {
                     reverifyStatus: body.record.reverifyStatus,
                     reverifyRetryCount: body.record.reverifyRetryCount,
                     reverifyAttemptCount: body.record.reverifyAttemptCount,
+                    reverifyRequestedAt: body.record.reverifyRequestedAt,
                     reverifyDeadlineAt: body.record.reverifyDeadlineAt,
+                    reverifySlotStartsAt: body.record.reverifyRequestedAt,
+                    reverifySlotEndsAt: body.record.reverifyDeadlineAt,
+                    reverifyTargetSequenceId: body.sequenceId ?? null,
+                    reverifyPromptAt: body.record.reverifyRequestedAt
+                      ? new Date(
+                          new Date(body.record.reverifyRequestedAt).getTime() -
+                            (current.attendance?.reverifyNotifyLeadMs ?? 10_000)
+                        ).toISOString()
+                      : null,
                     canRequestRetry: false,
                   }
                 : current.attendance,
@@ -537,15 +640,24 @@ export default function AttendPage() {
     switch (attendance.reverifyStatus) {
       case "PENDING":
       case "RETRY_PENDING":
+        {
+          const sequenceText = attendance.reverifyTargetSequenceId
+            ? `Scan ${attendance.reverifyTargetSequenceId}`
+            : "Scan your assigned QR sequence";
+          const batchText =
+            attendance.reverifyBatchNumber && attendance.reverifyTotalBatches
+              ? ` (Batch ${attendance.reverifyBatchNumber}/${attendance.reverifyTotalBatches})`
+              : "";
         return {
           tone: "amber",
-          title: "Reverification required",
+            title: `Reverification required${batchText}`,
           body: attendance.reverifyDeadlineAt
-            ? `Complete reverification before ${new Date(
+                ? `${sequenceText} before ${new Date(
                 attendance.reverifyDeadlineAt
               ).toLocaleTimeString()}.`
-            : "Complete reverification now.",
+                : `${sequenceText} now.`,
         };
+        }
       case "PASSED":
       case "MANUAL_PRESENT":
         return {
@@ -585,6 +697,12 @@ export default function AttendPage() {
     setReverifyPasskeyVerified(false);
     setReverifySubmitting(false);
     setReverifyError(null);
+    setServerClockOffsetMs(0);
+    setClockTick(Date.now());
+    if (reverifyToastKeyRef.current) {
+      toast.dismiss(reverifyToastKeyRef.current);
+      reverifyToastKeyRef.current = null;
+    }
   }
 
   return (
@@ -833,31 +951,43 @@ export default function AttendPage() {
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <div>
                       <p className="text-sm font-medium">
-                        Reverification about to start. Verify your passkey again.
+                        Reverification assigned. Verify your passkey now.
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        After verification, you&apos;ll get a 6-second heads-up before the scan window.
+                        {reverifyTargetSequenceId
+                          ? `Your exact slot is ${reverifyTargetSequenceId}. Keep this page open until your slot starts.`
+                          : "Keep this page open. You will be guided to your exact slot."}
                       </p>
                     </div>
                   </div>
 
                   {!reverifyPasskeyVerified ? (
                     <WebAuthnPrompt onVerified={() => setReverifyPasskeyVerified(true)} />
-                  ) : reverifyCountdown !== null && reverifyCountdown > 0 ? (
-                    <div className="status-panel-subtle p-4 text-center">
-                      <p className="text-lg font-semibold">
-                        Scan in {reverifyCountdown} second{reverifyCountdown !== 1 ? "s" : ""}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Point your camera at the QR when the countdown ends.
-                      </p>
-                    </div>
                   ) : (
                     <div className="space-y-2">
                       <p className="text-xs font-medium text-foreground">
-                        Passkey verified. Scan the reverification QR now.
+                        Passkey verified.
                       </p>
-                      {reverifySubmitting ? (
+                      {!reverifySlotActive ? (
+                        <div className="status-panel-subtle p-4 text-center">
+                          {reverifySlotStartsAtTs && reverifySecondsToStart !== null && reverifySecondsToStart > 0 ? (
+                            <>
+                              <p className="text-lg font-semibold">
+                                Waiting for {reverifyTargetSequenceId ?? "your slot"} in{" "}
+                                {reverifySecondsToStart}s
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Slot starts at{" "}
+                                {new Date(reverifySlotStartsAtTs).toLocaleTimeString()}.
+                              </p>
+                            </>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">
+                              Waiting for your assigned slot window.
+                            </p>
+                          )}
+                        </div>
+                      ) : reverifySubmitting ? (
                         <div className="status-panel-subtle flex items-center gap-2 text-sm">
                           <Loader2 className="h-4 w-4 animate-spin" />
                           Submitting reverification...

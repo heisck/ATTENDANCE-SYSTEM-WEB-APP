@@ -95,14 +95,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid QR timestamp" }, { status: 400 });
     }
 
-    const scanSkewMs = Math.abs(now.getTime() - scanTimestamp);
-    if (scanSkewMs > 8_000) {
-      return NextResponse.json(
-        { error: "QR scan is too old. Scan again and submit immediately." },
-        { status: 400 }
-      );
-    }
-
     const syncedSession = await syncAttendanceSessionState(parsed.sessionId);
     if (!syncedSession) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
@@ -116,6 +108,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Initial attendance window is closed. Wait for reverification prompts." },
         { status: 410 }
+      );
+    }
+
+    const serverNowTs = Date.now();
+    const maxScanAgeMs = syncedSession.qrRotationMs + syncedSession.qrGraceMs;
+    const scanAgeMs = serverNowTs - scanTimestamp;
+    if (scanAgeMs > maxScanAgeMs || scanAgeMs < -1_500) {
+      return NextResponse.json(
+        { error: "QR scan is out of the allowed 6-second validation window. Scan again." },
+        { status: 400 }
       );
     }
 
@@ -158,7 +160,7 @@ export async function POST(request: NextRequest) {
       attendanceSession.qrSecret,
       parsed.qrToken,
       "INITIAL",
-      scanTimestamp,
+      serverNowTs,
       syncedSession.qrRotationMs,
       syncedSession.qrGraceMs
     );

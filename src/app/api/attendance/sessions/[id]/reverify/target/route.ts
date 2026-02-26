@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { syncAttendanceSessionState } from "@/lib/attendance";
+import { allocateRetrySlot, syncAttendanceSessionState } from "@/lib/attendance";
 import { db } from "@/lib/db";
+import { notifyStudentReverifySlot } from "@/lib/reverify-notifications";
 
 export async function POST(
   request: NextRequest,
@@ -33,13 +34,6 @@ export async function POST(
     );
   }
 
-  if (!syncedSession.reverifyEndsAt) {
-    return NextResponse.json(
-      { error: "Session reverification window is unavailable" },
-      { status: 500 }
-    );
-  }
-
   const attendanceSession = await db.attendanceSession.findUnique({
     where: { id },
     select: { lecturerId: true },
@@ -61,19 +55,18 @@ export async function POST(
   }
 
   const now = new Date();
-  const targetDeadline = new Date(
-    Math.min(
-      syncedSession.reverifyEndsAt.getTime() - 1000,
-      now.getTime() + 60_000
-    )
-  );
 
   const records = await db.attendanceRecord.findMany({
     where: {
       sessionId: id,
       studentId: { in: studentIds },
     },
-    select: { id: true },
+    select: {
+      id: true,
+      studentId: true,
+      reverifyAttemptCount: true,
+      reverifyRetryCount: true,
+    },
   });
 
   if (records.length === 0) {
@@ -83,25 +76,74 @@ export async function POST(
     );
   }
 
-  await db.$transaction(async (tx) => {
-    for (const record of records) {
-      await tx.attendanceRecord.update({
-        where: { id: record.id },
-        data: {
-          reverifyRequired: true,
-          reverifyStatus: "RETRY_PENDING",
-          reverifyAttemptCount: { increment: 1 },
-          reverifyRequestedAt: now,
-          reverifyDeadlineAt: targetDeadline,
-          flagged: true,
-        },
-      });
+  const assignments: Array<{
+    studentId: string;
+    sequence: number;
+    slotStartsAt: Date;
+    slotEndsAt: Date;
+    attemptCount: number;
+    retryCount: number;
+  }> = [];
+
+  for (const record of records) {
+    const slot = await allocateRetrySlot(id, syncedSession, now);
+    if (!slot) continue;
+
+    const updated = await db.attendanceRecord.update({
+      where: { id: record.id },
+      data: {
+        reverifyRequired: true,
+        reverifyStatus: "RETRY_PENDING",
+        reverifyAttemptCount: { increment: 1 },
+        reverifyRequestedAt: slot.startsAt,
+        reverifyDeadlineAt: slot.endsAt,
+        flagged: true,
+      },
+      select: {
+        studentId: true,
+        reverifyAttemptCount: true,
+        reverifyRetryCount: true,
+      },
     }
-  });
+    );
+
+    assignments.push({
+      studentId: updated.studentId,
+      sequence: slot.sequence,
+      slotStartsAt: slot.startsAt,
+      slotEndsAt: slot.endsAt,
+      attemptCount: updated.reverifyAttemptCount,
+      retryCount: updated.reverifyRetryCount,
+    });
+  }
+
+  if (assignments.length > 0) {
+    await Promise.allSettled(
+      assignments.map((item) =>
+        notifyStudentReverifySlot({
+          studentId: item.studentId,
+          sessionId: id,
+          sequence: item.sequence,
+          slotStartsAt: item.slotStartsAt,
+          slotEndsAt: item.slotEndsAt,
+          attemptCount: item.attemptCount,
+          retryCount: item.retryCount,
+          reason: "LECTURER_TARGET",
+        })
+      )
+    );
+  }
+
+  if (assignments.length === 0) {
+    return NextResponse.json(
+      { error: "No reverification slots are available in the remaining session window" },
+      { status: 409 }
+    );
+  }
 
   return NextResponse.json({
     success: true,
-    message: `Reverification opened for ${records.length} student(s)`,
-    deadlineAt: targetDeadline,
+    message: `Reverification opened for ${assignments.length} student(s)`,
+    assignedCount: assignments.length,
   });
 }

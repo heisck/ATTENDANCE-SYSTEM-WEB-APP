@@ -12,7 +12,18 @@ export function getQrSequence(timestamp: number, rotationMs: number = DEFAULT_BU
   return Math.floor(timestamp / rotationMs);
 }
 
-function generatePhaseBoundQrToken(
+export function getQrSequenceStartTs(
+  sequence: number,
+  rotationMs: number = DEFAULT_BUCKET_INTERVAL_MS
+): number {
+  return sequence * rotationMs;
+}
+
+export function formatQrSequenceId(sequence: number): string {
+  return `E${String(sequence).padStart(3, "0")}`;
+}
+
+export function generatePhaseBoundQrToken(
   secret: string,
   phase: AttendancePhase,
   sequence: number
@@ -66,6 +77,16 @@ export function verifyQrTokenStrict(
   }
 
   return false;
+}
+
+export function verifyQrTokenForSequence(
+  secret: string,
+  token: string,
+  phase: AttendancePhase,
+  sequence: number
+): boolean {
+  const expected = generatePhaseBoundQrToken(secret, phase, sequence);
+  return safeEqual(token, expected);
 }
 
 export function getNextRotationMs(rotationMs: number = DEFAULT_BUCKET_INTERVAL_MS): number {

@@ -5,7 +5,11 @@
 
 import { db } from "./db";
 import { syncAttendanceSessionState, getPhaseEndsAt } from "./attendance";
-import { generateQrPayload, getNextRotationMs } from "./qr";
+import {
+  formatQrSequenceId,
+  generateQrPayload,
+  getQrSequence,
+} from "./qr";
 
 export async function requestQrPort(sessionId: string, studentId: string) {
   const session = await db.attendanceSession.findUnique({
@@ -93,15 +97,19 @@ export async function getLiveQrForPort(sessionId: string, studentId: string) {
   });
   if (!attendanceSession) return null;
 
+  const nowTs = Date.now();
   const qr = generateQrPayload(
     attendanceSession.id,
     attendanceSession.qrSecret,
     syncedSession.phase,
-    syncedSession.qrRotationMs
+    syncedSession.qrRotationMs,
+    nowTs
   );
-  const nextRotation = getNextRotationMs(syncedSession.qrRotationMs);
-  const sequenceId = `E${String(qr.seq).padStart(3, "0")}`;
-  const nextSequenceId = `E${String(qr.seq + 1).padStart(3, "0")}`;
+  const currentSequence = getQrSequence(nowTs, syncedSession.qrRotationMs);
+  const nextRotationAtTs = (currentSequence + 1) * syncedSession.qrRotationMs;
+  const nextRotation = Math.max(0, nextRotationAtTs - nowTs);
+  const sequenceId = formatQrSequenceId(qr.seq);
+  const nextSequenceId = formatQrSequenceId(qr.seq + 1);
   const cueColor = syncedSession.phase === "REVERIFY" ? "blue" : "green";
 
   return {
@@ -113,6 +121,8 @@ export async function getLiveQrForPort(sessionId: string, studentId: string) {
     phaseEndsAt: getPhaseEndsAt(syncedSession),
     rotationMs: syncedSession.qrRotationMs,
     nextRotationMs: nextRotation,
+    nextRotationAtTs,
+    serverNowTs: nowTs,
   };
 }
 

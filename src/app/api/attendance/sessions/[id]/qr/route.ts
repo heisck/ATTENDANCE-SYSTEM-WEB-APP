@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getPhaseEndsAt, syncAttendanceSessionState } from "@/lib/attendance";
-import { generateQrPayload, getNextRotationMs } from "@/lib/qr";
+import {
+  formatQrSequenceId,
+  generateQrPayload,
+  getQrSequence,
+} from "@/lib/qr";
 
 export async function GET(
   _request: NextRequest,
@@ -37,16 +41,20 @@ export async function GET(
     return NextResponse.json({ error: "Session is closed" }, { status: 410 });
   }
 
+  const nowTs = Date.now();
   const qr = generateQrPayload(
     attendanceSession.id,
     attendanceSession.qrSecret,
     syncedSession.phase,
-    syncedSession.qrRotationMs
+    syncedSession.qrRotationMs,
+    nowTs
   );
-  const nextRotation = getNextRotationMs(syncedSession.qrRotationMs);
-  const sequenceId = `E${String(qr.seq).padStart(3, "0")}`;
+  const currentSequence = getQrSequence(nowTs, syncedSession.qrRotationMs);
+  const nextRotationAtTs = (currentSequence + 1) * syncedSession.qrRotationMs;
+  const nextRotation = Math.max(0, nextRotationAtTs - nowTs);
+  const sequenceId = formatQrSequenceId(qr.seq);
   const nextSequence = qr.seq + 1;
-  const nextSequenceId = `E${String(nextSequence).padStart(3, "0")}`;
+  const nextSequenceId = formatQrSequenceId(nextSequence);
   const cueColor = syncedSession.phase === "REVERIFY" ? "blue" : "green";
 
   return NextResponse.json({
@@ -57,12 +65,14 @@ export async function GET(
     nextSequenceId,
     upcomingSequenceIds: [
       nextSequenceId,
-      `E${String(nextSequence + 1).padStart(3, "0")}`,
+      formatQrSequenceId(nextSequence + 1),
     ],
     cueColor,
     phase: syncedSession.phase,
     phaseEndsAt: getPhaseEndsAt(syncedSession),
     rotationMs: syncedSession.qrRotationMs,
     nextRotationMs: nextRotation,
+    nextRotationAtTs,
+    serverNowTs: nowTs,
   });
 }
