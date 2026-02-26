@@ -78,7 +78,7 @@ function LoginForm() {
 
   return (
     <AuthPageLayout pageLabel="Sign In" contentMaxWidthClass="max-w-xl">
-      <div className="mx-auto w-full max-w-md">
+      <div className="mx-auto flex h-full w-full max-w-md flex-col justify-center">
         <h1 className="text-xl font-semibold tracking-tight">Welcome back</h1>
         <p className="mt-1 text-sm text-muted-foreground">Sign in to your ATTENDANCE IQ account.</p>
 

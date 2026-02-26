@@ -172,7 +172,7 @@ export default function RegisterPage() {
           stepCircleContainerClassName="h-full max-w-none rounded-none border-0 bg-transparent shadow-none"
           stepContainerClassName="hidden"
           contentClassName="px-0 pb-2 sm:px-0 sm:pb-2"
-          footerClassName="px-2 pb-1 sm:px-2 sm:pb-1 lg:px-0 lg:pb-0"
+          footerClassName="px-2 pb-[calc(env(safe-area-inset-bottom)+0.25rem)] sm:px-2 sm:pb-[calc(env(safe-area-inset-bottom)+0.25rem)] lg:px-0 lg:pb-0"
           footerInnerClassName="mt-0 w-full"
         >
           <Step>

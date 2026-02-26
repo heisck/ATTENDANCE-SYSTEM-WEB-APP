@@ -24,8 +24,8 @@ export function AuthPageLayout({
   headerCounter,
 }: AuthPageLayoutProps) {
   return (
-    <div className="min-h-screen bg-background">
-      <header className="fixed inset-x-0 top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <div className="min-h-dvh bg-background">
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-border bg-background/95 pt-[env(safe-area-inset-top)] backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
             <Link href="/" className="inline-flex items-center">
@@ -66,7 +66,7 @@ export function AuthPageLayout({
         </div>
       </header>
 
-      <main className="h-screen overflow-hidden pt-16">
+      <main className="h-dvh overflow-hidden pb-[env(safe-area-inset-bottom)] pt-[calc(4rem+env(safe-area-inset-top))]">
         <div className="mx-auto flex h-full w-full max-w-7xl flex-col px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
           <div className={`mx-auto flex h-full w-full min-h-0 items-center ${contentMaxWidthClass}`}>
             {children}
