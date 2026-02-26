@@ -244,18 +244,18 @@ export default function RegisterPage() {
               </p>
 
               <div className="space-y-4">
-                <Field>
+                <Field label="Full Name" htmlFor="name">
                   <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     id="name"
                     value={form.name}
                     onChange={(e) => update("name", e.target.value)}
                     placeholder="Full name"
-                    className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex h-11 w-full rounded-xl border border-border/70 bg-muted/35 py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />
                 </Field>
 
-                <Field>
+                <Field label="Institutional Email" htmlFor="institutionalEmail">
                   <GraduationCap className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     id="institutionalEmail"
@@ -263,11 +263,11 @@ export default function RegisterPage() {
                     value={form.institutionalEmail}
                     onChange={(e) => update("institutionalEmail", e.target.value)}
                     placeholder="Institutional email (@st.knust.edu.gh)"
-                    className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex h-11 w-full rounded-xl border border-border/70 bg-muted/35 py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />
                 </Field>
 
-                <Field>
+                <Field label="Personal Email" htmlFor="personalEmail">
                   <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     id="personalEmail"
@@ -275,7 +275,7 @@ export default function RegisterPage() {
                     value={form.personalEmail}
                     onChange={(e) => update("personalEmail", e.target.value)}
                     placeholder="Personal email (for verification/reset)"
-                    className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex h-11 w-full rounded-xl border border-border/70 bg-muted/35 py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />
                 </Field>
               </div>
@@ -290,7 +290,7 @@ export default function RegisterPage() {
               </p>
 
               <div className="space-y-4">
-                <Field>
+                <Field label="Password" htmlFor="password">
                   <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     id="password"
@@ -298,7 +298,7 @@ export default function RegisterPage() {
                     value={form.password}
                     onChange={(e) => update("password", e.target.value)}
                     placeholder="Password (minimum 8 characters)"
-                    className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-10 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex h-11 w-full rounded-xl border border-border/70 bg-muted/35 py-2 pl-10 pr-10 text-sm placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />
                   <button
                     type="button"
@@ -310,36 +310,36 @@ export default function RegisterPage() {
                   </button>
                 </Field>
 
-                <Field>
+                <Field label="Student ID" htmlFor="studentId">
                   <BadgeCheck className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     id="studentId"
                     value={form.studentId}
                     onChange={(e) => update("studentId", e.target.value)}
                     placeholder="Student ID (e.g. 20241234)"
-                    className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex h-11 w-full rounded-xl border border-border/70 bg-muted/35 py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />
                 </Field>
 
-                <Field>
+                <Field label="Index Number" htmlFor="indexNumber">
                   <BadgeCheck className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     id="indexNumber"
                     value={form.indexNumber}
                     onChange={(e) => update("indexNumber", e.target.value)}
                     placeholder="Index number (e.g. ITC/24/0012)"
-                    className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex h-11 w-full rounded-xl border border-border/70 bg-muted/35 py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />
                 </Field>
 
-                <Field>
+                <Field label="University Code" htmlFor="org">
                   <Building2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     id="org"
                     value={form.organizationSlug}
                     onChange={(e) => update("organizationSlug", e.target.value)}
                     placeholder="University code (e.g. knust)"
-                    className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex h-11 w-full rounded-xl border border-border/70 bg-muted/35 py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />
                 </Field>
               </div>
@@ -386,12 +386,22 @@ export default function RegisterPage() {
 }
 
 function Field({
+  label,
+  htmlFor,
   children,
 }: {
+  label: string;
+  htmlFor: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="py-0.5">
+    <div className="space-y-2">
+      <label
+        htmlFor={htmlFor}
+        className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground"
+      >
+        {label}
+      </label>
       <div className="relative">{children}</div>
     </div>
   );
