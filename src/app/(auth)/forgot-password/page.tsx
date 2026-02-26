@@ -2,9 +2,8 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { Mail, Loader2 } from "lucide-react";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { AuthPageLayout } from "@/components/auth/auth-page-layout";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -37,20 +36,14 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="absolute top-4 right-4">
-        <ThemeToggle />
-      </div>
-      <div className="w-full max-w-sm space-y-6 rounded-lg border border-border bg-card p-6">
-        <div className="text-center">
-          <Image src="/web-app-manifest-192x192.png" alt="App logo" width={40} height={40} className="mx-auto rounded logo-mark" />
-          <h1 className="mt-3 text-2xl font-bold">Forgot password</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Enter your account email to receive a reset link.
-          </p>
-        </div>
+    <AuthPageLayout pageLabel="Forgot Password" contentMaxWidthClass="max-w-xl">
+      <div className="mx-auto w-full max-w-md">
+        <h1 className="text-xl font-semibold tracking-tight">Forgot password</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Enter your account email to receive a reset link.
+        </p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           {message && (
             <div className="rounded-md border border-green-300 bg-green-50 p-3 text-sm text-green-800">
               {message}
@@ -62,40 +55,38 @@ export default function ForgotPasswordPage() {
             </div>
           )}
 
-          <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium">
+          <div className="group relative">
+            <label htmlFor="email" className="sr-only">
               Email
             </label>
-            <div className="relative">
-              <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                placeholder="you@university.edu"
-                className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
+            <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              placeholder="you@university.edu"
+              className="flex h-11 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm placeholder:text-muted-foreground/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
           </div>
 
           <button
             type="submit"
             disabled={submitting}
-            className="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            className="inline-flex h-11 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send Reset Link"}
           </button>
         </form>
 
-        <p className="text-center text-sm text-muted-foreground">
+        <p className="mt-5 text-center text-sm text-muted-foreground">
           Back to{" "}
           <Link href="/login" className="font-medium text-primary hover:underline">
             Sign In
           </Link>
         </p>
       </div>
-    </div>
+    </AuthPageLayout>
   );
 }

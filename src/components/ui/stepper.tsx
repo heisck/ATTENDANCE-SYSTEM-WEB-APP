@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import { motion, AnimatePresence, type Variants } from "motion/react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface StepperProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
@@ -18,6 +19,7 @@ interface StepperProps extends HTMLAttributes<HTMLDivElement> {
   stepContainerClassName?: string;
   contentClassName?: string;
   footerClassName?: string;
+  footerInnerClassName?: string;
   backButtonProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
   nextButtonProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
   backButtonText?: string;
@@ -33,6 +35,7 @@ interface StepperProps extends HTMLAttributes<HTMLDivElement> {
 
 export default function Stepper({
   children,
+  className,
   initialStep = 1,
   onStepChange = () => {},
   onFinalStepCompleted = () => {},
@@ -40,6 +43,7 @@ export default function Stepper({
   stepContainerClassName = "",
   contentClassName = "",
   footerClassName = "",
+  footerInnerClassName = "mt-10",
   backButtonProps = {},
   nextButtonProps = {},
   backButtonText = "Back",
@@ -94,12 +98,18 @@ export default function Stepper({
   };
 
   return (
-    <div className="flex w-full flex-col items-center justify-center px-1 sm:px-2" {...rest}>
+    <div className={cn("flex w-full flex-col items-center justify-center px-1 sm:px-2", className)} {...rest}>
       <div
-        className={`mx-auto flex h-[clamp(460px,82vh,760px)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-xl ${stepCircleContainerClassName}`}
+        className={cn(
+          "mx-auto flex h-[clamp(460px,82vh,760px)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-xl",
+          stepCircleContainerClassName,
+        )}
       >
         <div
-          className={`${stepContainerClassName} flex w-full flex-wrap items-center justify-center gap-3 px-7 pb-6 pt-7 sm:px-8 sm:pb-7 sm:pt-8`}
+          className={cn(
+            "flex w-full flex-wrap items-center justify-center gap-3 px-7 pb-6 pt-7 sm:px-8 sm:pb-7 sm:pt-8",
+            stepContainerClassName,
+          )}
         >
           {stepsArray.map((_, index) => {
             const stepNumber = index + 1;
@@ -134,14 +144,14 @@ export default function Stepper({
           isCompleted={isCompleted}
           currentStep={currentStep}
           direction={direction}
-          className={`min-h-0 flex-1 px-7 pb-4 sm:px-8 sm:pb-5 ${contentClassName}`}
+          className={cn("min-h-0 flex-1 px-7 pb-4 sm:px-8 sm:pb-5", contentClassName)}
         >
           {stepsArray[currentStep - 1]}
         </StepContentWrapper>
 
         {!isCompleted && (
-          <div className={`px-7 pb-7 sm:px-8 sm:pb-8 ${footerClassName}`}>
-            <div className="mt-10 flex items-center justify-between">
+          <div className={cn("px-7 pb-7 sm:px-8 sm:pb-8", footerClassName)}>
+            <div className={cn("flex items-center justify-between", footerInnerClassName)}>
               <button
                 onClick={handleBack}
                 type="button"
@@ -227,7 +237,7 @@ interface StepProps {
 }
 
 export function Step({ children }: StepProps) {
-  return <div className="mx-auto w-full max-w-2xl px-2 py-1 sm:px-3">{children}</div>;
+  return <div className="mx-auto w-full max-w-none py-1">{children}</div>;
 }
 
 interface StepIndicatorProps {

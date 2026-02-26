@@ -6,11 +6,11 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-background">
-      <nav className="border-b border-border">
+      <nav className="fixed inset-x-0 top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center gap-3">
-              <Image src="/web-app-manifest-192x192.png" alt="App logo" width={36} height={36} className="rounded logo-mark" />
+              <Image src="/icon1.png" alt="App logo" width={36} height={36} className="rounded logo-mark" />
             </div>
             <div className="flex items-center gap-4">
               <ThemeToggle />
@@ -31,7 +31,7 @@ export default function HomePage() {
         </div>
       </nav>
 
-      <main>
+      <main className="pt-16">
         <section className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
           <div className="text-center">
             <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
@@ -90,7 +90,7 @@ export default function HomePage() {
                 score="+20 pts"
               />
               <FeatureCard
-                icon={<Image src="/web-app-manifest-192x192.png" alt="" width={32} height={32} className="rounded logo-mark" />}
+                icon={<Image src="/icon1.png" alt="" width={32} height={32} className="rounded logo-mark" />}
                 title="Network Validation"
                 description="Campus WiFi IP range verification adds contextual trust evidence."
                 score="+10 pts"

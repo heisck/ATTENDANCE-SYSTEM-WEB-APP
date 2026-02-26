@@ -3,9 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
-import Link from "next/link";
 import { toast } from "sonner";
-import Image from "next/image";
 import {
   BadgeCheck,
   BookOpenCheck,
@@ -18,7 +16,7 @@ import {
   ShieldCheck,
   User,
 } from "lucide-react";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { AuthPageLayout } from "@/components/auth/auth-page-layout";
 import Stepper, { Step } from "@/components/ui/stepper";
 
 type RegisterForm = {
@@ -157,38 +155,28 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-5 py-10 sm:px-8 sm:py-12">
-      <div className="absolute right-4 top-4">
-        <ThemeToggle />
-      </div>
-
-      <div className="w-full max-w-4xl space-y-8">
-        <div className="text-center">
-          <Link href="/" className="inline-flex items-center gap-2">
-            <Image
-              src="/web-app-manifest-192x192.png"
-              alt="App logo"
-              width={42}
-              height={42}
-              className="rounded logo-mark"
-            />
-          </Link>
-          <h1 className="mt-4 text-2xl font-bold">Get Started</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Step {Math.min(activeStep, 5)} of 5. Learn the rules and create your student account.
-          </p>
-        </div>
-
+    <AuthPageLayout
+      pageLabel="Sign Up"
+      headerCounter={`${Math.min(activeStep, 5)}/5`}
+      contentMaxWidthClass="max-w-4xl"
+      headerLink={{ href: "/login", label: "Sign In" }}
+    >
+      <div className="flex h-full w-full flex-col overflow-hidden">
         <Stepper
+          className="flex h-full w-full flex-1 flex-col justify-start px-0"
           initialStep={1}
           onStepChange={(step) => setActiveStep(step)}
           onFinalStepCompleted={submitRegistration}
           nextButtonProps={{ disabled: loading }}
-          stepCircleContainerClassName="bg-card/95 backdrop-blur-sm shadow-2xl"
+          disableStepIndicators
+          stepCircleContainerClassName="h-full max-w-none rounded-none border-0 bg-transparent shadow-none"
+          stepContainerClassName="hidden"
+          contentClassName="px-0 pb-2 sm:px-0 sm:pb-2"
+          footerClassName="px-2 pb-1 sm:px-2 sm:pb-1 lg:px-0 lg:pb-0"
+          footerInnerClassName="mt-0 w-full"
         >
           <Step>
             <div className="space-y-5">
-              <h2 className="text-xl font-semibold">Welcome to guided sign up</h2>
               <p className="text-sm text-muted-foreground">
                 Before account creation, we walk you through how attendance works so you avoid
                 mistakes that can get records flagged.
@@ -222,9 +210,7 @@ export default function RegisterPage() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="rounded-xl border border-border bg-muted/35 p-4">
-                  <p className="mb-2 text-sm font-semibold text-foreground">
-                    Do
-                  </p>
+                  <p className="mb-2 text-sm font-semibold text-foreground">Do</p>
                   <ul className="space-y-1.5 text-sm text-muted-foreground">
                     <li>Use your own verified institutional account.</li>
                     <li>Enable location and follow lecturer session rules.</li>
@@ -232,9 +218,7 @@ export default function RegisterPage() {
                   </ul>
                 </div>
                 <div className="rounded-xl border border-border bg-muted/35 p-4">
-                  <p className="mb-2 text-sm font-semibold text-foreground">
-                    Don&apos;t
-                  </p>
+                  <p className="mb-2 text-sm font-semibold text-foreground">Don&apos;t</p>
                   <ul className="space-y-1.5 text-sm text-muted-foreground">
                     <li>Share credentials, QR tokens, or passkey device access.</li>
                     <li>Attempt proxy attendance for another student.</li>
@@ -396,14 +380,8 @@ export default function RegisterPage() {
           </Step>
         </Stepper>
 
-        <p className="text-center text-sm text-muted-foreground">
-          Already have an account?{" "}
-          <Link href="/login" className="font-medium text-primary hover:underline">
-            Sign In
-          </Link>
-        </p>
       </div>
-    </div>
+    </AuthPageLayout>
   );
 }
 
