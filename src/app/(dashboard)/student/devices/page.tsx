@@ -176,60 +176,72 @@ export default function DevicesPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {devices.map((device) => (
-            <div
-              key={device.credentialId}
-              className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="flex min-w-0 items-start gap-4">
-                <div className="rounded-full border border-border/60 bg-muted/55 p-3">
-                  {getDeviceIcon(device.userAgent)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-medium">{getDeviceName(device.userAgent)}</p>
-                    {device.backedUp && (
-                      <span className="inline-flex items-center rounded-full border border-border bg-muted/45 px-2 py-0.5 text-xs font-medium">
-                        Cloud Synced
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-muted-foreground truncate">
-                    {device.userAgent}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Registered {new Date(device.registeredAt).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
+          {devices.map((device) => {
+            const isOnlyDevice = devices.length === 1;
 
-              <div className="flex flex-wrap items-center justify-end gap-2 sm:shrink-0">
-                {devices.length === 1 && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted text-muted-foreground text-xs">
-                    <CheckCircle2 className="h-4 w-4" />
-                    Only Device
+            return (
+              <div
+                key={device.credentialId}
+                className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="flex min-w-0 items-start gap-4">
+                  <div className="rounded-full border border-border/60 bg-muted/55 p-3">
+                    {getDeviceIcon(device.userAgent)}
                   </div>
-                )}
-                <button
-                  onClick={() => handleDeleteDevice(device.credentialId)}
-                  disabled={passkeysLockedUntilAdminReset || deletingId === device.credentialId}
-                  title={
-                    passkeysLockedUntilAdminReset
-                      ? "Ask admin to unlock passkeys before deleting"
-                      : "Delete this passkey"
-                  }
-                  className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50 transition-colors"
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium">{getDeviceName(device.userAgent)}</p>
+                      {device.backedUp && (
+                        <span className="inline-flex items-center rounded-full border border-border bg-muted/45 px-2 py-0.5 text-xs font-medium">
+                          Cloud Synced
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground truncate">
+                      {device.userAgent}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Registered {new Date(device.registeredAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+
+                <div
+                  className={`w-full pl-[3.75rem] sm:w-auto sm:pl-0 ${
+                    isOnlyDevice
+                      ? "grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-end"
+                      : "flex justify-end"
+                  }`}
                 >
-                  {deletingId === device.credentialId ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4" />
+                  {isOnlyDevice && (
+                    <div className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-muted px-3 text-xs text-muted-foreground">
+                      <CheckCircle2 className="h-4 w-4" />
+                      Only Device
+                    </div>
                   )}
-                  Delete
-                </button>
+                  <button
+                    onClick={() => handleDeleteDevice(device.credentialId)}
+                    disabled={passkeysLockedUntilAdminReset || deletingId === device.credentialId}
+                    title={
+                      passkeysLockedUntilAdminReset
+                        ? "Ask admin to unlock passkeys before deleting"
+                        : "Delete this passkey"
+                    }
+                    className={`inline-flex h-9 items-center gap-1 rounded-md px-3 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50 ${
+                      isOnlyDevice ? "w-full justify-center" : ""
+                    }`}
+                  >
+                    {deletingId === device.credentialId ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                    Delete
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

@@ -1,10 +1,12 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getStudentGateState } from "@/lib/student-gates";
+import { TOTAL_SESSION_MS, deriveAttendancePhase } from "@/lib/attendance";
 import { redirect } from "next/navigation";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
 import { OverviewMetrics } from "@/components/dashboard/overview-metrics";
 import { PageHeader, SectionHeading } from "@/components/dashboard/page-header";
+import { StudentLiveSessionsTable } from "@/components/dashboard/student-live-sessions-table";
 import { PushNotificationToggle } from "@/components/push-notification-toggle";
 import { QrCode, AlertTriangle } from "lucide-react";
 import Link from "next/link";
@@ -16,6 +18,9 @@ export default async function StudentDashboard() {
   const userId = session.user.id;
   const gate = await getStudentGateState(userId);
   if (gate.redirectPath) redirect(gate.redirectPath);
+
+  const now = new Date();
+  const activeWindowStart = new Date(now.getTime() - TOTAL_SESSION_MS);
 
   const [enrollments, totalAttendance, flaggedCount, recentRecords, liveSessions] =
     await Promise.all([
@@ -35,19 +40,46 @@ export default async function StudentDashboard() {
       db.attendanceSession.findMany({
         where: {
           status: "ACTIVE",
+          startedAt: { gt: activeWindowStart },
           course: {
             enrollments: {
               some: { studentId: userId },
             },
           },
         },
-        include: {
+        select: {
+          id: true,
+          status: true,
+          phase: true,
+          startedAt: true,
+          initialEndsAt: true,
+          reverifyEndsAt: true,
           course: { select: { code: true, name: true } },
         },
         orderBy: { startedAt: "desc" },
         take: 10,
       }),
     ]);
+
+  const initialLiveSessions = liveSessions
+    .map((sessionItem) => ({
+      id: sessionItem.id,
+      phase: deriveAttendancePhase(
+        {
+          status: sessionItem.status,
+          startedAt: sessionItem.startedAt,
+          initialEndsAt: sessionItem.initialEndsAt,
+          reverifyEndsAt: sessionItem.reverifyEndsAt,
+        },
+        now
+      ),
+      startedAt: sessionItem.startedAt.toISOString(),
+      course: {
+        code: sessionItem.course.code,
+        name: sessionItem.course.name,
+      },
+    }))
+    .filter((sessionItem) => sessionItem.phase !== "CLOSED");
 
   const hasCredential = await db.webAuthnCredential.count({
     where: { userId },
@@ -121,29 +153,7 @@ export default async function StudentDashboard() {
           title="Live Attendance Sessions"
           description="Real-time sessions available for check-in"
         />
-        <AttendanceTable
-          columns={[
-            { key: "course", label: "Course" },
-            { key: "phase", label: "Phase" },
-            { key: "started", label: "Started" },
-            { key: "action", label: "" },
-          ]}
-          data={liveSessions.map((sessionItem) => ({
-            course: `${sessionItem.course.code} - ${sessionItem.course.name}`,
-            phase: (
-              <span className="inline-flex rounded-full border border-border px-2 py-0.5 text-xs font-medium">
-                {sessionItem.phase}
-              </span>
-            ),
-            started: sessionItem.startedAt.toLocaleTimeString(),
-            action: (
-              <Link href="/student/attend" className="text-xs font-medium text-foreground underline underline-offset-2">
-                Open Scanner
-              </Link>
-            ),
-          }))}
-          emptyMessage="No live sessions right now."
-        />
+        <StudentLiveSessionsTable initialSessions={initialLiveSessions} />
       </section>
 
       <section className="space-y-3">
