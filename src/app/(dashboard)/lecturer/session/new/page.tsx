@@ -105,8 +105,6 @@ export default function NewSessionPage() {
             defaultValue={radius}
             value={radius}
             maxValue={2000}
-            isStepped
-            stepSize={50}
             valueFormatter={(value) => `${Math.round(value)}m`}
             onValueChange={(value) => setRadius(Math.round(value))}
           />

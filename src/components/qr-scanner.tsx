@@ -20,7 +20,6 @@ export function QrScanner({ onScan }: QrScannerProps) {
   const [zoomSupported, setZoomSupported] = useState(false);
   const [zoomMin, setZoomMin] = useState(1);
   const [zoomMax, setZoomMax] = useState(3);
-  const [zoomStep, setZoomStep] = useState(0.1);
   const [zoomValue, setZoomValue] = useState(1);
 
   useEffect(() => {
@@ -47,11 +46,9 @@ export function QrScanner({ onScan }: QrScannerProps) {
         if (caps?.zoom) {
           const min = Number(caps.zoom.min ?? 1);
           const max = Number(caps.zoom.max ?? 3);
-          const step = Number(caps.zoom.step ?? 0.1);
           setZoomSupported(true);
           setZoomMin(min);
           setZoomMax(max);
-          setZoomStep(step);
           setZoomValue(min);
           try {
             await track.applyConstraints({
@@ -64,7 +61,6 @@ export function QrScanner({ onScan }: QrScannerProps) {
           setZoomSupported(false);
           setZoomMin(1);
           setZoomMax(3);
-          setZoomStep(0.1);
           setZoomValue(1);
         }
       }
@@ -261,8 +257,6 @@ export function QrScanner({ onScan }: QrScannerProps) {
                 defaultValue={zoomValue}
                 value={zoomValue}
                 maxValue={zoomMax}
-                isStepped={zoomStep > 0}
-                stepSize={zoomStep}
                 valueFormatter={(value) => `${value.toFixed(1)}x`}
                 onValueChange={(value) => {
                   void handleZoomChange(Number(value.toFixed(2)));
