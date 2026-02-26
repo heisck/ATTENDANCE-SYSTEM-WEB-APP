@@ -6,6 +6,7 @@ import { GpsCheck } from "@/components/gps-check";
 import { Loader2, Play } from "lucide-react";
 import { toast } from "sonner";
 import ElasticSlider from "@/components/ui/elastic-slider";
+import { PageHeader } from "@/components/dashboard/page-header";
 
 interface Course {
   id: string;
@@ -67,12 +68,11 @@ export default function NewSessionPage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Start Attendance Session</h1>
-        <p className="text-muted-foreground">
-          Create a new session and display the QR code for students
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Lecturer"
+        title="Start Attendance Session"
+        description="Create a new session and display the QR code for students."
+      />
 
       <div className="space-y-4">
         <div className="space-y-2">

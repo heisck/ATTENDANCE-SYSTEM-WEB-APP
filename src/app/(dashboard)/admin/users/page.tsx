@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
+import { PageHeader } from "@/components/dashboard/page-header";
 
 export default async function AdminUsersPage() {
   const session = await auth();
@@ -20,12 +21,7 @@ export default async function AdminUsersPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Users</h1>
-        <p className="text-muted-foreground">
-          All users in your university
-        </p>
-      </div>
+      <PageHeader eyebrow="Admin" title="Users" description="All users in your university." />
 
       <AttendanceTable
         columns={[

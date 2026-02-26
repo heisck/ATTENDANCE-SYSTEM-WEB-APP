@@ -13,6 +13,7 @@ import {
   EyeOff,
 } from "lucide-react";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/dashboard/page-header";
 
 type StudentProfile = {
   id: string;
@@ -171,6 +172,12 @@ export default function StudentProfilePage() {
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6">
+      <PageHeader
+        eyebrow="Student"
+        title="Profile"
+        description="Manage your identity details and account security settings."
+      />
+
       <section className="surface p-5 sm:p-6">
         <div className="space-y-4">
           <ReadOnlyField

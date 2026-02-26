@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
+import { PageHeader } from "@/components/dashboard/page-header";
 
 export default async function AdminCoursesPage() {
   const session = await auth();
@@ -22,12 +23,11 @@ export default async function AdminCoursesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Courses</h1>
-        <p className="text-muted-foreground">
-          All courses in your university. Manage enrollments to add or remove students.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Admin"
+        title="Courses"
+        description="All courses in your university. Manage enrollments to add or remove students."
+      />
 
       <AttendanceTable
         columns={[

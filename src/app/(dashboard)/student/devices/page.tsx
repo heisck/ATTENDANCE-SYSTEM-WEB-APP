@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Smartphone, Laptop, Trash2, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/dashboard/page-header";
 
 interface Device {
   id: string;
@@ -115,14 +116,11 @@ export default function DevicesPage() {
 
   return (
     <div className="space-y-6">
-      <section className="surface p-5 sm:p-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Registered Devices</h1>
-            <p className="section-subtitle mt-1">
-              Manage the devices and passkeys used for attendance verification
-            </p>
-          </div>
+      <PageHeader
+        eyebrow="Student"
+        title="Registered Devices"
+        description="Manage the devices and passkeys used for attendance verification."
+        action={
           <button
             type="button"
             onClick={() => router.push("/setup-device")}
@@ -138,8 +136,8 @@ export default function DevicesPage() {
           >
             Register New Passkey
           </button>
-        </div>
-      </section>
+        }
+      />
 
       {passkeysLockedUntilAdminReset && (
         <div className="surface-muted p-4 text-sm text-foreground/80">

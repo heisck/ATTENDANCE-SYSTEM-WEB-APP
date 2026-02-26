@@ -2,8 +2,9 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { StatsGrid, StatCard } from "@/components/dashboard/stats-cards";
+import { PageHeader, SectionHeading } from "@/components/dashboard/page-header";
 import Image from "next/image";
-import { Building2, Users, BarChart3, AlertTriangle } from "lucide-react";
+import { Building2, Users, BarChart3 } from "lucide-react";
 
 export default async function PlatformAnalyticsPage() {
   const session = await auth();
@@ -39,12 +40,11 @@ export default async function PlatformAnalyticsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">Platform Analytics</h1>
-        <p className="text-muted-foreground">
-          System-wide metrics across all organizations
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Super Admin"
+        title="Platform Analytics"
+        description="System-wide metrics across all organizations."
+      />
 
       <StatsGrid>
         <StatCard
@@ -72,13 +72,13 @@ export default async function PlatformAnalyticsPage() {
         />
       </StatsGrid>
 
-      <div>
-        <h2 className="mb-4 text-lg font-semibold">Per Organization</h2>
+      <div className="space-y-3">
+        <SectionHeading title="Per Organization" description="Cross-tenant footprint by organization." />
         <div className="space-y-3">
           {orgStats.map((org) => (
             <div
               key={org.id}
-              className="rounded-lg border border-border bg-card p-4"
+              className="rounded-lg border border-border/70 bg-background/40 p-4"
             >
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 lg:items-center">
                 <div className="sm:col-span-2 lg:col-span-1">

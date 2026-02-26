@@ -148,10 +148,10 @@
 
 @layer components {
   .surface {
-    @apply rounded-2xl border border-border/70 bg-card/90 shadow-sm backdrop-blur-sm;
+    @apply rounded-xl border border-border/65 bg-background/55;
   }
   .surface-muted {
-    @apply rounded-2xl border border-border/70 bg-muted/35;
+    @apply rounded-xl border border-border/55 bg-muted/20;
   }
   .status-chip {
     @apply inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted px-2.5 py-1 text-xs font-medium text-foreground;
@@ -166,10 +166,22 @@
     @apply rounded-xl border border-border/60 bg-card p-3 text-sm text-muted-foreground;
   }
   .section-title {
-    @apply text-base font-semibold tracking-tight;
+    @apply text-[15px] font-semibold tracking-tight;
   }
   .section-subtitle {
-    @apply text-sm text-muted-foreground;
+    @apply text-sm leading-relaxed text-muted-foreground;
+  }
+  .page-header-block {
+    @apply border-b border-border/70 pb-4;
+  }
+  .page-eyebrow {
+    @apply text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground;
+  }
+  .page-title {
+    @apply mt-1 text-xl font-semibold tracking-tight text-foreground;
+  }
+  .page-description {
+    @apply mt-1 text-sm text-muted-foreground;
   }
   .logo-mark {
     @apply transition duration-200 dark:invert dark:brightness-125;

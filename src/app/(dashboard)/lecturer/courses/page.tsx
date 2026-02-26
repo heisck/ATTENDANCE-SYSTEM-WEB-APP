@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { BookOpen, Users, ChevronRight } from "lucide-react";
+import { PageHeader } from "@/components/dashboard/page-header";
 
 export default async function LecturerCoursesPage() {
   const session = await auth();
@@ -16,19 +17,18 @@ export default async function LecturerCoursesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">My Courses</h1>
-        <p className="text-muted-foreground">
-          Manage student enrollments for your courses
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Lecturer"
+        title="My Courses"
+        description="Manage student enrollments for your courses."
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {courses.map((course) => (
           <Link
             key={course.id}
             href={`/lecturer/courses/${course.id}`}
-            className="flex items-center justify-between rounded-lg border border-border bg-card p-4 hover:bg-muted/50 transition-colors"
+            className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-4 transition-colors hover:bg-muted/40"
           >
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-primary/10 p-2">

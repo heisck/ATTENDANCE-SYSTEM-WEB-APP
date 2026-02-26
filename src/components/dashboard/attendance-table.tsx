@@ -17,7 +17,7 @@ export function AttendanceTable({
   emptyMessage = "No records found",
 }: AttendanceTableProps) {
   return (
-    <div className="surface overflow-hidden">
+    <div className="overflow-hidden rounded-xl border border-border/70 bg-background/40">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px]">
           <thead>

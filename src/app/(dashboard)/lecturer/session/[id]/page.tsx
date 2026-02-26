@@ -150,9 +150,9 @@ export default function SessionMonitorPage() {
 
   return (
     <div className="space-y-6">
-      <div className="surface flex flex-col gap-4 p-4 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+      <div className="page-header-block flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold">
+          <h1 className="text-xl font-semibold tracking-tight">
             {data.course.code} - {data.course.name}
           </h1>
           <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
@@ -172,7 +172,7 @@ export default function SessionMonitorPage() {
               className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                 isActive
                   ? "border border-border/70 bg-muted text-foreground"
-                  : "bg-gray-100 text-gray-600"
+                  : "border border-border/60 bg-muted/35 text-muted-foreground"
               }`}
             >
               {data.status}
@@ -183,7 +183,7 @@ export default function SessionMonitorPage() {
                   ? "border border-border/70 bg-muted text-foreground"
                   : data.phase === "REVERIFY"
                     ? "border border-border/70 bg-muted text-foreground"
-                    : "bg-slate-100 text-slate-700"
+                    : "border border-border/60 bg-muted/35 text-muted-foreground"
               }`}
             >
               {data.phase}
@@ -244,7 +244,7 @@ export default function SessionMonitorPage() {
             {data.records.map((record) => (
               <div
                 key={record.id}
-                className="rounded-xl border border-border bg-card p-3"
+                className="rounded-xl border border-border/70 bg-background/40 p-3"
               >
                 <div>
                   <p className="text-sm font-medium">{record.student.name}</p>

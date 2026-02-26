@@ -1,6 +1,8 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
+import type { ReactNode } from "react";
+import { PageHeader } from "@/components/dashboard/page-header";
 
 export default async function AdminSettingsPage() {
   const session = await auth();
@@ -17,121 +19,126 @@ export default async function AdminSettingsPage() {
   if (!org) redirect("/login");
 
   const settings = org.settings as any;
+  const settingRows: Array<{ label: string; value: string }> = [
+    { label: "Campus latitude", value: settings?.campusLat ? String(settings.campusLat) : "Not set" },
+    { label: "Campus longitude", value: settings?.campusLng ? String(settings.campusLng) : "Not set" },
+    { label: "Default radius", value: `${settings?.defaultRadiusMeters || 500}m` },
+    { label: "Confidence threshold", value: `${settings?.confidenceThreshold || 70}%` },
+    { label: "Timezone", value: settings?.timezone || "UTC" },
+    {
+      label: "Student email domains",
+      value:
+        Array.isArray(settings?.studentEmailDomains) && settings.studentEmailDomains.length > 0
+          ? settings.studentEmailDomains.join(", ")
+          : "Not configured",
+    },
+  ];
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">
-          Configure your university&apos;s attendance system
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Admin"
+        title="Settings"
+        description="Configure your university attendance environment."
+      />
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-lg border border-border bg-card p-6">
-          <h2 className="text-lg font-semibold">Organization</h2>
-          <div className="mt-4 space-y-3">
-            <div>
-              <p className="text-sm text-muted-foreground">Name</p>
-              <p className="font-medium">{org.name}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Slug</p>
-              <p className="font-medium">{org.slug}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Domain</p>
-              <p className="font-medium">{org.domain || "Not set"}</p>
-            </div>
-          </div>
-        </div>
+      <div className="space-y-6">
+        <SettingsSection
+          title="Organization"
+          description="Identity and domain values used across your tenant."
+        >
+          <dl className="grid gap-4 sm:grid-cols-2">
+            <InfoItem label="Name" value={org.name} />
+            <InfoItem label="Slug" value={org.slug} />
+            <InfoItem label="Domain" value={org.domain || "Not set"} />
+          </dl>
+        </SettingsSection>
 
-        <div className="rounded-lg border border-border bg-card p-6">
-          <h2 className="text-lg font-semibold">GPS Settings</h2>
-          <div className="mt-4 space-y-3">
-            <div>
-              <p className="text-sm text-muted-foreground">Campus Latitude</p>
-              <p className="font-medium">{settings?.campusLat || "Not set"}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Campus Longitude</p>
-              <p className="font-medium">{settings?.campusLng || "Not set"}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Default Radius</p>
-              <p className="font-medium">
-                {settings?.defaultRadiusMeters || 500}m
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">
-                Confidence Threshold
-              </p>
-              <p className="font-medium">
-                {settings?.confidenceThreshold || 70}%
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Timezone</p>
-              <p className="font-medium">{settings?.timezone || "UTC"}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Student Email Domains</p>
-              <p className="font-medium">
-                {Array.isArray(settings?.studentEmailDomains) && settings.studentEmailDomains.length > 0
-                  ? settings.studentEmailDomains.join(", ")
-                  : "Not configured"}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-border bg-card p-6">
-          <h2 className="text-lg font-semibold">Trusted IP Ranges</h2>
-          <div className="mt-4 space-y-2">
-            {org.ipRanges.map((range) => (
-              <div
-                key={range.id}
-                className="flex items-center justify-between rounded-md border border-border p-3"
-              >
-                <div>
-                  <p className="font-mono text-sm">{range.cidr}</p>
-                  <p className="text-xs text-muted-foreground">{range.label}</p>
-                </div>
-              </div>
+        <SettingsSection
+          title="Attendance Defaults"
+          description="Core GPS and trust thresholds used for marking attendance."
+        >
+          <dl className="grid gap-4 sm:grid-cols-2">
+            {settingRows.map((row) => (
+              <InfoItem key={row.label} label={row.label} value={row.value} />
             ))}
-            {org.ipRanges.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                No trusted IP ranges configured.
-              </p>
-            )}
-          </div>
-        </div>
+          </dl>
+        </SettingsSection>
 
-        <div className="rounded-lg border border-border bg-card p-6">
-          <h2 className="text-lg font-semibold">Subscription</h2>
-          <div className="mt-4 space-y-3">
-            <div>
-              <p className="text-sm text-muted-foreground">Plan</p>
-              <p className="font-medium">
-                {org.subscription?.plan || "FREE"}
-              </p>
+        <SettingsSection
+          title="Trusted IP Ranges"
+          description="Approved network ranges for strict attendance validation."
+        >
+          {org.ipRanges.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No trusted IP ranges configured.</p>
+          ) : (
+            <div className="overflow-hidden rounded-lg border border-border/70">
+              <table className="w-full text-sm">
+                <thead className="border-b border-border/70 bg-muted/25">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                      CIDR
+                    </th>
+                    <th className="px-3 py-2 text-left text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                      Label
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {org.ipRanges.map((range) => (
+                    <tr key={range.id}>
+                      <td className="px-3 py-2 font-mono text-sm">{range.cidr}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{range.label || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Max Students</p>
-              <p className="font-medium">
-                {org.subscription?.maxStudents || 100}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Max Courses</p>
-              <p className="font-medium">
-                {org.subscription?.maxCourses || 10}
-              </p>
-            </div>
-          </div>
-        </div>
+          )}
+        </SettingsSection>
+
+        <SettingsSection
+          title="Subscription"
+          description="Current plan limits for this institution."
+        >
+          <dl className="grid gap-4 sm:grid-cols-2">
+            <InfoItem label="Plan" value={org.subscription?.plan || "FREE"} />
+            <InfoItem label="Max students" value={String(org.subscription?.maxStudents || 100)} />
+            <InfoItem label="Max courses" value={String(org.subscription?.maxCourses || 10)} />
+          </dl>
+        </SettingsSection>
       </div>
+    </div>
+  );
+}
+
+function SettingsSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="border-t border-border/70 pt-5">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,210px)_1fr] lg:gap-6">
+        <div>
+          <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+        </div>
+        <div>{children}</div>
+      </div>
+    </section>
+  );
+}
+
+function InfoItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="space-y-1">
+      <dt className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium text-foreground">{value}</dd>
     </div>
   );
 }

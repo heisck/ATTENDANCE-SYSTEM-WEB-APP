@@ -147,7 +147,7 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
 
   return (
     <div ref={wrapperRef} className="mx-auto w-full max-w-[760px] space-y-3">
-      <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 rounded-xl border border-border/70 bg-background/40 p-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-md bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground">
             Now: {sequenceId}

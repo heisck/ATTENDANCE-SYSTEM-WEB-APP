@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { Loader2, Mail, Send, RefreshCcw, Ban } from "lucide-react";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/dashboard/page-header";
 
 type LecturerInvite = {
   id: string;
@@ -105,12 +106,11 @@ export default function LecturerInvitesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="surface p-6">
-        <h1 className="text-2xl font-bold tracking-tight">Lecturer Invites</h1>
-        <p className="mt-2 text-muted-foreground">
-          Invite lecturers to create accounts. Public lecturer signup is disabled.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Admin"
+        title="Lecturer Invites"
+        description="Invite lecturers to create accounts. Public lecturer signup is disabled."
+      />
 
       {role === "SUPER_ADMIN" && (
         <div className="surface space-y-2 p-4">

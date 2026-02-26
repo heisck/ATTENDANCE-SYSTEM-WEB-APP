@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Mail, CheckCircle2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/dashboard/page-header";
 
 type StudentProfileState = {
   email: string;
@@ -105,12 +106,11 @@ export default function CompleteProfilePage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <div className="surface p-6">
-        <h1 className="text-2xl font-bold tracking-tight">Complete Student Profile</h1>
-        <p className="mt-2 text-muted-foreground">
-          Add and verify your personal email before attendance actions are enabled.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Student"
+        title="Complete Student Profile"
+        description="Add and verify your personal email before attendance actions are enabled."
+      />
 
       <div className="surface space-y-4 p-5">
         <div>

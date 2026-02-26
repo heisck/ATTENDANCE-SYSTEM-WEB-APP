@@ -4,8 +4,9 @@ import { getStudentGateState } from "@/lib/student-gates";
 import { redirect } from "next/navigation";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
 import { OverviewMetrics } from "@/components/dashboard/overview-metrics";
+import { PageHeader, SectionHeading } from "@/components/dashboard/page-header";
 import { PushNotificationToggle } from "@/components/push-notification-toggle";
-import { QrCode, AlertTriangle, User } from "lucide-react";
+import { QrCode, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 
 export default async function StudentDashboard() {
@@ -54,22 +55,20 @@ export default async function StudentDashboard() {
 
   return (
     <div className="space-y-6">
-      <section className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-        <div>
-          <p className="section-title inline-flex items-center gap-2">
-            <User className="h-4 w-4" />
-            Student Workspace
-          </p>
-          <p className="section-subtitle">Attendance tracking and verification status in one place.</p>
-        </div>
-        <Link
-          href="/student/attend"
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-        >
-          <QrCode className="h-4 w-4" />
-          Mark Attendance
-        </Link>
-      </section>
+      <PageHeader
+        eyebrow="Student"
+        title="Student Workspace"
+        description="Attendance tracking and verification status in one place."
+        action={
+          <Link
+            href="/student/attend"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <QrCode className="h-4 w-4" />
+            Mark Attendance
+          </Link>
+        }
+      />
 
       {!hasCredential && (
         <section className="surface-muted p-4">
@@ -118,12 +117,10 @@ export default async function StudentDashboard() {
       />
 
       <section className="space-y-3">
-        <div className="flex items-end justify-between">
-          <h2 className="section-title">Live Attendance Sessions</h2>
-          <p className="hidden text-xs text-muted-foreground sm:block">
-            Real-time sessions available for check-in
-          </p>
-        </div>
+        <SectionHeading
+          title="Live Attendance Sessions"
+          description="Real-time sessions available for check-in"
+        />
         <AttendanceTable
           columns={[
             { key: "course", label: "Course" },
@@ -150,12 +147,10 @@ export default async function StudentDashboard() {
       </section>
 
       <section className="space-y-3">
-        <div className="flex items-end justify-between">
-          <h2 className="section-title">Recent Attendance</h2>
-          <p className="hidden text-xs text-muted-foreground sm:block">
-            Your latest verification records
-          </p>
-        </div>
+        <SectionHeading
+          title="Recent Attendance"
+          description="Your latest verification records"
+        />
         <AttendanceTable
           columns={[
             { key: "course", label: "Course" },

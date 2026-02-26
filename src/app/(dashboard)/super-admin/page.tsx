@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { OverviewMetrics } from "@/components/dashboard/overview-metrics";
+import { PageHeader, SectionHeading } from "@/components/dashboard/page-header";
 
 export default async function SuperAdminDashboard() {
   const session = await auth();
@@ -24,10 +25,11 @@ export default async function SuperAdminDashboard() {
 
   return (
     <div className="space-y-6">
-      <section className="surface p-4 sm:p-5">
-        <p className="section-title">Platform Workspace</p>
-        <p className="section-subtitle">Tenant management and global system activity.</p>
-      </section>
+      <PageHeader
+        eyebrow="Super Admin"
+        title="Platform Workspace"
+        description="Tenant management and global system activity."
+      />
 
       <OverviewMetrics
         title="Platform Snapshot"
@@ -40,17 +42,12 @@ export default async function SuperAdminDashboard() {
       />
 
       <section className="space-y-3">
-        <div className="flex items-end justify-between">
-          <h2 className="section-title">Organizations</h2>
-          <p className="hidden text-xs text-muted-foreground sm:block">
-            Tenants and subscription snapshot
-          </p>
-        </div>
+        <SectionHeading title="Organizations" description="Tenants and subscription snapshot" />
         <div className="space-y-3">
           {organizations.map((org) => (
             <div
               key={org.id}
-              className="surface flex items-center justify-between p-4"
+              className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-4"
             >
               <div>
                 <p className="font-medium">{org.name}</p>

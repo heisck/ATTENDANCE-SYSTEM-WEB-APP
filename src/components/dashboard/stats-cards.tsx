@@ -10,7 +10,7 @@ interface StatCardProps {
 
 export function StatCard({ title, value, subtitle, icon, trend }: StatCardProps) {
   return (
-    <div className="surface p-4 sm:p-5">
+    <div className="rounded-xl border border-border/70 bg-background/45 p-4 sm:p-5">
       <div className="flex items-center justify-between gap-3">
         <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
           {title}

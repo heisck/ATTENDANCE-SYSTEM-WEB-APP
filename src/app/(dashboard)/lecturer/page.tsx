@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
 import { OverviewMetrics } from "@/components/dashboard/overview-metrics";
+import { PageHeader, SectionHeading } from "@/components/dashboard/page-header";
 import { Play } from "lucide-react";
 import Link from "next/link";
 
@@ -34,19 +35,20 @@ export default async function LecturerDashboard() {
 
   return (
     <div className="space-y-6">
-      <section className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-        <div>
-          <p className="section-title">Lecturer Workspace</p>
-          <p className="section-subtitle">Course operations and attendance sessions at a glance.</p>
-        </div>
-        <Link
-          href="/lecturer/session/new"
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-        >
-          <Play className="h-4 w-4" />
-          Start Session
-        </Link>
-      </section>
+      <PageHeader
+        eyebrow="Lecturer"
+        title="Lecturer Workspace"
+        description="Course operations and attendance sessions at a glance."
+        action={
+          <Link
+            href="/lecturer/session/new"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <Play className="h-4 w-4" />
+            Start Session
+          </Link>
+        }
+      />
 
       <OverviewMetrics
         title="Teaching Snapshot"
@@ -67,12 +69,10 @@ export default async function LecturerDashboard() {
       />
 
       <section className="space-y-3">
-        <div className="flex items-end justify-between">
-          <h2 className="section-title">Recent Sessions</h2>
-          <p className="hidden text-xs text-muted-foreground sm:block">
-            Latest class sessions and attendance counts
-          </p>
-        </div>
+        <SectionHeading
+          title="Recent Sessions"
+          description="Latest class sessions and attendance counts"
+        />
         <AttendanceTable
           columns={[
             { key: "course", label: "Course" },

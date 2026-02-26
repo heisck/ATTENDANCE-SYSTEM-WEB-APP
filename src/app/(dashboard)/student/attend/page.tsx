@@ -21,6 +21,7 @@ import {
   RefreshCcw,
   Share2,
 } from "lucide-react";
+import { PageHeader } from "@/components/dashboard/page-header";
 
 type Step = "session" | "webauthn" | "gps" | "qr" | "submitting" | "result";
 type QrPortStatus = "PENDING" | "APPROVED" | "REJECTED" | null;
@@ -588,6 +589,11 @@ export default function AttendPage() {
 
   return (
     <div className="w-full max-w-none space-y-6">
+      <PageHeader
+        eyebrow="Student"
+        title="Mark Attendance"
+        description="Select a live session and complete both verification phases."
+      />
 
       <BleProximityCheck />
 
@@ -758,7 +764,7 @@ export default function AttendPage() {
           )}
 
           {activeSessionId && (
-            <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+            <div className="space-y-3 rounded-lg border border-border/70 bg-background/40 p-4">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold">Reverification Sync</p>
                 {syncState?.session && (

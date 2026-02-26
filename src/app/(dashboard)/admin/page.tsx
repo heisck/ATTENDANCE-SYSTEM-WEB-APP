@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { OverviewMetrics } from "@/components/dashboard/overview-metrics";
+import { PageHeader, SectionHeading } from "@/components/dashboard/page-header";
 
 export default async function AdminDashboard() {
   const session = await auth();
@@ -32,10 +33,11 @@ export default async function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      <section className="surface p-4 sm:p-5">
-        <p className="section-title">Administration Workspace</p>
-        <p className="section-subtitle">Institution metrics and recent session activity.</p>
-      </section>
+      <PageHeader
+        eyebrow="Admin"
+        title="Administration Workspace"
+        description="Institution metrics and recent session activity."
+      />
 
       <OverviewMetrics
         title="Institution Snapshot"
@@ -48,17 +50,12 @@ export default async function AdminDashboard() {
       />
 
       <section className="space-y-3">
-        <div className="flex items-end justify-between">
-          <h2 className="section-title">Recent Activity</h2>
-          <p className="hidden text-xs text-muted-foreground sm:block">
-            Latest sessions across your institution
-          </p>
-        </div>
+        <SectionHeading title="Recent Activity" description="Latest sessions across your institution" />
         <div className="space-y-3">
           {recentActivity.map((s) => (
             <div
               key={s.id}
-              className="surface flex items-center justify-between p-4"
+              className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 p-4"
             >
               <div>
                 <p className="font-medium">
@@ -85,7 +82,9 @@ export default async function AdminDashboard() {
             </div>
           ))}
           {recentActivity.length === 0 && (
-            <div className="surface p-5 text-sm text-muted-foreground">No activity yet.</div>
+            <div className="rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground">
+              No activity yet.
+            </div>
           )}
         </div>
       </section>

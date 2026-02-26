@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
+import { PageHeader } from "@/components/dashboard/page-header";
 
 export default async function LecturerReportsPage() {
   const session = await auth();
@@ -21,12 +22,11 @@ export default async function LecturerReportsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Reports</h1>
-        <p className="text-muted-foreground">
-          Attendance reports for your courses
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Lecturer"
+        title="Reports"
+        description="Attendance reports for your courses."
+      />
 
       {courses.map((course) => (
         <div key={course.id} className="space-y-3">
