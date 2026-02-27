@@ -52,6 +52,7 @@ export default async function LecturerDashboard() {
 
       <OverviewMetrics
         title="Teaching Snapshot"
+        compact
         items={[
           { key: "courses", label: "My Courses", value: courses },
           { key: "active", label: "Active Sessions", value: activeSessions },

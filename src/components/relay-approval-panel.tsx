@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Bluetooth, CheckCircle2, XCircle, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,6 +28,7 @@ export function RelayApprovalPanel({
   lecturerId,
   isLive = true,
 }: RelayApprovalPanelProps) {
+  const router = useRouter();
   const [devices, setDevices] = useState<RelayDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -84,7 +86,7 @@ export function RelayApprovalPanel({
 
       toast.success("Device approved for relay broadcasting");
       // Refresh data
-      window.location.reload();
+      router.refresh();
     } catch (error) {
       toast.error("Failed to approve device");
       console.error(error);
@@ -110,7 +112,7 @@ export function RelayApprovalPanel({
       if (!response.ok) throw new Error("Failed to reject");
 
       toast.success("Device rejected");
-      window.location.reload();
+      router.refresh();
     } catch (error) {
       toast.error("Failed to reject device");
       console.error(error);
@@ -140,7 +142,7 @@ export function RelayApprovalPanel({
       if (!response.ok) throw new Error("Failed to revoke");
 
       toast.success("Device revoked");
-      window.location.reload();
+      router.refresh();
     } catch (error) {
       toast.error("Failed to revoke device");
       console.error(error);

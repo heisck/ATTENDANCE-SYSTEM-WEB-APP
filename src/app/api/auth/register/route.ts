@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     if (error.name === "ZodError") {
       return NextResponse.json(
-        { error: error.errors[0].message },
+        { error: error?.issues?.[0]?.message || error?.errors?.[0]?.message || "Invalid request payload." },
         { status: 400 }
       );
     }

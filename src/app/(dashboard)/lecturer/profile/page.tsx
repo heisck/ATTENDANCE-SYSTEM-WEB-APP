@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
-  BadgeCheck,
+  BookOpen,
   CalendarClock,
   Eye,
   EyeOff,
@@ -10,36 +11,41 @@ import {
   Loader2,
   Mail,
   ShieldCheck,
-  User,
+  UserCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/dashboard/page-header";
 
-type StudentProfile = {
+type LecturerProfile = {
   id: string;
   role: string;
   name: string;
   email: string;
-  studentId: string | null;
-  indexNumber: string | null;
   personalEmail: string | null;
   personalEmailVerifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  organization: { name: string; slug: string } | null;
 };
 
-export default function StudentProfilePage() {
-  const [profile, setProfile] = useState<StudentProfile | null>(null);
+export default function LecturerProfilePage() {
+  const [profile, setProfile] = useState<LecturerProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [savingSignInEmail, setSavingSignInEmail] = useState(false);
   const [savingPersonalEmail, setSavingPersonalEmail] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
   const [personalEmail, setPersonalEmail] = useState("");
+  const [signInForm, setSignInForm] = useState({
+    email: "",
+    currentPassword: "",
+  });
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
   });
   const [showPasswords, setShowPasswords] = useState({
+    signIn: false,
     current: false,
     next: false,
     confirm: false,
@@ -49,12 +55,13 @@ export default function StudentProfilePage() {
     async function loadProfile() {
       setLoading(true);
       try {
-        const res = await fetch("/api/auth/student-profile");
+        const res = await fetch("/api/auth/profile");
         const data = await res.json();
         if (!res.ok) {
           throw new Error(data?.error || "Unable to load profile");
         }
         setProfile(data);
+        setSignInForm({ email: data.email || "", currentPassword: "" });
         setPersonalEmail(data.personalEmail || "");
       } catch (error: any) {
         toast.error(error?.message || "Unable to load profile");
@@ -65,6 +72,62 @@ export default function StudentProfilePage() {
 
     void loadProfile();
   }, []);
+
+  async function handleUpdateSignInEmail(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!profile) return;
+
+    const nextValue = signInForm.email.trim().toLowerCase();
+    if (!nextValue) {
+      toast.error("Sign-in email cannot be empty.");
+      return;
+    }
+
+    if (nextValue === profile.email.toLowerCase()) {
+      return;
+    }
+
+    if (!signInForm.currentPassword.trim()) {
+      toast.error("Current password is required to update sign-in email.");
+      return;
+    }
+
+    setSavingSignInEmail(true);
+    try {
+      const res = await fetch("/api/auth/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: nextValue,
+          currentPassword: signInForm.currentPassword,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Unable to update sign-in email");
+      }
+
+      setProfile((current) =>
+        current
+          ? {
+              ...current,
+              email: nextValue,
+              updatedAt: new Date().toISOString(),
+            }
+          : current
+      );
+      setSignInForm((current) => ({
+        ...current,
+        email: nextValue,
+        currentPassword: "",
+      }));
+      toast.success(data?.message || "Sign-in email updated successfully.");
+    } catch (error: any) {
+      toast.error(error?.message || "Unable to update sign-in email");
+    } finally {
+      setSavingSignInEmail(false);
+    }
+  }
 
   async function handleUpdatePersonalEmail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -81,7 +144,7 @@ export default function StudentProfilePage() {
 
     setSavingPersonalEmail(true);
     try {
-      const res = await fetch("/api/auth/student-profile", {
+      const res = await fetch("/api/auth/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ personalEmail: nextValue }),
@@ -149,6 +212,12 @@ export default function StudentProfilePage() {
     return nextValue.length > 0 && nextValue !== (profile.personalEmail || "");
   }, [personalEmail, profile]);
 
+  const canSaveSignInEmail = useMemo(() => {
+    if (!profile) return false;
+    const nextEmail = signInForm.email.trim().toLowerCase();
+    return nextEmail.length > 0 && nextEmail !== profile.email.toLowerCase() && signInForm.currentPassword.length > 0;
+  }, [profile, signInForm.email, signInForm.currentPassword]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -168,9 +237,18 @@ export default function StudentProfilePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Student"
+        eyebrow="Lecturer"
         title="Profile"
         description="Manage your account details and security settings."
+        action={
+          <Link
+            href="/lecturer/courses"
+            className="inline-flex items-center gap-2 rounded-xl border border-border/70 px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <BookOpen className="h-4 w-4" />
+            View Courses
+          </Link>
+        }
       />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
@@ -178,29 +256,37 @@ export default function StudentProfilePage() {
           <div className="surface p-5 sm:p-6">
             <div className="mb-5 flex items-start gap-3">
               <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/70 bg-muted/40">
-                <User className="h-5 w-5 text-muted-foreground" />
+                <UserCircle2 className="h-5 w-5 text-muted-foreground" />
               </span>
               <div>
                 <h2 className="text-base font-semibold tracking-tight">Identity Details</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Core profile data used across your attendance workspace.
+                  Core profile data used across lecturer tools.
                 </p>
               </div>
             </div>
 
             <dl className="grid gap-4 sm:grid-cols-2">
-              <InfoCard label="Full Name" value={profile.name} icon={<User className="h-4 w-4" />} />
+              <InfoCard label="Full Name" value={profile.name} icon={<UserCircle2 className="h-4 w-4" />} />
               <InfoCard label="Institutional Email" value={profile.email} icon={<Mail className="h-4 w-4" />} />
-              <InfoCard label="Student ID" value={profile.studentId || "Not set"} icon={<BadgeCheck className="h-4 w-4" />} />
-              <InfoCard
-                label="Index Number"
-                value={profile.indexNumber || "Not set"}
-                icon={<BadgeCheck className="h-4 w-4" />}
-              />
               <InfoCard
                 label="Personal Email"
                 value={profile.personalEmail || "Not set"}
                 icon={<Mail className="h-4 w-4" />}
+              />
+              <InfoCard
+                label="Role"
+                value={profile.role}
+                icon={<ShieldCheck className="h-4 w-4" />}
+              />
+              <InfoCard
+                label="Organization"
+                value={
+                  profile.organization
+                    ? `${profile.organization.name} (${profile.organization.slug})`
+                    : "Not assigned"
+                }
+                icon={<BookOpen className="h-4 w-4" />}
               />
               <InfoCard
                 label="Email Status"
@@ -209,9 +295,81 @@ export default function StudentProfilePage() {
               />
             </dl>
 
+            <form onSubmit={handleUpdateSignInEmail} className="mt-6 space-y-3">
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                Update Sign-in Email
+              </p>
+              <div className="space-y-3 rounded-xl border border-border/60 bg-muted/20 p-3">
+                <div className="relative">
+                  <label htmlFor="signInEmail" className="sr-only">
+                    Sign-in Email
+                  </label>
+                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    id="signInEmail"
+                    type="email"
+                    value={signInForm.email}
+                    onChange={(event) =>
+                      setSignInForm((current) => ({ ...current, email: event.target.value }))
+                    }
+                    required
+                    placeholder="institution@email.com"
+                    className="flex h-11 w-full rounded-xl border border-border/70 bg-background/40 py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                </div>
+                <div className="relative">
+                  <label htmlFor="signInCurrentPassword" className="sr-only">
+                    Current Password
+                  </label>
+                  <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    id="signInCurrentPassword"
+                    type={showPasswords.signIn ? "text" : "password"}
+                    value={signInForm.currentPassword}
+                    onChange={(event) =>
+                      setSignInForm((current) => ({ ...current, currentPassword: event.target.value }))
+                    }
+                    required
+                    minLength={8}
+                    placeholder="Confirm with current password"
+                    className="flex h-11 w-full rounded-xl border border-border/70 bg-background/40 py-2 pl-10 pr-10 text-sm placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswords((prev) => ({ ...prev, signIn: !prev.signIn }))}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
+                    aria-label={
+                      showPasswords.signIn ? "Hide current password for email update" : "Show current password for email update"
+                    }
+                  >
+                    {showPasswords.signIn ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={savingSignInEmail || !canSaveSignInEmail}
+                    className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {savingSignInEmail ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Saving...
+                      </span>
+                    ) : (
+                      "Save Sign-in Email"
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
+
             <form onSubmit={handleUpdatePersonalEmail} className="mt-6 space-y-3">
               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 Update Personal Email
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Used for recovery and verification
               </p>
               <div className="relative">
                 <label htmlFor="personalEmail" className="sr-only">

@@ -107,18 +107,18 @@ export function GpsCheck({ onLocationReady, maxAccuracyMeters = 30 }: GpsCheckPr
           </div>
         </div>
 
-        <div className="w-full sm:w-auto">
+        <div className="w-full sm:w-auto sm:shrink-0">
           {status === "idle" && (
             <button
               onClick={requestLocation}
-              className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 sm:w-auto"
+              className="inline-flex h-11 w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 sm:w-auto"
             >
               <MapPin className="h-4 w-4" />
               Get Location
             </button>
           )}
           {status === "loading" && (
-            <div className="flex h-11 w-full items-center justify-center gap-2 rounded-md border border-border bg-muted/30 px-4 text-sm text-muted-foreground sm:w-auto">
+            <div className="flex h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-md border border-border bg-muted/30 px-4 text-sm text-muted-foreground sm:w-auto">
               <Loader2 className="h-4 w-4 animate-spin" />
               Calibrating...
             </div>
@@ -127,7 +127,7 @@ export function GpsCheck({ onLocationReady, maxAccuracyMeters = 30 }: GpsCheckPr
             <div className="grid w-full gap-2 sm:flex sm:w-auto sm:flex-row">
               <button
                 onClick={requestLocation}
-                className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-md border border-border px-4 text-sm font-medium transition-colors hover:bg-accent sm:w-auto"
+                className="inline-flex h-11 w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-border px-4 text-sm font-medium transition-colors hover:bg-accent sm:w-auto"
               >
                 <RefreshCw className="h-4 w-4" />
                 Re-measure
@@ -135,7 +135,7 @@ export function GpsCheck({ onLocationReady, maxAccuracyMeters = 30 }: GpsCheckPr
               <button
                 onClick={handleConfirm}
                 disabled={!accuracyOk}
-                className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                className="inline-flex h-11 w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               >
                 <CheckCircle2 className="h-4 w-4" />
                 Use this location
@@ -145,7 +145,7 @@ export function GpsCheck({ onLocationReady, maxAccuracyMeters = 30 }: GpsCheckPr
           {status === "error" && (
             <button
               onClick={requestLocation}
-              className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-md border border-border px-4 text-sm font-medium transition-colors hover:bg-accent sm:w-auto"
+              className="inline-flex h-11 w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-border px-4 text-sm font-medium transition-colors hover:bg-accent sm:w-auto"
             >
               <RefreshCw className="h-4 w-4" />
               Retry

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -42,6 +42,7 @@ const navByRole: Record<string, NavItem[]> = {
     { label: "Courses", href: "/lecturer/courses", icon: BookOpen },
     { label: "New Session", href: "/lecturer/session/new", icon: Play },
     { label: "Reports", href: "/lecturer/reports", icon: FileText },
+    { label: "Profile", href: "/lecturer/profile", icon: User },
   ],
   ADMIN: [
     { label: "Dashboard", href: "/admin", icon: Home },
@@ -98,7 +99,7 @@ function profileHrefByRole(role: string) {
     case "ADMIN":
       return "/admin/settings";
     case "LECTURER":
-      return "/lecturer";
+      return "/lecturer/profile";
     case "SUPER_ADMIN":
       return "/super-admin";
     default:
@@ -122,6 +123,15 @@ export function Sidebar({
   const currentPage = useMemo(() => deriveCurrentPage(pathname, rolePath, items), [items, pathname, rolePath]);
   const profileHref = useMemo(() => profileHrefByRole(role), [role]);
 
+  useEffect(() => {
+    const targets = new Set(items.map((item) => item.href));
+    if (profileHref) targets.add(profileHref);
+
+    targets.forEach((href) => {
+      router.prefetch(href);
+    });
+  }, [items, profileHref, router]);
+
   const dockItems = useMemo<DockItemData[]>(
     () =>
       items.map((item) => {
@@ -136,7 +146,10 @@ export function Sidebar({
             />
           ),
           label: item.label,
-          onClick: () => router.push(item.href),
+          onClick: () => {
+            if (pathname === item.href) return;
+            router.push(item.href);
+          },
           className: isActive
             ? "!border-gray-300/80 !bg-gray-200/75 dark:!border-gray-500/70 dark:!bg-gray-700/45"
             : "",

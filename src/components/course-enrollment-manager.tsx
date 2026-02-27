@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Loader2, UserPlus, Trash2, Users } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 
@@ -109,12 +110,13 @@ export function CourseEnrollmentManager({
         title={`${courseCode} - ${courseName}`}
         description="Manage which students are enrolled in this course."
         action={
-          <a
+          <Link
             href={backHref}
+            prefetch
             className="inline-flex items-center rounded-md border border-border/70 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             Back
-          </a>
+          </Link>
         }
       />
 
