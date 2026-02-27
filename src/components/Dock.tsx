@@ -60,6 +60,9 @@ function DockItem({
   const ref = useRef<HTMLDivElement>(null);
   const isHovered = useMotionValue(0);
   const isFocused = useMotionValue(0);
+  const isPressed = useMotionValue(0);
+  const hoverOverlayOpacity = useTransform(isHovered, [0, 1], [0, 1]);
+  const pressOverlayOpacity = useTransform(isPressed, [0, 1], [0, 1]);
 
   const mouseDistance = useTransform(mouseX, (val) => {
     const rect = ref.current?.getBoundingClientRect() ?? {
@@ -112,6 +115,10 @@ function DockItem({
       }}
       onHoverStart={() => isHovered.set(1)}
       onHoverEnd={() => isHovered.set(0)}
+      onPointerDown={() => isPressed.set(1)}
+      onPointerUp={() => isPressed.set(0)}
+      onPointerCancel={() => isPressed.set(0)}
+      onPointerLeave={() => isPressed.set(0)}
       onFocus={() => {
         isFocused.set(1);
         isHovered.set(1);
@@ -129,11 +136,21 @@ function DockItem({
           onClick?.();
         }
       }}
-      className={`relative inline-flex items-center justify-center rounded-full border border-transparent bg-transparent text-black transition-colors duration-150 hover:border-black/15 hover:bg-gray-100/85 focus-visible:border-black/15 focus-visible:bg-gray-100/85 dark:border-border dark:bg-[#2a2623] dark:text-gray-100 dark:shadow-sm dark:shadow-black/25 dark:hover:border-border dark:hover:bg-[#312c28] dark:focus-visible:border-border dark:focus-visible:bg-[#312c28] ${className}`}
+      className={`relative inline-flex items-center justify-center rounded-full border border-transparent bg-transparent text-black transition-colors duration-150 hover:border-black/15 hover:bg-gray-100/85 active:border-black/20 active:bg-gray-200/90 focus-visible:border-black/15 focus-visible:bg-gray-100/85 dark:border-border dark:bg-[#2a2623] dark:text-gray-100 dark:shadow-sm dark:shadow-black/25 dark:hover:border-border dark:hover:bg-[#312c28] dark:active:border-border dark:active:bg-[#3a3531] dark:focus-visible:border-border dark:focus-visible:bg-[#312c28] ${className}`}
       tabIndex={0}
       role="button"
       aria-haspopup="true"
     >
+      <motion.span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 rounded-full bg-gray-200/85 dark:bg-[#312c28]"
+        style={{ opacity: hoverOverlayOpacity }}
+      />
+      <motion.span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 rounded-full bg-gray-300/85 dark:bg-[#3a3531]"
+        style={{ opacity: pressOverlayOpacity }}
+      />
       {Children.map(children, (child) =>
         React.isValidElement(child)
           ? cloneElement(
@@ -192,6 +209,9 @@ export default function Dock({
 }: DockProps) {
   const mouseX = useMotionValue(Infinity);
   const isInteracting = useMotionValue(0);
+  const shouldSnapAfterTap = () =>
+    typeof window !== "undefined" && window.matchMedia("(max-width: 1024px)").matches;
+
   const resetInteraction = () => {
     isInteracting.set(0);
     mouseX.set(Infinity);
@@ -240,7 +260,12 @@ export default function Dock({
         {items.map((item, index) => (
           <DockItem
             key={index}
-            onClick={item.onClick}
+            onClick={() => {
+              if (shouldSnapAfterTap()) {
+                resetInteraction();
+              }
+              item.onClick();
+            }}
             className={item.className}
             mouseX={mouseX}
             isInteracting={isInteracting}
