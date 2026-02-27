@@ -9,6 +9,7 @@ export function Toaster(props: ToasterProps) {
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
+      className="z-[120]"
       position="top-right"
       offset={{ top: 84, right: 16, left: 16, bottom: 16 }}
       duration={3600}

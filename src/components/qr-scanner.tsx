@@ -1,88 +1,176 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { Camera, CheckCircle2, Loader2, ZoomIn, ZoomOut } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Camera, Flashlight, FlashlightOff, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
-import ElasticSlider from "@/components/ui/elastic-slider";
+
+export type QrScanPayload = {
+  sessionId: string;
+  token: string;
+  ts: number;
+};
+
+export type QrScanResult = "accepted" | "retry" | "stop";
 
 interface QrScannerProps {
-  onScan: (data: { sessionId: string; token: string; ts: number }) => void;
+  onScan: (data: QrScanPayload) => Promise<QrScanResult> | QrScanResult;
+  autoOpen?: boolean;
+  triggerLabel?: string;
+  description?: string;
 }
 
-export function QrScanner({ onScan }: QrScannerProps) {
+declare global {
+  interface Window {
+    jsQR?: (
+      data: Uint8ClampedArray,
+      width: number,
+      height: number
+    ) => { data: string } | null;
+    __attendanceQrLoader?: Promise<void>;
+  }
+}
+
+const SCAN_DECODE_INTERVAL_MS = 140;
+const RETRY_SCAN_COOLDOWN_MS = 900;
+const ZOOM_PRESETS = [0.5, 1, 3] as const;
+
+type TouchListLike = {
+  length: number;
+  [index: number]: {
+    clientX: number;
+    clientY: number;
+  };
+};
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function parseQrPayload(raw: string): QrScanPayload | null {
+  try {
+    const parsed = JSON.parse(raw);
+    if (
+      typeof parsed?.sessionId === "string" &&
+      typeof parsed?.token === "string" &&
+      Number.isFinite(Number(parsed?.ts))
+    ) {
+      return {
+        sessionId: parsed.sessionId,
+        token: parsed.token,
+        ts: Number(parsed.ts),
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function ensureJsQrLoaded() {
+  if (typeof window === "undefined") return;
+  if (typeof window.jsQR === "function") return;
+
+  if (!window.__attendanceQrLoader) {
+    window.__attendanceQrLoader = new Promise<void>((resolve, reject) => {
+      const existing = document.querySelector<HTMLScriptElement>('script[data-qr-lib="jsqr"]');
+      if (existing) {
+        existing.addEventListener("load", () => resolve(), { once: true });
+        existing.addEventListener("error", () => reject(new Error("Failed to load QR decoder")), {
+          once: true,
+        });
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js";
+      script.async = true;
+      script.dataset.qrLib = "jsqr";
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Failed to load QR decoder"));
+      document.head.appendChild(script);
+    });
+  }
+
+  await window.__attendanceQrLoader;
+}
+
+function getTouchDistance(touches: TouchListLike) {
+  if (touches.length < 2) return 0;
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.hypot(dx, dy);
+}
+
+export function QrScanner({
+  onScan,
+  autoOpen = false,
+  triggerLabel = "Open Camera",
+  description = "Point your camera at the live rotating QR code.",
+}: QrScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [scanning, setScanning] = useState(false);
+  const [overlayOpen, setOverlayOpen] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
   const [error, setError] = useState("");
-  const [scanned, setScanned] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
+  const scanBusyRef = useRef(false);
+  const nextScanAllowedAtRef = useRef(0);
+  const lastDecodedKeyRef = useRef("");
+  const lastDecodedAtRef = useRef(0);
+  const lastDecodeTickRef = useRef(0);
+
   const [zoomSupported, setZoomSupported] = useState(false);
   const [zoomMin, setZoomMin] = useState(1);
   const [zoomMax, setZoomMax] = useState(3);
   const [zoomValue, setZoomValue] = useState(1);
+  const [torchSupported, setTorchSupported] = useState(false);
+  const [torchEnabled, setTorchEnabled] = useState(false);
+
+  const pinchStartDistanceRef = useRef<number | null>(null);
+  const pinchStartZoomRef = useRef(1);
 
   useEffect(() => {
     if (error) toast.error(error);
   }, [error]);
 
-  async function startCamera() {
-    setError("");
-    setVideoReady(false);
-    setScanning(true);
+  const effectiveZoomMin = useMemo(() => (zoomSupported ? zoomMin : 1), [zoomMin, zoomSupported]);
+  const effectiveZoomMax = useMemo(() => (zoomSupported ? zoomMax : 3), [zoomMax, zoomSupported]);
+
+  async function applyZoom(requestedValue: number) {
+    const nextValue = clamp(requestedValue, effectiveZoomMin, effectiveZoomMax);
+    const normalized = Number(nextValue.toFixed(2));
+    setZoomValue(normalized);
+
+    if (!zoomSupported || !streamRef.current) return;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-      });
-      streamRef.current = stream;
-      const track = stream.getVideoTracks()[0];
-      if (track && typeof track.getCapabilities === "function") {
-        const caps: any = track.getCapabilities();
-        if (caps?.zoom) {
-          const min = Number(caps.zoom.min ?? 1);
-          const max = Number(caps.zoom.max ?? 3);
-          setZoomSupported(true);
-          setZoomMin(min);
-          setZoomMax(max);
-          setZoomValue(min);
-          try {
-            await track.applyConstraints({
-              advanced: [{ zoom: min } as any],
-            });
-          } catch {
-            // Continue with default zoom if the browser rejects zoom constraints.
-          }
-        } else {
-          setZoomSupported(false);
-          setZoomMin(1);
-          setZoomMax(3);
-          setZoomValue(1);
-        }
-      }
-
-      await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => resolve());
-      });
-
-      if (!videoRef.current) {
-        setError("Unable to start camera preview. Please try again.");
-        stopCamera();
-        return;
-      }
-
-      videoRef.current.srcObject = stream;
-      void videoRef.current.play().catch(() => {
-        setError("Unable to start camera preview. Please try again.");
-        stopCamera();
+      const track = streamRef.current.getVideoTracks()[0];
+      if (!track) return;
+      await track.applyConstraints({
+        advanced: [{ zoom: normalized } as any],
       });
     } catch {
-      setError("Camera access denied. Please allow camera permissions.");
-      setScanning(false);
+      // Keep scanning if hardware zoom constraints are rejected.
+    }
+  }
+
+  async function toggleTorch() {
+    if (!streamRef.current || !torchSupported) return;
+
+    const track = streamRef.current.getVideoTracks()[0];
+    if (!track) return;
+
+    const next = !torchEnabled;
+    try {
+      await track.applyConstraints({
+        advanced: [{ torch: next } as any],
+      });
+      setTorchEnabled(next);
+    } catch {
+      toast.error("Flash is not available on this camera.");
     }
   }
 
@@ -93,29 +181,116 @@ export function QrScanner({ onScan }: QrScannerProps) {
     }
 
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
-    setScanning(false);
+
+    setCameraActive(false);
     setVideoReady(false);
-    setZoomValue(1);
+    setProcessing(false);
+    setTorchEnabled(false);
+    scanBusyRef.current = false;
+  }
+
+  function closeOverlay() {
+    stopCamera();
+    setOverlayOpen(false);
+  }
+
+  async function startCamera() {
+    if (cameraActive) return;
+
+    try {
+      setError("");
+      setOverlayOpen(true);
+      setVideoReady(false);
+      await ensureJsQrLoaded();
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+      });
+
+      streamRef.current = stream;
+      const track = stream.getVideoTracks()[0];
+      if (track && typeof track.getCapabilities === "function") {
+        const caps = track.getCapabilities() as any;
+        const canZoom = Boolean(caps?.zoom);
+        const canTorch = caps?.torch === true;
+
+        setTorchSupported(canTorch);
+        setTorchEnabled(false);
+
+        if (canZoom) {
+          const min = Number(caps.zoom.min ?? 1);
+          const max = Number(caps.zoom.max ?? 3);
+          const initial = clamp(1, min, max);
+          setZoomSupported(true);
+          setZoomMin(min);
+          setZoomMax(max);
+          setZoomValue(initial);
+          try {
+            await track.applyConstraints({
+              advanced: [{ zoom: initial } as any],
+            });
+          } catch {
+            // Continue with default zoom if the browser rejects zoom constraints.
+          }
+        } else {
+          setZoomSupported(false);
+          setZoomMin(1);
+          setZoomMax(3);
+          setZoomValue(1);
+          setTorchSupported(false);
+          setTorchEnabled(false);
+        }
+      }
+
+      if (!videoRef.current) {
+        throw new Error("Unable to initialize camera preview.");
+      }
+
+      videoRef.current.setAttribute("playsinline", "true");
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
+      setCameraActive(true);
+    } catch {
+      setError("Unable to start camera. Please allow permission and try again.");
+      setOverlayOpen(false);
+      stopCamera();
+    }
   }
 
   useEffect(() => {
-    if (!scanning || scanned) return;
+    if (!autoOpen || overlayOpen || cameraActive) return;
+    void startCamera();
+  }, [autoOpen, overlayOpen, cameraActive]);
 
-    let animFrame: number;
+  useEffect(() => {
+    if (!cameraActive) return;
+
+    let frame = 0;
     const scan = () => {
       if (!videoRef.current || !canvasRef.current) {
-        animFrame = requestAnimationFrame(scan);
+        frame = requestAnimationFrame(scan);
         return;
       }
+
+      const nowPerf = performance.now();
+      if (nowPerf - lastDecodeTickRef.current < SCAN_DECODE_INTERVAL_MS) {
+        frame = requestAnimationFrame(scan);
+        return;
+      }
+      lastDecodeTickRef.current = nowPerf;
 
       const video = videoRef.current;
       const canvas = canvasRef.current;
       const ctx = canvas.getContext("2d");
       if (!ctx || video.videoWidth === 0) {
-        animFrame = requestAnimationFrame(scan);
+        frame = requestAnimationFrame(scan);
         return;
       }
 
@@ -124,7 +299,7 @@ export function QrScanner({ onScan }: QrScannerProps) {
       canvas.width = frameWidth;
       canvas.height = frameHeight;
 
-      if (!zoomSupported && zoomValue > 1) {
+      if (!zoomSupported && zoomValue > 1.01) {
         // Fallback digital zoom for browsers that don't expose camera zoom controls.
         const srcW = frameWidth / zoomValue;
         const srcH = frameHeight / zoomValue;
@@ -138,20 +313,44 @@ export function QrScanner({ onScan }: QrScannerProps) {
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
       try {
-        // @ts-ignore - jsQR loaded via dynamic import
-        if (typeof window !== "undefined" && (window as any).jsQR) {
-          const code = (window as any).jsQR(
-            imageData.data,
-            imageData.width,
-            imageData.height
-          );
-          if (code) {
-            const parsed = JSON.parse(code.data);
-            if (parsed.sessionId && parsed.token && parsed.ts) {
-              setScanned(true);
-              stopCamera();
-              onScan(parsed);
-              return;
+        if (typeof window !== "undefined" && typeof window.jsQR === "function") {
+          const code = window.jsQR(imageData.data, imageData.width, imageData.height);
+          if (code?.data) {
+            const parsed = parseQrPayload(code.data);
+            if (parsed) {
+              const now = Date.now();
+              const payloadKey = `${parsed.sessionId}:${parsed.token}:${parsed.ts}`;
+
+              if (
+                scanBusyRef.current ||
+                now < nextScanAllowedAtRef.current ||
+                (payloadKey === lastDecodedKeyRef.current && now - lastDecodedAtRef.current < 1200)
+              ) {
+                frame = requestAnimationFrame(scan);
+                return;
+              }
+
+              scanBusyRef.current = true;
+              lastDecodedKeyRef.current = payloadKey;
+              lastDecodedAtRef.current = now;
+              setProcessing(true);
+
+              Promise.resolve(onScan(parsed))
+                .then((result) => {
+                  if (result === "accepted" || result === "stop") {
+                    closeOverlay();
+                    return;
+                  }
+
+                  nextScanAllowedAtRef.current = Date.now() + RETRY_SCAN_COOLDOWN_MS;
+                })
+                .catch(() => {
+                  nextScanAllowedAtRef.current = Date.now() + RETRY_SCAN_COOLDOWN_MS;
+                })
+                .finally(() => {
+                  scanBusyRef.current = false;
+                  setProcessing(false);
+                });
             }
           }
         }
@@ -159,121 +358,185 @@ export function QrScanner({ onScan }: QrScannerProps) {
         // continue scanning
       }
 
-      animFrame = requestAnimationFrame(scan);
+      frame = requestAnimationFrame(scan);
     };
 
-    animFrame = requestAnimationFrame(scan);
-    return () => cancelAnimationFrame(animFrame);
-  }, [scanning, scanned, onScan]);
+    frame = requestAnimationFrame(scan);
+    return () => cancelAnimationFrame(frame);
+  }, [cameraActive, onScan, zoomSupported, zoomValue]);
 
   useEffect(() => {
-    const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js";
-    script.async = true;
-    document.head.appendChild(script);
-
-    return () => {
-      stopCamera();
-      document.head.removeChild(script);
-    };
+    return () => stopCamera();
   }, []);
 
-  async function handleZoomChange(value: number) {
-    setZoomValue(value);
-    if (!zoomSupported || !streamRef.current) return;
+  useEffect(() => {
+    if (!overlayOpen) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeOverlay();
+      }
+    };
 
-    try {
-      const track = streamRef.current.getVideoTracks()[0];
-      await track.applyConstraints({
-        advanced: [{ zoom: value } as any],
-      });
-    } catch {
-      // Keep scanning with last known value if applyConstraints fails.
-    }
-  }
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [overlayOpen]);
 
-  if (scanned) {
-    return (
-      <div className="status-panel flex flex-col items-center gap-4 p-8 text-center">
-        <CheckCircle2 className="h-12 w-12" />
-        <p className="font-medium">QR Code Scanned</p>
-        <p className="text-sm text-muted-foreground">Processing your attendance...</p>
-      </div>
-    );
-  }
+  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length !== 2) return;
+    pinchStartDistanceRef.current = getTouchDistance(event.touches);
+    pinchStartZoomRef.current = zoomValue;
+  };
+
+  const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length !== 2 || pinchStartDistanceRef.current === null) return;
+    event.preventDefault();
+
+    const currentDistance = getTouchDistance(event.touches);
+    if (currentDistance <= 0) return;
+
+    const pinchRatio = currentDistance / pinchStartDistanceRef.current;
+    const nextZoom = pinchStartZoomRef.current * pinchRatio;
+    void applyZoom(nextZoom);
+  };
+
+  const handleTouchEnd = () => {
+    pinchStartDistanceRef.current = null;
+  };
 
   return (
-    <div className="space-y-4">
-      {!scanning ? (
+    <div className="space-y-3">
+      {!overlayOpen ? (
         <button
           onClick={startCamera}
-          className="flex w-full flex-col items-center gap-3 rounded-lg border-2 border-dashed border-border p-12 hover:border-primary hover:bg-accent/50 transition-colors"
+          className="flex w-full flex-col items-center gap-3 rounded-xl border border-border bg-background/70 p-8 transition-colors hover:bg-accent/50"
         >
-          <Camera className="h-12 w-12 text-muted-foreground" />
-          <span className="font-medium">Tap to Open Camera</span>
-          <span className="text-sm text-muted-foreground">
-            Point at the QR code displayed by your lecturer
-          </span>
+          <Camera className="h-10 w-10 text-primary" />
+          <span className="text-base font-semibold">{triggerLabel}</span>
+          <span className="text-center text-sm text-muted-foreground">{description}</span>
         </button>
       ) : (
-        <div className="flex flex-col items-center w-full">
-          <div className="relative w-full max-w-[min(100vw-2rem,420px)] mx-auto min-h-[min(50vh,320px)] aspect-[4/3] rounded-xl overflow-hidden border-2 border-border bg-black shadow-lg [aspect-ratio:4/3]">
-            <video
-              ref={videoRef}
-              className="absolute inset-0 h-full w-full object-cover"
-              autoPlay
-              playsInline
-              muted
-              onLoadedData={() => setVideoReady(true)}
-            />
-            {!videoReady && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                <div className="flex items-center gap-2 rounded-md bg-black/70 px-3 py-2 text-sm text-white">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Starting camera...
+        <div className="fixed inset-0 z-[70]">
+          <div className="absolute inset-0 bg-black/85 md:bg-black/70" />
+          <div className="relative flex h-full w-full items-stretch justify-center md:items-start md:px-6 md:pt-6">
+            <div
+              ref={previewRef}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              onTouchCancel={handleTouchEnd}
+              className="relative h-full w-full overflow-hidden bg-black touch-none md:h-[68vh] md:max-h-[760px] md:w-[min(92vw,1080px)] md:rounded-3xl md:border md:border-white/20 md:shadow-2xl"
+            >
+              <video
+                ref={videoRef}
+                className="absolute inset-0 h-full w-full object-cover"
+                style={!zoomSupported ? { transform: `scale(${zoomValue})` } : undefined}
+                autoPlay
+                playsInline
+                muted
+                onLoadedData={() => setVideoReady(true)}
+              />
+
+              {!videoReady && (
+                <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/65">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-black/70 px-4 py-2 text-sm text-white">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Starting camera...
+                  </div>
+                </div>
+              )}
+
+              {processing && (
+                <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/35">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-black/70 px-4 py-2 text-sm text-white">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Verifying scan...
+                  </div>
+                </div>
+              )}
+
+              <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between p-4">
+                <div className="rounded-full bg-black/55 px-3 py-1 text-xs text-white/90">
+                  Continuous scan active
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={toggleTorch}
+                    disabled={!torchSupported}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label={torchEnabled ? "Turn flash off" : "Turn flash on"}
+                  >
+                    {torchEnabled ? <FlashlightOff className="h-4 w-4" /> : <Flashlight className="h-4 w-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeOverlay}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white"
+                    aria-label="Close scanner"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
-            )}
-            <div className="pointer-events-none absolute inset-0">
-              <div className="absolute left-1/2 top-1/2 h-48 w-48 sm:h-56 sm:w-56 -translate-x-1/2 -translate-y-1/2 rounded-xl border-4 border-white/85" />
-              <div className="absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-black/50 to-transparent" />
-              <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/50 to-transparent" />
-              <p className="absolute bottom-16 left-1/2 -translate-x-1/2 rounded-md bg-black/55 px-2 py-1 text-xs text-white whitespace-nowrap">
-                Align QR within frame
-              </p>
-            </div>
-          </div>
-          <div className="mt-3 flex w-full max-w-[min(100vw-2rem,400px)] flex-col gap-2">
-            <div className="rounded-lg bg-muted/50 px-3 py-3">
-              <div className="flex items-center justify-between text-xs">
-                <span>{zoomSupported ? "Camera zoom" : "Digital zoom"}</span>
-                <span>{zoomValue.toFixed(1)}x</span>
+
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/55 to-transparent" />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/70 to-transparent" />
+
+              <div className="absolute inset-x-0 bottom-0 z-30 p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+                <div className="rounded-2xl bg-black/55 p-3 text-white backdrop-blur">
+                  <p className="text-center text-xs text-white/80">
+                    Keep the rotating QR in view. Detection works anywhere in frame.
+                  </p>
+                  <div className="mt-3 flex items-center justify-center gap-2">
+                    {ZOOM_PRESETS.map((preset) => {
+                      const disabled = preset < effectiveZoomMin || preset > effectiveZoomMax;
+                      const selected = Math.abs(zoomValue - preset) < 0.11;
+                      return (
+                        <button
+                          key={preset}
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => {
+                            void applyZoom(preset);
+                          }}
+                          className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                            selected
+                              ? "bg-white text-black"
+                              : "bg-white/15 text-white hover:bg-white/25"
+                          } disabled:cursor-not-allowed disabled:opacity-30`}
+                        >
+                          {preset.toFixed(1)}x
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-2 px-2">
+                    <input
+                      type="range"
+                      min={effectiveZoomMin}
+                      max={effectiveZoomMax}
+                      step={0.1}
+                      value={zoomValue}
+                      onChange={(event) => {
+                        void applyZoom(Number(event.target.value));
+                      }}
+                      className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-white/25"
+                      aria-label="Camera zoom"
+                    />
+                  </div>
+                </div>
               </div>
-              <ElasticSlider
-                className="mt-1 pb-4"
-                leftIcon={<ZoomOut className="h-4 w-4" />}
-                rightIcon={<ZoomIn className="h-4 w-4" />}
-                startingValue={zoomMin}
-                defaultValue={zoomValue}
-                value={zoomValue}
-                maxValue={zoomMax}
-                valueFormatter={(value) => `${value.toFixed(1)}x`}
-                onValueChange={(value) => {
-                  void handleZoomChange(Number(value.toFixed(2)));
-                }}
-              />
             </div>
-            <button
-              onClick={stopCamera}
-              className="w-full rounded-md border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"
-            >
-              Cancel
-            </button>
           </div>
+
+          <canvas ref={canvasRef} className="hidden" />
         </div>
       )}
 
-      <canvas ref={canvasRef} className="hidden" />
+      {!overlayOpen && error ? (
+        <div className="status-panel-subtle text-sm">{error}</div>
+      ) : null}
     </div>
   );
 }

@@ -39,11 +39,12 @@ export async function POST(request: NextRequest) {
     const parsed = markAttendanceSchema.parse(body);
     const now = new Date();
 
-    // Rate limiting check: max 10 submissions per minute per student per session
-    const { allowed, remaining } = await checkRateLimit(
+    // Continuous scan UX may submit multiple rotating tokens while waiting for a valid frame.
+    // Keep a guardrail but allow short bursts from mobile cameras.
+    const { allowed } = await checkRateLimit(
       session.user.id,
       parsed.sessionId,
-      10,
+      30,
       60
     );
     if (!allowed) {

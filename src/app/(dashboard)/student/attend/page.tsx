@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { QrScanner } from "@/components/qr-scanner";
+import { QrScanner, type QrScanPayload, type QrScanResult } from "@/components/qr-scanner";
 import { QrDisplay } from "@/components/qr-display";
 import { GpsCheck } from "@/components/gps-check";
 import { WebAuthnPrompt } from "@/components/webauthn-prompt";
@@ -12,7 +12,6 @@ import { toast } from "sonner";
 import {
   CheckCircle2,
   XCircle,
-  Loader2,
   Fingerprint,
   MapPin,
   QrCode,
@@ -20,10 +19,11 @@ import {
   Clock,
   RefreshCcw,
   Share2,
+  Loader2,
 } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 
-type Step = "session" | "webauthn" | "gps" | "qr" | "submitting" | "result";
+type Step = "webauthn" | "session" | "gps" | "qr" | "result";
 type QrPortStatus = "PENDING" | "APPROVED" | "REJECTED" | null;
 
 interface ActiveSession {
@@ -118,7 +118,7 @@ function detectDeviceTypeFromUserAgent(userAgent: string): "iOS" | "Android" | "
 
 export default function AttendPage() {
   const router = useRouter();
-  const [step, setStep] = useState<Step>("session");
+  const [step, setStep] = useState<Step>("webauthn");
   const [webauthnVerified, setWebauthnVerified] = useState(false);
   const [gps, setGps] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [result, setResult] = useState<AttendanceResult | null>(null);
@@ -135,7 +135,6 @@ export default function AttendPage() {
   const [qrPortStatusLocal, setQrPortStatusLocal] = useState<QrPortStatus>(null);
 
   const [reverifyPasskeyVerified, setReverifyPasskeyVerified] = useState(false);
-  const [reverifySubmitting, setReverifySubmitting] = useState(false);
   const [reverifyError, setReverifyError] = useState<string | null>(null);
   const [serverClockOffsetMs, setServerClockOffsetMs] = useState(0);
   const [clockTick, setClockTick] = useState(() => Date.now());
@@ -177,6 +176,18 @@ export default function AttendPage() {
       course: s.course ?? { code: s.courseCode ?? "", name: s.courseName ?? "" },
       hasMarked: s.hasMarked ?? false,
     }));
+
+  function showInitialFailure(errorMessage: string) {
+    setResult({
+      success: false,
+      confidence: 0,
+      flagged: true,
+      gpsDistance: 0,
+      layers: { webauthn: false, gps: false, qr: false, ip: false },
+      error: errorMessage,
+    });
+    setStep("result");
+  }
 
   useEffect(() => {
     async function checkDevice() {
@@ -317,7 +328,6 @@ export default function AttendPage() {
   useEffect(() => {
     if (!isPendingReverify) {
       setReverifyPasskeyVerified(false);
-      setReverifySubmitting(false);
       if (reverifyToastKeyRef.current) {
         toast.dismiss(reverifyToastKeyRef.current);
         reverifyToastKeyRef.current = null;
@@ -398,7 +408,7 @@ export default function AttendPage() {
 
   function handleWebAuthnVerified() {
     setWebauthnVerified(true);
-    setStep("gps");
+    setStep("session");
   }
 
   function handleGpsReady(lat: number, lng: number, accuracy: number) {
@@ -406,23 +416,17 @@ export default function AttendPage() {
     setStep("qr");
   }
 
-  async function handleInitialQrScan(data: { sessionId: string; token: string; ts: number }) {
-    if (!gps) return;
-    if (selectedSession && data.sessionId !== selectedSession.id) {
-      toast.error("This QR belongs to a different session.");
-      setResult({
-        success: false,
-        confidence: 0,
-        flagged: true,
-        gpsDistance: 0,
-        layers: { webauthn: false, gps: false, qr: false, ip: false },
-        error: "This QR belongs to a different session. Please scan the QR for your selected course.",
-      });
-      setStep("result");
-      return;
+  async function handleInitialQrScan(data: QrScanPayload): Promise<QrScanResult> {
+    if (!gps) {
+      toast.error("Location check is still in progress. Wait a moment and scan again.");
+      return "retry";
     }
-
-    setStep("submitting");
+    if (selectedSession && data.sessionId !== selectedSession.id) {
+      const message =
+        "This QR belongs to a different session. Please scan the QR for your selected course.";
+      toast.error(message);
+      return "retry";
+    }
 
     try {
       const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
@@ -457,37 +461,32 @@ export default function AttendPage() {
       const body = await res.json();
 
       if (!res.ok) {
-        toast.error(body.error || "Attendance failed.");
-        setResult({
-          success: false,
-          confidence: 0,
-          flagged: true,
-          gpsDistance: 0,
-          layers: { webauthn: false, gps: false, qr: false, ip: false },
-          error: body.error,
-        });
-      } else {
-        setResult({
-          success: true,
-          confidence: body.record.confidence,
-          flagged: body.record.flagged,
-          gpsDistance: body.record.gpsDistance,
-          layers: body.record.layers,
-        });
-        setActiveSessionId(data.sessionId);
+        const message = body?.error || "Attendance failed.";
+        toast.error(message);
+
+        const retryable = res.status === 400 || res.status === 429;
+        if (retryable) {
+          return "retry";
+        }
+
+        showInitialFailure(message);
+        return "stop";
       }
-      setStep("result");
-    } catch {
-      toast.error("Network error. Please try again.");
+
       setResult({
-        success: false,
-        confidence: 0,
-        flagged: true,
-        gpsDistance: 0,
-        layers: { webauthn: false, gps: false, qr: false, ip: false },
-        error: "Network error. Please try again.",
+        success: true,
+        confidence: body.record.confidence,
+        flagged: body.record.flagged,
+        gpsDistance: body.record.gpsDistance,
+        layers: body.record.layers,
       });
+      setActiveSessionId(data.sessionId);
       setStep("result");
+      toast.success("Attendance marked. Keep this page open for reverification updates.");
+      return "accepted";
+    } catch {
+      toast.error("Network error. Camera stays open so you can scan again.");
+      return "retry";
     }
   }
 
@@ -572,18 +571,19 @@ export default function AttendPage() {
     }
   }
 
-  async function handleReverifyQrScan(data: { sessionId: string; token: string; ts: number }) {
-    if (!activeSessionId) return;
+  async function handleReverifyQrScan(data: QrScanPayload): Promise<QrScanResult> {
+    if (!activeSessionId) {
+      return "stop";
+    }
     if (data.sessionId !== activeSessionId) {
       setReverifyError("This QR belongs to a different session.");
-      return;
+      return "retry";
     }
     if (!reverifyPasskeyVerified) {
       setReverifyError("Passkey verification is required before scanning.");
-      return;
+      return "retry";
     }
 
-    setReverifySubmitting(true);
     setReverifyError(null);
     try {
       const res = await fetch("/api/attendance/reverify", {
@@ -598,7 +598,9 @@ export default function AttendPage() {
       });
       const body = await res.json();
       if (!res.ok) {
-        throw new Error(body.error || "Reverification failed");
+        const message = body?.error || "Reverification failed";
+        setReverifyError(message);
+        return "retry";
       }
 
       setSyncState((current) =>
@@ -618,10 +620,11 @@ export default function AttendPage() {
           : current
       );
       setReverifyPasskeyVerified(false);
+      toast.success("Reverification completed.");
+      return "accepted";
     } catch (error: any) {
       setReverifyError(error.message);
-    } finally {
-      setReverifySubmitting(false);
+      return "retry";
     }
   }
 
@@ -683,7 +686,7 @@ export default function AttendPage() {
   }, [syncState]);
 
   function resetFlow() {
-    setStep("session");
+    setStep("webauthn");
     setSelectedSession(null);
     setWebauthnVerified(false);
     setGps(null);
@@ -695,7 +698,6 @@ export default function AttendPage() {
     setRequestingQrPort(false);
     setQrPortStatusLocal(null);
     setReverifyPasskeyVerified(false);
-    setReverifySubmitting(false);
     setReverifyError(null);
     setServerClockOffsetMs(0);
     setClockTick(Date.now());
@@ -710,7 +712,7 @@ export default function AttendPage() {
       <PageHeader
         eyebrow="Student"
         title="Mark Attendance"
-        description="Select a live session and complete both verification phases."
+        description="Verify passkey first, then select a live session and scan."
       />
 
       <BleProximityCheck />
@@ -740,23 +742,12 @@ export default function AttendPage() {
       {hasDevice && !result && (
         <>
           <div className="flex flex-wrap items-center gap-3 text-sm">
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ${
-                ["session", "webauthn", "gps", "qr", "submitting"].includes(step)
-                  ? step === "qr"
-                    ? "bg-primary text-primary-foreground"
-                    : ["session", "webauthn", "gps", "qr", "submitting"].indexOf(step) > 2
-                      ? "border border-border/70 bg-muted text-foreground"
-                      : "bg-muted text-muted-foreground"
-                  : "border border-border/70 bg-muted text-foreground"
-              }`}
-            >
-              Phase 1
-              {["qr", "submitting"].includes(step) ? (
-                <CheckCircle2 className="h-3.5 w-3.5" />
-              ) : null}
+            <span className="status-chip-soft">
+              Phase 1: Passkey to Session to GPS to QR
             </span>
           </div>
+
+          {step === "webauthn" && <WebAuthnPrompt onVerified={handleWebAuthnVerified} />}
 
           {step === "session" && (
             <div className="surface space-y-3 p-4 sm:p-5">
@@ -780,7 +771,7 @@ export default function AttendPage() {
                       key={s.id}
                       onClick={() => {
                         setSelectedSession(s);
-                        setStep("webauthn");
+                        setStep("gps");
                       }}
                       className="w-full rounded-md border border-border px-4 py-3 text-left hover:bg-accent transition-colors"
                     >
@@ -792,7 +783,6 @@ export default function AttendPage() {
               )}
             </div>
           )}
-          {step === "webauthn" && <WebAuthnPrompt onVerified={handleWebAuthnVerified} />}
           {step === "gps" && (
             <GpsCheck
               onLocationReady={handleGpsReady}
@@ -806,13 +796,11 @@ export default function AttendPage() {
                 if (el && step === "qr") el.scrollIntoView({ behavior: "smooth", block: "center" });
               }}
             >
-              <QrScanner onScan={handleInitialQrScan} />
-            </div>
-          )}
-          {step === "submitting" && (
-            <div className="flex flex-col items-center gap-4 py-12">
-              <Loader2 className="h-12 w-12 animate-spin text-primary" />
-              <p className="font-medium">Verifying attendance...</p>
+              <QrScanner
+                onScan={handleInitialQrScan}
+                triggerLabel="Open Full Camera"
+                description="Continuous scan is active. Invalid or expired codes will prompt you and keep scanning."
+              />
             </div>
           )}
         </>
@@ -987,13 +975,13 @@ export default function AttendPage() {
                             </p>
                           )}
                         </div>
-                      ) : reverifySubmitting ? (
-                        <div className="status-panel-subtle flex items-center gap-2 text-sm">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Submitting reverification...
-                        </div>
                       ) : (
-                        <QrScanner onScan={handleReverifyQrScan} />
+                        <QrScanner
+                          onScan={handleReverifyQrScan}
+                          autoOpen
+                          triggerLabel="Open Reverification Camera"
+                          description="Keep camera pointed at the live board. Scan continues until your exact slot is accepted."
+                        />
                       )}
                     </div>
                   )}
