@@ -98,18 +98,15 @@ export function AuthPageLayout({
   const shellStyle = (
     viewportMode === "stable"
       ? { minHeight: "100svh", height: "100svh" }
-      : { minHeight: "var(--auth-viewport-height, 100dvh)" }
-  ) satisfies CSSProperties;
-
-  const mainStyle = (
-    viewportMode === "stable"
-      ? { height: "100%" }
-      : { height: "var(--auth-viewport-height, 100dvh)" }
+      : {
+          minHeight: "var(--auth-viewport-height, 100dvh)",
+          height: "var(--auth-viewport-height, 100dvh)",
+        }
   ) satisfies CSSProperties;
 
   return (
-    <div ref={shellRef} className="overflow-hidden bg-background" style={shellStyle}>
-      <header className="fixed inset-x-0 top-0 z-50 border-b border-border bg-background/95 pt-[env(safe-area-inset-top)] backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <div ref={shellRef} className="flex flex-col overflow-hidden bg-background" style={shellStyle}>
+      <header className="z-50 shrink-0 border-b border-border bg-background/95 pt-[env(safe-area-inset-top)] backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
             <Link href="/" className="inline-flex items-center">
@@ -152,8 +149,7 @@ export function AuthPageLayout({
 
       <main
         ref={mainRef}
-        className="overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)] pt-[calc(4rem+env(safe-area-inset-top))] [scroll-padding-bottom:calc(env(safe-area-inset-bottom)+0.75rem)] [scroll-padding-top:calc(4rem+env(safe-area-inset-top)+0.75rem)] [-webkit-overflow-scrolling:touch]"
-        style={mainStyle}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)] [scroll-padding-bottom:calc(env(safe-area-inset-bottom)+0.75rem)] [scroll-padding-top:0.75rem] [-webkit-overflow-scrolling:touch]"
       >
         <div className="mx-auto flex min-h-full w-full max-w-7xl flex-col px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
           <div className={`mx-auto flex w-full min-h-0 flex-1 items-stretch ${contentMaxWidthClass}`}>
