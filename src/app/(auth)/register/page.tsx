@@ -157,6 +157,7 @@ export default function RegisterPage() {
   return (
     <AuthPageLayout
       pageLabel="Sign Up"
+      viewportMode="stable"
       headerCounter={`${Math.min(activeStep, 5)}/5`}
       contentMaxWidthClass="max-w-4xl"
       headerLink={{ href: "/login", label: "Sign In" }}

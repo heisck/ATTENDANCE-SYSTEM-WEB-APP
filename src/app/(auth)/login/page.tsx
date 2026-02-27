@@ -77,13 +77,25 @@ function LoginForm() {
   }
 
   return (
-    <AuthPageLayout pageLabel="Sign In" contentMaxWidthClass="max-w-xl">
-      <div className="mx-auto flex min-h-full w-full max-w-md flex-col justify-center pb-8 sm:pb-0">
-        <h1 className="text-xl font-semibold tracking-tight">Welcome back</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Sign in to your ATTENDANCE IQ account.</p>
+    <AuthPageLayout
+      pageLabel="Sign In"
+      viewportMode="stable"
+      contentMaxWidthClass="max-w-xl"
+      headerLink={{ href: "/register", label: "Sign Up" }}
+    >
+      <div className="mx-auto flex h-full w-full max-w-md flex-col">
+        <form
+          onSubmit={handleSubmit}
+          className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl border border-border/70 bg-background/80"
+        >
+          <div className="shrink-0 border-b border-border/70 px-5 pb-4 pt-5 sm:px-6 sm:pt-6">
+            <h1 className="text-[1.35rem] font-semibold tracking-tight">Welcome back</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Enter your credentials to access your account.
+            </p>
+          </div>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <div className="space-y-4">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
             <div className="space-y-2">
               <label
                 htmlFor="email"
@@ -99,7 +111,7 @@ function LoginForm() {
                   aria-label="Email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Email address"
+                  placeholder="name@example.com"
                   required
                   className="flex h-11 w-full rounded-xl border border-border/70 bg-muted/35 py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
@@ -143,28 +155,23 @@ function LoginForm() {
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Signing in...
-              </>
-            ) : (
-              "Sign In"
-            )}
-          </button>
+          <div className="shrink-0 border-t border-border/70 px-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 sm:px-6 sm:pb-4">
+            <button
+              type="submit"
+              disabled={loading}
+              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                "Sign In"
+              )}
+            </button>
+          </div>
         </form>
-
-        <p className="mt-5 text-center text-sm text-muted-foreground">
-          Don&apos;t have an account?{" "}
-          <Link href="/register" className="font-semibold text-primary hover:underline">
-            Sign Up
-          </Link>
-        </p>
       </div>
     </AuthPageLayout>
   );
@@ -174,7 +181,12 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <AuthPageLayout pageLabel="Sign In" contentMaxWidthClass="max-w-xl">
+        <AuthPageLayout
+          pageLabel="Sign In"
+          viewportMode="stable"
+          contentMaxWidthClass="max-w-xl"
+          headerLink={{ href: "/register", label: "Sign Up" }}
+        >
           <div className="flex w-full items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>

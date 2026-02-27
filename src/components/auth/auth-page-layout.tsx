@@ -9,6 +9,7 @@ type AuthPageLayoutProps = {
   pageLabel: string;
   children: ReactNode;
   contentMaxWidthClass?: string;
+  viewportMode?: "dynamic" | "stable";
   headerLink?: {
     href: string;
     label: string;
@@ -20,6 +21,7 @@ export function AuthPageLayout({
   pageLabel,
   children,
   contentMaxWidthClass = "max-w-3xl",
+  viewportMode = "dynamic",
   headerLink,
   headerCounter,
 }: AuthPageLayoutProps) {
@@ -30,8 +32,10 @@ export function AuthPageLayout({
     const shell = shellRef.current;
     if (!shell) return;
 
+    const visualViewport = window.visualViewport;
     const syncViewportHeight = () => {
-      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      if (viewportMode !== "dynamic") return;
+      const viewportHeight = visualViewport?.height ?? window.innerHeight;
       shell.style.setProperty("--auth-viewport-height", `${Math.round(viewportHeight)}px`);
     };
 
@@ -66,11 +70,12 @@ export function AuthPageLayout({
 
     syncViewportHeight();
 
-    const visualViewport = window.visualViewport;
-    window.addEventListener("resize", syncViewportHeight);
-    window.addEventListener("orientationchange", syncViewportHeight);
-    visualViewport?.addEventListener("resize", syncViewportHeight);
-    visualViewport?.addEventListener("scroll", syncViewportHeight);
+    if (viewportMode === "dynamic") {
+      window.addEventListener("resize", syncViewportHeight);
+      window.addEventListener("orientationchange", syncViewportHeight);
+      visualViewport?.addEventListener("resize", syncViewportHeight);
+      visualViewport?.addEventListener("scroll", syncViewportHeight);
+    }
 
     const main = mainRef.current;
     main?.addEventListener("focusin", ensureFocusedFieldVisible);
@@ -80,25 +85,30 @@ export function AuthPageLayout({
 
     return () => {
       document.body.style.overflowY = previousBodyOverflowY;
-
-      window.removeEventListener("resize", syncViewportHeight);
-      window.removeEventListener("orientationchange", syncViewportHeight);
-      visualViewport?.removeEventListener("resize", syncViewportHeight);
-      visualViewport?.removeEventListener("scroll", syncViewportHeight);
+      if (viewportMode === "dynamic") {
+        window.removeEventListener("resize", syncViewportHeight);
+        window.removeEventListener("orientationchange", syncViewportHeight);
+        visualViewport?.removeEventListener("resize", syncViewportHeight);
+        visualViewport?.removeEventListener("scroll", syncViewportHeight);
+      }
       main?.removeEventListener("focusin", ensureFocusedFieldVisible);
     };
-  }, []);
+  }, [viewportMode]);
 
-  const shellStyle = {
-    minHeight: "var(--auth-viewport-height, 100dvh)",
-  } satisfies CSSProperties;
+  const shellStyle = (
+    viewportMode === "stable"
+      ? { minHeight: "100svh", height: "100svh" }
+      : { minHeight: "var(--auth-viewport-height, 100dvh)" }
+  ) satisfies CSSProperties;
 
-  const mainStyle = {
-    height: "var(--auth-viewport-height, 100dvh)",
-  } satisfies CSSProperties;
+  const mainStyle = (
+    viewportMode === "stable"
+      ? { height: "100%" }
+      : { height: "var(--auth-viewport-height, 100dvh)" }
+  ) satisfies CSSProperties;
 
   return (
-    <div ref={shellRef} className="bg-background" style={shellStyle}>
+    <div ref={shellRef} className="overflow-hidden bg-background" style={shellStyle}>
       <header className="fixed inset-x-0 top-0 z-50 border-b border-border bg-background/95 pt-[env(safe-area-inset-top)] backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
