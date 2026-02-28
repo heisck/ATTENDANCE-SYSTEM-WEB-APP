@@ -24,7 +24,19 @@ import {
 
 type Step = "webauthn" | "session" | "gps" | "qr" | "result";
 type QrPortStatus = "PENDING" | "APPROVED" | "REJECTED" | null;
-type AttendPageStage = "prepare" | "scan" | "phase1" | "reverify" | "complete";
+type AttendPageStage =
+  | "prepare"
+  | "scan"
+  | "phase1"
+  | "reverify"
+  | "complete"
+  | "already";
+type TerminalLineTone = "command" | "success" | "info" | "warn" | "error";
+
+interface TerminalLine {
+  tone: TerminalLineTone;
+  text: string;
+}
 
 interface ActiveSession {
   id: string;
@@ -122,7 +134,8 @@ function normalizeAttendStage(value: string | null): AttendPageStage | null {
     value === "scan" ||
     value === "phase1" ||
     value === "reverify" ||
-    value === "complete"
+    value === "complete" ||
+    value === "already"
   ) {
     return value;
   }
@@ -220,6 +233,42 @@ export default function AttendPage() {
       course: s.course ?? { code: s.courseCode ?? "", name: s.courseName ?? "" },
       hasMarked: s.hasMarked ?? false,
     }));
+
+  const openMarkedSessionStatus = useCallback(
+    (session: ActiveSession) => {
+      setSelectedSession(session);
+      setActiveSessionId(session.id);
+      setStep("session");
+      setResult(null);
+      setAttendStage("already");
+    },
+    [setAttendStage]
+  );
+
+  const openPhaseTwoFromMarkedStatus = useCallback(() => {
+    if (!syncState) return;
+
+    const alreadyComplete =
+      syncState.attendance?.reverifyStatus === "PASSED" ||
+      syncState.attendance?.reverifyStatus === "MANUAL_PRESENT";
+
+    if (!alreadyComplete && syncState.session.phase !== "REVERIFY") {
+      toast.info("Phase 2 has not started yet for this session.");
+      return;
+    }
+
+    setResult((current) =>
+      current ?? {
+        success: true,
+        confidence: 100,
+        flagged: Boolean(syncState.attendance?.flagged),
+        gpsDistance: 0,
+        layers: { webauthn: true, gps: true, qr: true, ip: false },
+      }
+    );
+    setStep("result");
+    setAttendStage(alreadyComplete ? "complete" : "reverify");
+  }, [setAttendStage, syncState]);
 
   function showInitialFailure(errorMessage: string) {
     setResult({
@@ -403,26 +452,9 @@ export default function AttendPage() {
           }
         }
 
-        setSelectedSession(markedSession);
-        setActiveSessionId(markedSession.id);
+        openMarkedSessionStatus(markedSession);
         setSyncState(body);
         setQrPortStatusLocal(body.qrPortStatus ?? null);
-        setResult({
-          success: true,
-          confidence: 100,
-          flagged: Boolean(body.attendance.flagged),
-          gpsDistance: 0,
-          layers: { webauthn: true, gps: true, qr: true, ip: false },
-        });
-        setStep("result");
-
-        const alreadyComplete =
-          body.attendance.reverifyStatus === "PASSED" ||
-          body.attendance.reverifyStatus === "MANUAL_PRESENT";
-        setAttendStage(alreadyComplete ? "complete" : "reverify");
-        if (!alreadyComplete) {
-          toast.info("Attendance resumed. Continue with phase two verification.");
-        }
       } catch {
         // Keep normal manual flow on transient errors.
       }
@@ -432,7 +464,7 @@ export default function AttendPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeSessionId, hasDevice, result, sessions, sessionsLoading, setAttendStage, step]);
+  }, [activeSessionId, hasDevice, openMarkedSessionStatus, result, sessions, sessionsLoading, step]);
 
   useEffect(() => {
     if (hasDevice !== true || step !== "session") return;
@@ -877,6 +909,67 @@ export default function AttendPage() {
     }
   }, [syncState]);
 
+  const markedSessionTerminalLines = useMemo<TerminalLine[]>(() => {
+    const lines: TerminalLine[] = [
+      {
+        tone: "command",
+        text: `> attendance status --course ${selectedSession?.course.code ?? "unknown"}`,
+      },
+    ];
+
+    if (!selectedSession) {
+      lines.push({ tone: "info", text: "Select a session to inspect attendance state." });
+      return lines;
+    }
+
+    if (!syncState) {
+      lines.push({ tone: "info", text: "Syncing current session mode..." });
+      return lines;
+    }
+
+    lines.push({ tone: "success", text: "Attendance record found for this session." });
+    lines.push({
+      tone: "info",
+      text: `Session mode: ${syncState.session.phase} (${syncState.session.status})`,
+    });
+
+    const status = syncState.attendance?.reverifyStatus ?? "NOT_REQUIRED";
+    lines.push({ tone: "info", text: `Phase 2 status: ${status}` });
+
+    if (syncState.session.phase === "INITIAL") {
+      lines.push({
+        tone: "warn",
+        text: "Phase 1 is active. You already marked attendance; wait for phase 2.",
+      });
+      return lines;
+    }
+
+    if (syncState.session.phase === "REVERIFY") {
+      if (status === "PASSED" || status === "MANUAL_PRESENT") {
+        lines.push({ tone: "success", text: "Phase 2 already completed for this session." });
+      } else {
+        lines.push({
+          tone: "warn",
+          text: "Phase 2 pending. Continue to verify passkey and scan your assigned QR slot.",
+        });
+      }
+      return lines;
+    }
+
+    if (syncState.session.phase === "CLOSED") {
+      if (status === "PASSED" || status === "MANUAL_PRESENT") {
+        lines.push({ tone: "success", text: "Session closed with full attendance completion." });
+      } else {
+        lines.push({
+          tone: "error",
+          text: "Session closed before phase 2 completion. Contact lecturer if review is needed.",
+        });
+      }
+    }
+
+    return lines;
+  }, [selectedSession, syncState]);
+
   function resetFlow() {
     setStep("webauthn");
     setSelectedSession(null);
@@ -962,7 +1055,7 @@ export default function AttendPage() {
                       key={s.id}
                       onClick={() => {
                         if (s.hasMarked) {
-                          toast.info("You already marked attendance for this session.");
+                          openMarkedSessionStatus(s);
                           return;
                         }
                         setSelectedSession(s);
@@ -1015,6 +1108,38 @@ export default function AttendPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             Verify passkey, select a live session, and complete location check before scanning.
           </p>
+        </div>
+      )}
+
+      {hasDevice && attendStage === "already" && selectedSession && (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-border bg-background/70 p-4 sm:p-5">
+            <AttendanceStatusTerminal lines={markedSessionTerminalLines} />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {(syncState?.session.phase === "REVERIFY" ||
+              syncState?.attendance?.reverifyStatus === "PASSED" ||
+              syncState?.attendance?.reverifyStatus === "MANUAL_PRESENT") && (
+              <button
+                type="button"
+                onClick={openPhaseTwoFromMarkedStatus}
+                className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+              >
+                {syncState?.attendance?.reverifyStatus === "PASSED" ||
+                syncState?.attendance?.reverifyStatus === "MANUAL_PRESENT"
+                  ? "Open Completion Actions"
+                  : "Continue Phase 2"}
+              </button>
+            )}
+
+            <Link
+              href="/student"
+              className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+            >
+              Go to Dashboard
+            </Link>
+          </div>
         </div>
       )}
 
@@ -1271,6 +1396,61 @@ export default function AttendPage() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function AttendanceStatusTerminal({ lines }: { lines: TerminalLine[] }) {
+  const [visibleCount, setVisibleCount] = useState(1);
+
+  useEffect(() => {
+    setVisibleCount(1);
+    if (lines.length <= 1) return;
+
+    const timer = window.setInterval(() => {
+      setVisibleCount((current) => {
+        if (current >= lines.length) {
+          window.clearInterval(timer);
+          return current;
+        }
+        return current + 1;
+      });
+    }, 170);
+
+    return () => window.clearInterval(timer);
+  }, [lines]);
+
+  return (
+    <div className="space-y-2 font-mono text-sm">
+      {lines.slice(0, visibleCount).map((line, index) => {
+        const toneClass =
+          line.tone === "success"
+            ? "text-green-500"
+            : line.tone === "warn"
+              ? "text-amber-500"
+              : line.tone === "error"
+                ? "text-red-500"
+                : line.tone === "command"
+                  ? "text-foreground"
+                  : "text-blue-500";
+        const prefix =
+          line.tone === "success"
+            ? "✔"
+            : line.tone === "warn"
+              ? "⚠"
+              : line.tone === "error"
+                ? "✖"
+                : line.tone === "command"
+                  ? ""
+                  : "ℹ";
+
+        return (
+          <div key={`${line.text}-${index}`} className={toneClass}>
+            {prefix ? `${prefix} ` : ""}
+            {line.text}
+          </div>
+        );
+      })}
     </div>
   );
 }
