@@ -197,7 +197,6 @@ async function ensureReverifySelection(
 
     if (!session) return;
     if (session.status !== "ACTIVE" || session.phase !== "REVERIFY") return;
-    if (session.reverifySelectionDone) return;
     if (!session.reverifyEndsAt) return;
 
     const candidates = await tx.attendanceRecord.findMany({
@@ -208,17 +207,19 @@ async function ensureReverifySelection(
       select: { id: true, studentId: true },
     });
 
-    const selectedCount = computeAdaptiveSelectionCount(
-      candidates.length,
-      session.reverifySelectionRate
-    );
+    const currentSelectedCount = await tx.attendanceRecord.count({
+      where: {
+        sessionId,
+        reverifyRequired: true,
+      },
+    });
 
-    if (selectedCount <= 0) {
+    if (candidates.length <= 0) {
       await tx.attendanceSession.update({
         where: { id: sessionId },
         data: {
           reverifySelectionDone: true,
-          reverifySelectedCount: 0,
+          reverifySelectedCount: currentSelectedCount,
         },
       });
       return;
@@ -231,17 +232,39 @@ async function ensureReverifySelection(
       session.qrGraceMs
     );
     if (!sequenceBounds) {
+      // If no assignment slot can be allocated within this window,
+      // mark remaining NOT_REQUIRED records as missed so phase-two
+      // state is still explicit and retry can be requested.
+      await tx.attendanceRecord.updateMany({
+        where: {
+          id: { in: candidates.map((candidate) => candidate.id) },
+          reverifyStatus: "NOT_REQUIRED",
+        },
+        data: {
+          reverifyRequired: true,
+          reverifyStatus: "MISSED",
+          flagged: true,
+        },
+      });
+
+      const totalSelectedCount = await tx.attendanceRecord.count({
+        where: {
+          sessionId,
+          reverifyRequired: true,
+        },
+      });
+
       await tx.attendanceSession.update({
         where: { id: sessionId },
         data: {
           reverifySelectionDone: true,
-          reverifySelectedCount: 0,
+          reverifySelectedCount: totalSelectedCount,
         },
       });
       return;
     }
 
-    const selectedCandidates = shuffleItems(candidates).slice(0, selectedCount);
+    const selectedCandidates = shuffleItems(candidates);
     const studentsPerSlot = Math.max(
       1,
       Math.ceil(selectedCandidates.length / sequenceBounds.slotCount)
@@ -280,11 +303,18 @@ async function ensureReverifySelection(
       });
     }
 
+    const totalSelectedCount = await tx.attendanceRecord.count({
+      where: {
+        sessionId,
+        reverifyRequired: true,
+      },
+    });
+
     await tx.attendanceSession.update({
       where: { id: sessionId },
       data: {
         reverifySelectionDone: true,
-        reverifySelectedCount: selectedCandidates.length,
+        reverifySelectedCount: totalSelectedCount,
       },
     });
   });

@@ -189,8 +189,7 @@ export default function AttendPage() {
   const attendStage: AttendPageStage = normalizeAttendStage(searchParams.get("stage")) ?? "prepare";
   const attendanceState = syncState?.attendance;
   const reverifyFinished = attendanceState
-    ? !attendanceState.reverifyRequired ||
-      attendanceState.reverifyStatus === "PASSED" ||
+    ? attendanceState.reverifyStatus === "PASSED" ||
       attendanceState.reverifyStatus === "MANUAL_PRESENT"
     : false;
 
@@ -418,7 +417,6 @@ export default function AttendPage() {
         setStep("result");
 
         const alreadyComplete =
-          !body.attendance.reverifyRequired ||
           body.attendance.reverifyStatus === "PASSED" ||
           body.attendance.reverifyStatus === "MANUAL_PRESENT";
         setAttendStage(alreadyComplete ? "complete" : "reverify");
@@ -829,8 +827,8 @@ export default function AttendPage() {
     if (!attendance.reverifyRequired) {
       return {
         tone: "neutral",
-        title: "Hold on for reverification",
-        body: "You were not selected for reverification this time. Stay on this page until the session ends—you may still be selected. Do not close the window.",
+        title: "Phase two slot pending",
+        body: "Stay on this page. Your reverification slot will be assigned automatically.",
       };
     }
 
