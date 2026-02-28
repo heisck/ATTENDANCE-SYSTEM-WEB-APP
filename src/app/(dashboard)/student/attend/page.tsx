@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { QrScanner, type QrScanPayload, type QrScanResult } from "@/components/qr-scanner";
 import { QrDisplay } from "@/components/qr-display";
@@ -24,6 +24,7 @@ import {
 
 type Step = "webauthn" | "session" | "gps" | "qr" | "result";
 type QrPortStatus = "PENDING" | "APPROVED" | "REJECTED" | null;
+type AttendPageStage = "prepare" | "scan" | "reverify" | "complete";
 
 interface ActiveSession {
   id: string;
@@ -115,6 +116,13 @@ function detectDeviceTypeFromUserAgent(userAgent: string): "iOS" | "Android" | "
   return "Web";
 }
 
+function normalizeAttendStage(value: string | null): AttendPageStage | null {
+  if (value === "prepare" || value === "scan" || value === "reverify" || value === "complete") {
+    return value;
+  }
+  return null;
+}
+
 export default function AttendPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -172,6 +180,31 @@ export default function AttendPage() {
     reverifySlotStartsAtTs !== null
       ? Math.max(0, Math.ceil((reverifySlotStartsAtTs - reverifyNowTs) / 1000))
       : null;
+  const attendStage: AttendPageStage = normalizeAttendStage(searchParams.get("stage")) ?? "prepare";
+  const reverifyFinished =
+    !syncState?.attendance?.reverifyRequired ||
+    syncState?.attendance?.reverifyStatus === "PASSED" ||
+    syncState?.attendance?.reverifyStatus === "MANUAL_PRESENT";
+
+  const setAttendStage = useCallback(
+    (nextStage: AttendPageStage) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("mode");
+      if (nextStage === "prepare") {
+        params.delete("stage");
+      } else {
+        params.set("stage", nextStage);
+      }
+
+      const nextQuery = params.toString();
+      const nextUrl = nextQuery ? `/student/attend?${nextQuery}` : "/student/attend";
+      const currentQuery = searchParams.toString();
+      const currentUrl = currentQuery ? `/student/attend?${currentQuery}` : "/student/attend";
+      if (currentUrl === nextUrl) return;
+      router.replace(nextUrl);
+    },
+    [router, searchParams]
+  );
 
   const mapSessions = (data: any[]): ActiveSession[] =>
     data.map((s: any) => ({
@@ -191,6 +224,7 @@ export default function AttendPage() {
       error: errorMessage,
     });
     setStep("result");
+    setAttendStage("reverify");
   }
 
   useEffect(() => {
@@ -198,11 +232,11 @@ export default function AttendPage() {
     if (mode !== "verify" && mode !== "scan") return;
 
     if (mode === "verify") {
-      if (isPendingReverify && !reverifyPasskeyVerified) {
+      if (attendStage === "reverify" && isPendingReverify && !reverifyPasskeyVerified) {
         setReverifyVerifyTrigger((value) => value + 1);
       } else if (step === "webauthn") {
         setInitialVerifyTrigger((value) => value + 1);
-      } else if (isPendingReverify && reverifyPasskeyVerified) {
+      } else if (attendStage === "reverify" && isPendingReverify && reverifyPasskeyVerified) {
         toast.info("Passkey already verified for this reverification round.");
       } else {
         toast.info("Passkey is already verified for this attendance flow.");
@@ -210,9 +244,9 @@ export default function AttendPage() {
     }
 
     if (mode === "scan") {
-      if (step === "qr") {
+      if (attendStage === "scan" && step === "qr") {
         setInitialScanTrigger((value) => value + 1);
-      } else if (isPendingReverify) {
+      } else if (attendStage === "reverify" && isPendingReverify) {
         if (!reverifyPasskeyVerified) {
           toast.info("Verify passkey first.");
         } else if (!reverifySlotActive) {
@@ -225,8 +259,45 @@ export default function AttendPage() {
       }
     }
 
-    router.replace("/student/attend");
-  }, [isPendingReverify, reverifyPasskeyVerified, reverifySlotActive, router, searchParams, step]);
+    setAttendStage(attendStage);
+  }, [
+    attendStage,
+    isPendingReverify,
+    reverifyPasskeyVerified,
+    reverifySlotActive,
+    searchParams,
+    setAttendStage,
+    step,
+  ]);
+
+  useEffect(() => {
+    if (step === "qr" && attendStage !== "scan") {
+      setAttendStage("scan");
+    }
+  }, [attendStage, setAttendStage, step]);
+
+  useEffect(() => {
+    if (step !== "result" || !result?.success) return;
+    if (reverifyFinished) {
+      setAttendStage("complete");
+      return;
+    }
+    if (attendStage !== "reverify") {
+      setAttendStage("reverify");
+    }
+  }, [attendStage, result?.success, reverifyFinished, setAttendStage, step]);
+
+  useEffect(() => {
+    if (step === "qr" && attendStage === "scan") {
+      setInitialScanTrigger((value) => value + 1);
+    }
+  }, [attendStage, step]);
+
+  useEffect(() => {
+    if (!isPendingReverify || !reverifyPasskeyVerified || !reverifySlotActive) return;
+    if (attendStage !== "reverify") return;
+    setReverifyScanTrigger((value) => value + 1);
+  }, [attendStage, isPendingReverify, reverifyPasskeyVerified, reverifySlotActive]);
 
   useEffect(() => {
     async function checkDevice() {
@@ -453,6 +524,7 @@ export default function AttendPage() {
   function handleGpsReady(lat: number, lng: number, accuracy: number) {
     setGps({ lat, lng, accuracy });
     setStep("qr");
+    setAttendStage("scan");
   }
 
   async function handleInitialQrScan(data: QrScanPayload): Promise<QrScanResult> {
@@ -521,6 +593,7 @@ export default function AttendPage() {
       });
       setActiveSessionId(data.sessionId);
       setStep("result");
+      setAttendStage("reverify");
       toast.success("Attendance marked. Keep this page open for reverification updates.");
       return "accepted";
     } catch {
@@ -659,6 +732,7 @@ export default function AttendPage() {
           : current
       );
       setReverifyPasskeyVerified(false);
+      setAttendStage("complete");
       toast.success("Reverification completed.");
       return "accepted";
     } catch (error: any) {
@@ -744,6 +818,7 @@ export default function AttendPage() {
       toast.dismiss(reverifyToastKeyRef.current);
       reverifyToastKeyRef.current = null;
     }
+    setAttendStage("prepare");
   }
 
   return (
@@ -772,12 +847,10 @@ export default function AttendPage() {
         </div>
       )}
 
-      {hasDevice && !result && (
+      {hasDevice && !result && attendStage === "prepare" && (
         <>
           <div className="flex flex-wrap items-center gap-3 text-sm">
-            <span className="status-chip-soft">
-              Phase 1: Passkey to Session to GPS to QR
-            </span>
+            <span className="status-chip-soft">Phase 1: Passkey to Session to GPS to QR</span>
           </div>
 
           {step === "webauthn" && (
@@ -809,41 +882,61 @@ export default function AttendPage() {
                     <button
                       key={s.id}
                       onClick={() => {
+                        if (s.hasMarked) {
+                          toast.info("You already marked attendance for this session.");
+                          return;
+                        }
                         setSelectedSession(s);
                         setStep("gps");
                       }}
-                      className="w-full rounded-md border border-border px-4 py-3 text-left hover:bg-accent transition-colors"
+                      className="w-full rounded-md border border-border px-4 py-3 text-left transition-colors hover:bg-accent"
                     >
                       <span className="font-medium">{s.course.code}</span>
                       <span className="text-muted-foreground"> — {s.course.name}</span>
+                      {s.hasMarked ? (
+                        <span className="ml-2 inline-flex rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                          Already marked
+                        </span>
+                      ) : null}
                     </button>
                   ))}
                 </div>
               )}
             </div>
           )}
+
           {step === "gps" && (
             <GpsCheck
               onLocationReady={handleGpsReady}
               maxAccuracyMeters={selectedSession?.radiusMeters ?? 50}
             />
           )}
-          {step === "qr" && (
-            <div
-              className="flex min-h-[60dvh] flex-col justify-center py-4 md:min-h-0 md:py-0"
-              ref={(el) => {
-                if (el && step === "qr") el.scrollIntoView({ behavior: "smooth", block: "center" });
-              }}
-            >
-              <QrScanner
-                onScan={handleInitialQrScan}
-                openSignal={initialScanTrigger}
-                hideTriggerButton
-                description="Continuous scan is active. Invalid or expired codes will prompt you and keep scanning."
-              />
-            </div>
-          )}
         </>
+      )}
+
+      {hasDevice && !result && attendStage === "scan" && step === "qr" && (
+        <div
+          className="flex min-h-[60dvh] flex-col justify-center py-4 md:min-h-0 md:py-0"
+          ref={(el) => {
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+          }}
+        >
+          <QrScanner
+            onScan={handleInitialQrScan}
+            openSignal={initialScanTrigger}
+            hideTriggerButton
+            description="Continuous scan is active. Invalid or expired codes will prompt you and keep scanning."
+          />
+        </div>
+      )}
+
+      {hasDevice && !result && attendStage === "scan" && step !== "qr" && (
+        <div className="surface-muted p-4">
+          <p className="text-sm font-semibold">Prepare scan first</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Verify passkey, select a live session, and complete location check before scanning.
+          </p>
+        </div>
       )}
 
       {hasDevice && step === "result" && result && (
@@ -869,6 +962,7 @@ export default function AttendPage() {
               </span>
             </div>
           )}
+
           {!result.success && (
             <div className="surface-muted p-4">
               <p className="text-base font-semibold">Attendance was not completed.</p>
@@ -909,10 +1003,10 @@ export default function AttendPage() {
             </div>
           )}
 
-          {activeSessionId && (
+          {result.success && activeSessionId && attendStage === "reverify" && (
             <div className="space-y-3 rounded-lg border border-border/70 bg-background/40 p-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold">Reverification Sync</p>
+                <p className="text-sm font-semibold">Reverification</p>
                 {syncState?.session && (
                   <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs">
                     <Clock className="mr-1 h-3 w-3" />
@@ -930,9 +1024,7 @@ export default function AttendPage() {
               )}
 
               {!syncState?.attendance && (
-                <p className="text-sm text-muted-foreground">
-                  Waiting for attendance state sync...
-                </p>
+                <p className="text-sm text-muted-foreground">Waiting for attendance state sync...</p>
               )}
 
               {syncState?.attendance && reverifyMessage && (
@@ -940,13 +1032,7 @@ export default function AttendPage() {
                   className={`rounded-md border p-3 text-sm ${
                     reverifyMessage.tone === "neutral"
                       ? "border-border bg-muted/50 text-foreground"
-                    : reverifyMessage.tone === "green"
-                        ? "border-border/70 bg-muted/40 text-foreground"
-                        : reverifyMessage.tone === "amber"
-                          ? "border-border/70 bg-muted/40 text-foreground"
-                          : reverifyMessage.tone === "yellow"
-                            ? "border-border/70 bg-muted/40 text-foreground"
-                            : "border-border/70 bg-muted/40 text-foreground"
+                      : "border-border/70 bg-muted/40 text-foreground"
                   }`}
                 >
                   <p className="font-medium">{reverifyMessage.title}</p>
@@ -978,9 +1064,7 @@ export default function AttendPage() {
                   <div className="flex items-start gap-2 text-foreground">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <div>
-                      <p className="text-sm font-medium">
-                        Reverification assigned. Verify your passkey now.
-                      </p>
+                      <p className="text-sm font-medium">Reverification assigned. Verify your passkey now.</p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         {reverifyTargetSequenceId
                           ? `Your exact slot is ${reverifyTargetSequenceId}. Keep this page open until your slot starts.`
@@ -997,20 +1081,18 @@ export default function AttendPage() {
                     />
                   ) : (
                     <div className="space-y-2">
-                      <p className="text-xs font-medium text-foreground">
-                        Passkey verified.
-                      </p>
+                      <p className="text-xs font-medium text-foreground">Passkey verified.</p>
                       {!reverifySlotActive ? (
                         <div className="status-panel-subtle p-4 text-center">
-                          {reverifySlotStartsAtTs && reverifySecondsToStart !== null && reverifySecondsToStart > 0 ? (
+                          {reverifySlotStartsAtTs &&
+                          reverifySecondsToStart !== null &&
+                          reverifySecondsToStart > 0 ? (
                             <>
                               <p className="text-lg font-semibold">
-                                Waiting for {reverifyTargetSequenceId ?? "your slot"} in{" "}
-                                {reverifySecondsToStart}s
+                                Waiting for {reverifyTargetSequenceId ?? "your slot"} in {reverifySecondsToStart}s
                               </p>
                               <p className="mt-1 text-xs text-muted-foreground">
-                                Slot starts at{" "}
-                                {new Date(reverifySlotStartsAtTs).toLocaleTimeString()}.
+                                Slot starts at {new Date(reverifySlotStartsAtTs).toLocaleTimeString()}.
                               </p>
                             </>
                           ) : (
@@ -1031,14 +1113,18 @@ export default function AttendPage() {
                   )}
                 </div>
               )}
+            </div>
+          )}
 
-              {(reverifyStatus === "PASSED" || reverifyStatus === "MANUAL_PRESENT") && (
-                <div className="status-panel p-4 text-center">
-                  <CheckCircle2 className="mx-auto h-10 w-10" />
-                  <p className="mt-2 font-semibold">Fully done!</p>
-                  <p className="text-sm text-muted-foreground">You can close this window.</p>
-                </div>
-              )}
+          {result.success && activeSessionId && attendStage === "complete" && (
+            <div className="space-y-3 rounded-lg border border-border/70 bg-background/40 p-4">
+              <div className="status-panel p-4 text-center">
+                <CheckCircle2 className="mx-auto h-10 w-10" />
+                <p className="mt-2 font-semibold">Attendance complete</p>
+                <p className="text-sm text-muted-foreground">
+                  Verification finished. You can request QR port access or return to dashboard.
+                </p>
+              </div>
 
               <div className="surface-muted space-y-3 p-3">
                 <div className="flex items-start gap-2">
@@ -1085,6 +1171,12 @@ export default function AttendPage() {
                 )}
               </div>
 
+              <Link
+                href="/student"
+                className="inline-flex w-fit items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+              >
+                Go to Dashboard
+              </Link>
             </div>
           )}
         </div>
