@@ -72,7 +72,6 @@ export interface AttendanceVerification {
   gpsWithinRadius: boolean;
   gpsDistance: number;
   qrTokenValid: boolean;
-  ipTrusted: boolean;
   confidence: number;
   flagged: boolean;
 }

@@ -297,14 +297,6 @@ async function seedOrganization() {
     },
   });
 
-  await prisma.trustedIpRange.deleteMany({ where: { organizationId: org.id } });
-  await prisma.trustedIpRange.createMany({
-    data: [
-      { organizationId: org.id, cidr: "41.66.0.0/16", label: "KNUST Campus WiFi" },
-      { organizationId: org.id, cidr: "196.44.0.0/16", label: "KNUST ISP Backbone" },
-    ],
-  });
-
   const superAdmin = await prisma.user.upsert({
     where: { email: "superadmin@attendanceiq.com" },
     update: {
@@ -1083,8 +1075,6 @@ async function seedOrganization() {
           gpsLat: 6.6745 + j * 0.00001,
           gpsLng: -1.5716 + j * 0.00001,
           gpsDistance: 15 + j * 3,
-          ipAddress: `10.0.${i}.${j + 10}`,
-          ipTrusted: j % 2 === 0,
           qrToken: `seed-token-${session.id}-${studentId}`,
           webauthnUsed: true,
           reverifyRequired,

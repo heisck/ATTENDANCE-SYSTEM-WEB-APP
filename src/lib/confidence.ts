@@ -2,7 +2,6 @@ interface ConfidenceInput {
   webauthnVerified: boolean;
   gpsWithinRadius: boolean;
   qrTokenValid: boolean;
-  ipTrusted: boolean;
   // New security factors
   gpsVelocityAnomaly?: boolean;
   deviceConsistency?: number; // 0-100
@@ -16,8 +15,7 @@ const WEIGHTS = {
   webauthn: 30,
   gps: 25,
   qr: 25,
-  ip: 10,
-  bleProximity: 10,
+  bleProximity: 20,
 } as const;
 
 const PENALTIES = {
@@ -39,7 +37,6 @@ export function calculateConfidence(input: ConfidenceInput): number {
   if (input.webauthnVerified) score += WEIGHTS.webauthn;
   if (input.gpsWithinRadius) score += WEIGHTS.gps;
   if (input.qrTokenValid) score += WEIGHTS.qr;
-  if (input.ipTrusted) score += WEIGHTS.ip;
   if (input.bleProximityVerified) score += WEIGHTS.bleProximity;
 
   // Device consistency factor (additional bonus)
@@ -101,7 +98,6 @@ export function getConfidenceBreakdown(input: ConfidenceInput) {
       webauthn: input.webauthnVerified ? WEIGHTS.webauthn : 0,
       gps: input.gpsWithinRadius ? WEIGHTS.gps : 0,
       qr: input.qrTokenValid ? WEIGHTS.qr : 0,
-      ip: input.ipTrusted ? WEIGHTS.ip : 0,
       ble: input.bleProximityVerified ? WEIGHTS.bleProximity : 0,
     },
     anomalies: {

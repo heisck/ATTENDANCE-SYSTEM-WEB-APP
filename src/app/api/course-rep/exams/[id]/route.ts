@@ -8,9 +8,7 @@ import { isAdminLike } from "@/lib/permissions";
 import { getStudentRepContext } from "@/lib/course-rep-auth";
 import { hasMatchingScope } from "@/lib/course-rep";
 import { enqueueManyJobs } from "@/lib/job-queue";
-import { examEntrySchema } from "@/lib/validators";
-
-const updateSchema = examEntrySchema.partial();
+import { examEntryUpdateSchema } from "@/lib/validators";
 
 async function canManageExam(sessionUser: any, exam: { organizationId: string; cohortId: string | null; courseId: string | null }) {
   if (isAdminLike(sessionUser.role)) {
@@ -80,7 +78,7 @@ export async function PATCH(
 
   try {
     const body = await request.json();
-    const parsed = updateSchema.parse(body);
+    const parsed = examEntryUpdateSchema.parse(body);
 
     const nextCohortId = parsed.cohortId ?? existing.cohortId;
     const nextCourseId = parsed.courseId ?? existing.courseId;
@@ -169,4 +167,3 @@ export async function DELETE(
 
   return NextResponse.json({ success: true });
 }
-

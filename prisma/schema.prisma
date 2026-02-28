@@ -113,7 +113,6 @@ model Organization {
   users                   User[]
   courses                 Course[]
   subscription            Subscription?
-  ipRanges                TrustedIpRange[]
   lecturerInvites         LecturerInvite[]
   cohorts                 Cohort[]
   courseRepScopes         CourseRepScope[]
@@ -719,8 +718,6 @@ model AttendanceRecord {
   gpsLat                     Float
   gpsLng                     Float
   gpsDistance                Float
-  ipAddress                  String
-  ipTrusted                  Boolean        @default(false)
   qrToken                    String
   webauthnUsed               Boolean        @default(true)
   reverifyRequired           Boolean        @default(false)
@@ -769,17 +766,6 @@ model AuditLog {
   @@index([userId])
   @@index([action])
   @@index([createdAt])
-}
-
-model TrustedIpRange {
-  id             String @id @default(cuid())
-  organizationId String
-  cidr           String
-  label          String
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@index([organizationId])
 }
 
 model Subscription {
@@ -940,7 +926,6 @@ enum AnomalyType {
   RAPID_SUBMISSIONS // Too many attempts in short time
   GPS_SPOOFING // Invalid movement pattern
   QR_REUSE // Same QR used by multiple students
-  IP_MISMATCH // IP doesn't match student location
   TIMEZONE_ANOMALY // Timestamp doesn't match timezone
   BEHAVIORAL_CHANGE // Unusual attendance pattern
 }

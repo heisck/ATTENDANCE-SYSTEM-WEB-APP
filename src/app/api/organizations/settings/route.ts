@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { action, cidr, label, rangeId, maxLevel, archiveGraduates } = body as Record<string, any>;
+    const { action, maxLevel, archiveGraduates } = body as Record<string, any>;
 
     const org = await db.organization.findUnique({
       where: { id: user.organizationId },
@@ -87,30 +87,6 @@ export async function POST(request: NextRequest) {
     });
     if (!org) {
       return NextResponse.json({ error: "Organization not found" }, { status: 404 });
-    }
-
-    if (action === "addIpRange") {
-      if (!cidr || !label) {
-        return NextResponse.json({ error: "CIDR and label required" }, { status: 400 });
-      }
-
-      const range = await db.trustedIpRange.create({
-        data: {
-          organizationId: user.organizationId,
-          cidr,
-          label,
-        },
-      });
-      return NextResponse.json(range, { status: 201 });
-    }
-
-    if (action === "removeIpRange") {
-      if (!rangeId) {
-        return NextResponse.json({ error: "Range ID required" }, { status: 400 });
-      }
-
-      await db.trustedIpRange.delete({ where: { id: rangeId } });
-      return NextResponse.json({ success: true });
     }
 
     if (action === "advanceSemester") {

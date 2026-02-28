@@ -185,7 +185,7 @@ export const reminderRunSchema = z.object({
   batchSize: z.number().int().positive().max(500).optional().default(100),
 });
 
-export const examEntrySchema = z.object({
+const examEntryBaseSchema = z.object({
   cohortId: z.string().optional(),
   courseId: z.string().optional(),
   title: z.string().min(1, "title is required"),
@@ -194,8 +194,27 @@ export const examEntrySchema = z.object({
   venue: z.string().optional(),
   allowAnyHall: z.boolean().optional().default(false),
   instructions: z.string().optional(),
-}).superRefine((data, ctx) => {
+});
+
+export const examEntrySchema = examEntryBaseSchema.superRefine((data, ctx) => {
   if (!data.cohortId && !data.courseId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["cohortId"],
+      message: "Provide cohortId or courseId target.",
+    });
+  }
+});
+
+export const examEntryUpdateSchema = examEntryBaseSchema.partial().superRefine((data, ctx) => {
+  if (!("cohortId" in data) && !("courseId" in data)) {
+    return;
+  }
+
+  const nextCohortId = data.cohortId;
+  const nextCourseId = data.courseId;
+
+  if (!nextCohortId && !nextCourseId) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["cohortId"],
@@ -227,7 +246,7 @@ export const examAttachmentFinalizeSchema = z.object({
   mime: z.string().min(1, "mime is required"),
 });
 
-export const groupFormationSessionSchema = z.object({
+const groupFormationSessionBaseSchema = z.object({
   cohortId: z.string().optional(),
   courseId: z.string().optional(),
   title: z.string().optional(),
@@ -237,7 +256,9 @@ export const groupFormationSessionSchema = z.object({
   startsAt: z.string().datetime(),
   endsAt: z.string().datetime(),
   active: z.boolean().optional().default(true),
-}).superRefine((data, ctx) => {
+});
+
+export const groupFormationSessionSchema = groupFormationSessionBaseSchema.superRefine((data, ctx) => {
   if (!data.cohortId && !data.courseId) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -246,6 +267,25 @@ export const groupFormationSessionSchema = z.object({
     });
   }
 });
+
+export const groupFormationSessionUpdateSchema = groupFormationSessionBaseSchema
+  .partial()
+  .superRefine((data, ctx) => {
+    if (!("cohortId" in data) && !("courseId" in data)) {
+      return;
+    }
+
+    const nextCohortId = data.cohortId;
+    const nextCourseId = data.courseId;
+
+    if (!nextCohortId && !nextCourseId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["cohortId"],
+        message: "Provide cohortId or courseId target.",
+      });
+    }
+  });
 
 export const createStudentGroupSchema = z.object({
   name: z.string().min(1, "name is required"),
@@ -289,10 +329,12 @@ export type AssignmentAttachmentInitInput = z.infer<typeof assignmentAttachmentI
 export type AssignmentAttachmentFinalizeInput = z.infer<typeof assignmentAttachmentFinalizeSchema>;
 export type ReminderRunInput = z.infer<typeof reminderRunSchema>;
 export type ExamEntryInput = z.infer<typeof examEntrySchema>;
+export type ExamEntryUpdateInput = z.infer<typeof examEntryUpdateSchema>;
 export type ExamUpdateInput = z.infer<typeof examUpdateSchema>;
 export type ExamAttachmentInitInput = z.infer<typeof examAttachmentInitSchema>;
 export type ExamAttachmentFinalizeInput = z.infer<typeof examAttachmentFinalizeSchema>;
 export type GroupFormationSessionInput = z.infer<typeof groupFormationSessionSchema>;
+export type GroupFormationSessionUpdateInput = z.infer<typeof groupFormationSessionUpdateSchema>;
 export type CreateStudentGroupInput = z.infer<typeof createStudentGroupSchema>;
 export type JoinGroupInput = z.infer<typeof joinGroupSchema>;
 export type GroupLeaderVoteInput = z.infer<typeof groupLeaderVoteSchema>;

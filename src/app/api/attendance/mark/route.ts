@@ -6,8 +6,7 @@ import { syncAttendanceSessionState } from "@/lib/attendance";
 import { markAttendanceSchema } from "@/lib/validators";
 import { verifyQrTokenStrict } from "@/lib/qr";
 import { isWithinRadius, checkGpsVelocityAnomaly, checkLocationJumpPattern } from "@/lib/gps";
-import { getClientIp, isIpTrusted } from "@/lib/ip";
-import { calculateConfidence, isFlagged, getConfidenceBreakdown } from "@/lib/confidence";
+import { calculateConfidence, isFlagged } from "@/lib/confidence";
 import { logError, ApiErrorMessages } from "@/lib/api-error";
 import {
   checkRateLimit,
@@ -127,7 +126,7 @@ export async function POST(request: NextRequest) {
       include: {
         course: {
           include: {
-            organization: { include: { ipRanges: true } },
+            organization: true,
             enrollments: { where: { studentId: session.user.id } },
           },
         },
@@ -179,24 +178,6 @@ export async function POST(request: NextRequest) {
       attendanceSession.gpsLng,
       attendanceSession.radiusMeters
     );
-
-    // Extract real client IP from proxy headers (only works behind trusted proxy)
-    const clientIp = getClientIp(request.headers);
-
-    const trustedRanges = attendanceSession.course.organization.ipRanges.map(
-      (r) => r.cidr
-    );
-    const ipCheck = isIpTrusted(clientIp, trustedRanges);
-
-    // Log suspicious IP attempts for security monitoring
-    if (clientIp !== "unknown" && !ipCheck && trustedRanges.length > 0) {
-      console.warn("IP validation failed", {
-        studentId: session.user.id,
-        sessionId: parsed.sessionId,
-        clientIp,
-        expectedRanges: trustedRanges.length,
-      });
-    }
 
     const webauthnUsed = body.webauthnVerified === true;
     const userAgent = request.headers.get("user-agent") ?? "";
@@ -263,7 +244,6 @@ export async function POST(request: NextRequest) {
       webauthnVerified: webauthnUsed,
       gpsWithinRadius: gpsResult.within,
       qrTokenValid: qrValid,
-      ipTrusted: ipCheck,
       bleProximityVerified: bleStats.verificationCount > 0,
       bleSignalStrength: body.bleSignalStrength,
       gpsVelocityAnomaly: velocityCheck.anomalyDetected,
@@ -285,8 +265,6 @@ export async function POST(request: NextRequest) {
         gpsLat: parsed.gpsLat,
         gpsLng: parsed.gpsLng,
         gpsDistance: gpsResult.distance,
-        ipAddress: clientIp,
-        ipTrusted: ipCheck,
         qrToken: parsed.qrToken,
         webauthnUsed,
         reverifyRequired: false,
@@ -366,7 +344,6 @@ export async function POST(request: NextRequest) {
           webauthn: webauthnUsed,
           gps: gpsResult.within,
           qr: qrValid,
-          ip: ipCheck,
           ble: bleStats.verificationCount > 0,
           deviceConsistent: !deviceMismatch,
         },

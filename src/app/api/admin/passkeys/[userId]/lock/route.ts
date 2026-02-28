@@ -46,7 +46,7 @@ export async function POST(
           targetUserId: userId,
           targetUserEmail: targetUser.email,
         },
-        ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown",
+        ipAddress: "not-collected",
       },
     });
 

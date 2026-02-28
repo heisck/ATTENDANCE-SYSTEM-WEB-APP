@@ -62,7 +62,7 @@ export async function POST(
           targetUserEmail: targetUser.email,
           credentialsDeleted: credentialCount,
         },
-        ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown",
+        ipAddress: "not-collected",
       },
     });
 

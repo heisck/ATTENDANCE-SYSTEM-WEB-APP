@@ -6,9 +6,7 @@ import { getFeatureFlags } from "@/lib/organization-settings";
 import { isAdminLike } from "@/lib/permissions";
 import { getStudentRepContext } from "@/lib/course-rep-auth";
 import { hasMatchingScope } from "@/lib/course-rep";
-import { groupFormationSessionSchema } from "@/lib/validators";
-
-const updateSchema = groupFormationSessionSchema.partial();
+import { groupFormationSessionUpdateSchema } from "@/lib/validators";
 
 async function canManageGroupSession(
   sessionUser: any,
@@ -77,7 +75,7 @@ export async function PATCH(
 
   try {
     const body = await request.json();
-    const parsed = updateSchema.parse(body);
+    const parsed = groupFormationSessionUpdateSchema.parse(body);
 
     const nextStartsAt = parsed.startsAt ? new Date(parsed.startsAt) : null;
     const nextEndsAt = parsed.endsAt ? new Date(parsed.endsAt) : null;
@@ -156,4 +154,3 @@ export async function DELETE(
 
   return NextResponse.json({ success: true });
 }
-

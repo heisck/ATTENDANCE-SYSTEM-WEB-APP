@@ -20,7 +20,7 @@ export default async function AdminSettingsPage() {
 
   const org = await db.organization.findUnique({
     where: { id: orgId },
-    include: { ipRanges: true, subscription: true },
+    include: { subscription: true },
   });
 
   if (!org) redirect("/login");
@@ -67,7 +67,7 @@ export default async function AdminSettingsPage() {
 
         <SettingsSection
           title="Attendance Defaults"
-          description="Core GPS and trust thresholds used for marking attendance."
+          description="Core GPS and confidence thresholds used for marking attendance."
         >
           <dl className="grid gap-4 sm:grid-cols-2">
             {settingRows.map((row) => (
@@ -86,38 +86,6 @@ export default async function AdminSettingsPage() {
             initialAcademicProgression={academicProgression}
             initialBilling={studentHubBilling}
           />
-        </SettingsSection>
-
-        <SettingsSection
-          title="Trusted IP Ranges"
-          description="Approved network ranges for strict attendance validation."
-        >
-          {org.ipRanges.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No trusted IP ranges configured.</p>
-          ) : (
-            <div className="overflow-hidden rounded-lg border border-border/70">
-              <table className="w-full text-sm">
-                <thead className="border-b border-border/70 bg-muted/25">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                      CIDR
-                    </th>
-                    <th className="px-3 py-2 text-left text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                      Label
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/60">
-                  {org.ipRanges.map((range) => (
-                    <tr key={range.id}>
-                      <td className="px-3 py-2 font-mono text-sm">{range.cidr}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{range.label || "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </SettingsSection>
 
         <SettingsSection
