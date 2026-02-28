@@ -24,7 +24,7 @@ import {
 
 type Step = "webauthn" | "session" | "gps" | "qr" | "result";
 type QrPortStatus = "PENDING" | "APPROVED" | "REJECTED" | null;
-type AttendPageStage = "prepare" | "scan" | "reverify" | "complete";
+type AttendPageStage = "prepare" | "scan" | "phase1" | "reverify" | "complete";
 
 interface ActiveSession {
   id: string;
@@ -117,7 +117,13 @@ function detectDeviceTypeFromUserAgent(userAgent: string): "iOS" | "Android" | "
 }
 
 function normalizeAttendStage(value: string | null): AttendPageStage | null {
-  if (value === "prepare" || value === "scan" || value === "reverify" || value === "complete") {
+  if (
+    value === "prepare" ||
+    value === "scan" ||
+    value === "phase1" ||
+    value === "reverify" ||
+    value === "complete"
+  ) {
     return value;
   }
   return null;
@@ -181,10 +187,12 @@ export default function AttendPage() {
       ? Math.max(0, Math.ceil((reverifySlotStartsAtTs - reverifyNowTs) / 1000))
       : null;
   const attendStage: AttendPageStage = normalizeAttendStage(searchParams.get("stage")) ?? "prepare";
-  const reverifyFinished =
-    !syncState?.attendance?.reverifyRequired ||
-    syncState?.attendance?.reverifyStatus === "PASSED" ||
-    syncState?.attendance?.reverifyStatus === "MANUAL_PRESENT";
+  const attendanceState = syncState?.attendance;
+  const reverifyFinished = attendanceState
+    ? !attendanceState.reverifyRequired ||
+      attendanceState.reverifyStatus === "PASSED" ||
+      attendanceState.reverifyStatus === "MANUAL_PRESENT"
+    : false;
 
   const setAttendStage = useCallback(
     (nextStage: AttendPageStage) => {
@@ -224,7 +232,6 @@ export default function AttendPage() {
       error: errorMessage,
     });
     setStep("result");
-    setAttendStage("reverify");
   }
 
   useEffect(() => {
@@ -232,12 +239,14 @@ export default function AttendPage() {
     if (mode !== "verify" && mode !== "scan") return;
 
     if (mode === "verify") {
-      if (attendStage === "reverify" && isPendingReverify && !reverifyPasskeyVerified) {
-        setReverifyVerifyTrigger((value) => value + 1);
+      if (attendStage === "reverify") {
+        if (!reverifyPasskeyVerified) {
+          setReverifyVerifyTrigger((value) => value + 1);
+        } else {
+          toast.info("Passkey already verified for this reverification round.");
+        }
       } else if (step === "webauthn") {
         setInitialVerifyTrigger((value) => value + 1);
-      } else if (attendStage === "reverify" && isPendingReverify && reverifyPasskeyVerified) {
-        toast.info("Passkey already verified for this reverification round.");
       } else {
         toast.info("Passkey is already verified for this attendance flow.");
       }
@@ -246,7 +255,7 @@ export default function AttendPage() {
     if (mode === "scan") {
       if (attendStage === "scan" && step === "qr") {
         setInitialScanTrigger((value) => value + 1);
-      } else if (attendStage === "reverify" && isPendingReverify) {
+      } else if (attendStage === "reverify") {
         if (!reverifyPasskeyVerified) {
           toast.info("Verify passkey first.");
         } else if (!reverifySlotActive) {
@@ -278,14 +287,31 @@ export default function AttendPage() {
 
   useEffect(() => {
     if (step !== "result" || !result?.success) return;
-    if (reverifyFinished) {
+    if (attendStage === "phase1") {
+      return;
+    }
+    if ((attendStage === "prepare" || attendStage === "scan") && activeSessionId) {
+      setAttendStage("phase1");
+      return;
+    }
+    if (attendStage === "reverify" && reverifyFinished) {
       setAttendStage("complete");
       return;
     }
-    if (attendStage !== "reverify") {
+    if (attendStage !== "complete" && attendStage !== "reverify") {
       setAttendStage("reverify");
     }
-  }, [attendStage, result?.success, reverifyFinished, setAttendStage, step]);
+  }, [activeSessionId, attendStage, result?.success, reverifyFinished, setAttendStage, step]);
+
+  useEffect(() => {
+    if (step !== "result" || !result?.success || attendStage !== "phase1") return;
+
+    const timer = window.setTimeout(() => {
+      setAttendStage("reverify");
+    }, 1400);
+
+    return () => window.clearTimeout(timer);
+  }, [attendStage, result?.success, setAttendStage, step]);
 
   useEffect(() => {
     if (step === "qr" && attendStage === "scan") {
@@ -354,6 +380,61 @@ export default function AttendPage() {
       cancelled = true;
     };
   }, [hasDevice]);
+
+  useEffect(() => {
+    if (hasDevice !== true || sessionsLoading) return;
+    if (activeSessionId || result || step === "qr") return;
+
+    const markedSession = sessions.find((session) => session.hasMarked);
+    if (!markedSession) return;
+
+    let cancelled = false;
+    const resumeFlow = async () => {
+      try {
+        const res = await fetch(`/api/attendance/sessions/${markedSession.id}/me`, {
+          cache: "no-store",
+        });
+        const body = await res.json();
+        if (!res.ok || !body?.attendance || cancelled) return;
+
+        if (typeof body.serverNow === "string") {
+          const serverNowTs = new Date(body.serverNow).getTime();
+          if (Number.isFinite(serverNowTs)) {
+            setServerClockOffsetMs(serverNowTs - Date.now());
+          }
+        }
+
+        setSelectedSession(markedSession);
+        setActiveSessionId(markedSession.id);
+        setSyncState(body);
+        setQrPortStatusLocal(body.qrPortStatus ?? null);
+        setResult({
+          success: true,
+          confidence: 100,
+          flagged: Boolean(body.attendance.flagged),
+          gpsDistance: 0,
+          layers: { webauthn: true, gps: true, qr: true, ip: false },
+        });
+        setStep("result");
+
+        const alreadyComplete =
+          !body.attendance.reverifyRequired ||
+          body.attendance.reverifyStatus === "PASSED" ||
+          body.attendance.reverifyStatus === "MANUAL_PRESENT";
+        setAttendStage(alreadyComplete ? "complete" : "reverify");
+        if (!alreadyComplete) {
+          toast.info("Attendance resumed. Continue with phase two verification.");
+        }
+      } catch {
+        // Keep normal manual flow on transient errors.
+      }
+    };
+
+    void resumeFlow();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSessionId, hasDevice, result, sessions, sessionsLoading, setAttendStage, step]);
 
   useEffect(() => {
     if (hasDevice !== true || step !== "session") return;
@@ -593,7 +674,7 @@ export default function AttendPage() {
       });
       setActiveSessionId(data.sessionId);
       setStep("result");
-      setAttendStage("reverify");
+      setAttendStage("phase1");
       toast.success("Attendance marked. Keep this page open for reverification updates.");
       return "accepted";
     } catch {
@@ -977,7 +1058,7 @@ export default function AttendPage() {
             </div>
           )}
 
-          {result.success && (
+          {result.success && attendStage === "phase1" && (
             <div className="rounded-lg border border-border p-4">
               <p className="mb-3 text-sm font-medium">Initial Verification Layers</p>
               <div className="space-y-2">
@@ -1000,6 +1081,16 @@ export default function AttendPage() {
                   points={33}
                 />
               </div>
+            </div>
+          )}
+
+          {result.success && attendStage === "phase1" && (
+            <div className="status-panel p-4 text-center">
+              <CheckCircle2 className="mx-auto h-10 w-10" />
+              <p className="mt-2 font-semibold">Attendance complete</p>
+              <p className="text-sm text-muted-foreground">
+                Phase one completed, you will be redirected to begin phase two.
+              </p>
             </div>
           )}
 
@@ -1059,60 +1150,61 @@ export default function AttendPage() {
                 </button>
               )}
 
-              {isPendingReverify && (
-                <div className="surface-muted space-y-3 p-3">
-                  <div className="flex items-start gap-2 text-foreground">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium">Reverification assigned. Verify your passkey now.</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {reverifyTargetSequenceId
-                          ? `Your exact slot is ${reverifyTargetSequenceId}. Keep this page open until your slot starts.`
-                          : "Keep this page open. You will be guided to your exact slot."}
-                      </p>
-                    </div>
+              <div className="surface-muted space-y-3 p-3">
+                <div className="flex items-start gap-2 text-foreground">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium">Phase two verification</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Verify passkey now. The countdown starts once your assigned slot is ready.
+                    </p>
                   </div>
-
-                  {!reverifyPasskeyVerified ? (
-                    <WebAuthnPrompt
-                      onVerified={() => setReverifyPasskeyVerified(true)}
-                      triggerSignal={reverifyVerifyTrigger}
-                      hideActionButton
-                    />
-                  ) : (
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium text-foreground">Passkey verified.</p>
-                      {!reverifySlotActive ? (
-                        <div className="status-panel-subtle p-4 text-center">
-                          {reverifySlotStartsAtTs &&
-                          reverifySecondsToStart !== null &&
-                          reverifySecondsToStart > 0 ? (
-                            <>
-                              <p className="text-lg font-semibold">
-                                Waiting for {reverifyTargetSequenceId ?? "your slot"} in {reverifySecondsToStart}s
-                              </p>
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                Slot starts at {new Date(reverifySlotStartsAtTs).toLocaleTimeString()}.
-                              </p>
-                            </>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">
-                              Waiting for your assigned slot window.
-                            </p>
-                          )}
-                        </div>
-                      ) : (
-                        <QrScanner
-                          onScan={handleReverifyQrScan}
-                          openSignal={reverifyScanTrigger}
-                          hideTriggerButton
-                          description="Keep camera pointed at the live board. Scan continues until your exact slot is accepted."
-                        />
-                      )}
-                    </div>
-                  )}
                 </div>
-              )}
+
+                {!reverifyPasskeyVerified ? (
+                  <WebAuthnPrompt
+                    onVerified={() => setReverifyPasskeyVerified(true)}
+                    triggerSignal={reverifyVerifyTrigger}
+                  />
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-foreground">Passkey verified.</p>
+                    {!isPendingReverify ? (
+                      <div className="status-panel-subtle p-4 text-center">
+                        <p className="text-sm text-muted-foreground">
+                          Waiting for your phase two slot assignment.
+                        </p>
+                      </div>
+                    ) : !reverifySlotActive ? (
+                      <div className="status-panel-subtle p-4 text-center">
+                        {reverifySlotStartsAtTs &&
+                        reverifySecondsToStart !== null &&
+                        reverifySecondsToStart > 0 ? (
+                          <>
+                            <p className="text-lg font-semibold">
+                              Waiting for {reverifyTargetSequenceId ?? "your slot"} in {reverifySecondsToStart}s
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Slot starts at {new Date(reverifySlotStartsAtTs).toLocaleTimeString()}.
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            Waiting for your assigned slot window.
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <QrScanner
+                        onScan={handleReverifyQrScan}
+                        openSignal={reverifyScanTrigger}
+                        hideTriggerButton
+                        description="Keep camera pointed at the live board. Scan continues until your exact slot is accepted."
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
