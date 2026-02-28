@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -53,6 +53,52 @@ enum NotificationType {
   SYSTEM
 }
 
+enum TimetableMode {
+  PHYSICAL
+  ONLINE
+  HYBRID
+}
+
+enum ClassUpdateType {
+  CANCELLED
+  RESCHEDULED
+  VENUE_CHANGE
+  ONLINE_LINK
+  TAKEOVER
+  NOTICE
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+}
+
+enum JobType {
+  SEND_NOTIFICATION
+  ASSIGNMENT_REMINDER
+  CLASS_REMINDER
+  EXAM_REMINDER
+  DELETE_CLOUDINARY_ASSET
+}
+
+enum GroupFormationMode {
+  SELF_SELECT
+  RANDOM_ASSIGNMENT
+}
+
+enum GroupLeaderMode {
+  VOLUNTEER_VOTE
+  VOLUNTEER_FIRST_COME
+  RANDOM
+}
+
+enum MaterialStatus {
+  DRAFT
+  PUBLISHED
+}
+
 model Organization {
   id        String   @id @default(cuid())
   name      String
@@ -64,55 +110,84 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users        User[]
-  courses      Course[]
-  subscription Subscription?
-  ipRanges     TrustedIpRange[]
-  lecturerInvites LecturerInvite[]
+  users                   User[]
+  courses                 Course[]
+  subscription            Subscription?
+  ipRanges                TrustedIpRange[]
+  lecturerInvites         LecturerInvite[]
+  cohorts                 Cohort[]
+  courseRepScopes         CourseRepScope[]
+  courseRepInvites        CourseRepInvite[]
+  timetableEntries        TimetableEntry[]
+  classUpdates            ClassUpdate[]
+  assignmentAnnouncements AssignmentAnnouncement[]
+  materialSections        MaterialSection[]
+  courseMaterials         CourseMaterial[]
+  examEntries             ExamEntry[]
+  groupFormationSessions  GroupFormationSession[]
+  jobQueue                JobQueue[]
 
   @@index([slug])
   @@index([apiKey])
 }
 
 model User {
-  id             String   @id @default(cuid())
-  email          String   @unique
-  personalEmail  String?  @unique
-  name           String
-  passwordHash   String
-  role           Role     @default(STUDENT)
-  studentId      String?  @unique
-  indexNumber    String?  @unique
-  organizationId String?
-  emailVerified  DateTime?
-  personalEmailVerifiedAt DateTime?
+  id                            String    @id @default(cuid())
+  email                         String    @unique
+  personalEmail                 String?   @unique
+  name                          String
+  passwordHash                  String
+  role                          Role      @default(STUDENT)
+  studentId                     String?   @unique
+  indexNumber                   String?   @unique
+  organizationId                String?
+  cohortId                      String?
+  emailVerified                 DateTime?
+  personalEmailVerifiedAt       DateTime?
   lastProfileCompletionPromptAt DateTime?
-  image          String?
-  passkeysLockedUntilAdminReset Boolean @default(false)
-  firstPasskeyCreatedAt DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  image                         String?
+  passkeysLockedUntilAdminReset Boolean   @default(false)
+  firstPasskeyCreatedAt         DateTime?
+  createdAt                     DateTime  @default(now())
+  updatedAt                     DateTime  @updatedAt
 
-  organization Organization?        @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  credentials  WebAuthnCredential[]
-  attendances  AttendanceRecord[]
-  sessions     AttendanceSession[]  @relation("LecturerSessions")
-  courses      Course[]             @relation("LecturerCourses")
-  enrollments  Enrollment[]
-  auditLogs    AuditLog[]
-  lecturerInvitesCreated LecturerInvite[] @relation("LecturerInvitesCreatedBy")
-  emailVerificationTokens EmailVerificationToken[]
-  passwordResetTokens PasswordResetToken[]
-  pushSubscriptions PushSubscription[]
-  notifications UserNotification[]
-  userDevices UserDevice[]
-  attendanceAnomalies AttendanceAnomaly[]
-  relayDevices BleRelayDevice[] @relation("RelayDevices")
-  qrPortRequests QrPortRequest[] @relation("QrPortRequests")
+  organization                   Organization?            @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  cohort                         Cohort?                  @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  credentials                    WebAuthnCredential[]
+  attendances                    AttendanceRecord[]
+  sessions                       AttendanceSession[]      @relation("LecturerSessions")
+  courses                        Course[]                 @relation("LecturerCourses")
+  enrollments                    Enrollment[]
+  auditLogs                      AuditLog[]
+  lecturerInvitesCreated         LecturerInvite[]         @relation("LecturerInvitesCreatedBy")
+  emailVerificationTokens        EmailVerificationToken[]
+  passwordResetTokens            PasswordResetToken[]
+  pushSubscriptions              PushSubscription[]
+  notifications                  UserNotification[]
+  userDevices                    UserDevice[]
+  attendanceAnomalies            AttendanceAnomaly[]
+  relayDevices                   BleRelayDevice[]         @relation("RelayDevices")
+  qrPortRequests                 QrPortRequest[]          @relation("QrPortRequests")
+  courseRepScopes                CourseRepScope[]         @relation("CourseRepScopes")
+  courseRepScopesAssigned        CourseRepScope[]         @relation("CourseRepScopesAssignedBy")
+  courseRepInvites               CourseRepInvite[]        @relation("CourseRepInvites")
+  courseRepInvitesCreated        CourseRepInvite[]        @relation("CourseRepInvitesCreatedBy")
+  timetableEntriesCreated        TimetableEntry[]         @relation("TimetableEntriesCreatedBy")
+  classUpdatesCreated            ClassUpdate[]            @relation("ClassUpdatesCreatedBy")
+  assignmentAnnouncementsCreated AssignmentAnnouncement[] @relation("AssignmentAnnouncementsCreatedBy")
+  materialSectionsCreated        MaterialSection[]        @relation("MaterialSectionsCreatedBy")
+  courseMaterialsCreated         CourseMaterial[]         @relation("CourseMaterialsCreatedBy")
+  notificationPreference         NotificationPreference?
+  groupFormationSessionsCreated  GroupFormationSession[]  @relation("GroupFormationSessionsCreatedBy")
+  groupsLed                      StudentGroup[]           @relation("StudentGroupLeader")
+  groupMemberships               GroupMembership[]        @relation("StudentGroupMemberships")
+  groupVotesCast                 GroupLeaderVote[]        @relation("GroupLeaderVotesCast")
+  groupLinksPosted               GroupLink[]              @relation("GroupLinksPostedBy")
 
   @@index([email])
   @@index([personalEmail])
   @@index([organizationId])
+  @@index([cohortId])
   @@index([role])
   @@index([passkeysLockedUntilAdminReset])
 }
@@ -128,16 +203,16 @@ model WebAuthnChallenge {
 }
 
 model WebAuthnCredential {
-  id               String   @id @default(cuid())
-  userId           String
-  credentialId     String   @unique
-  publicKey        Bytes
-  counter          BigInt   @default(0)
-  transports       String[]
-  deviceType       String
-  backedUp         Boolean  @default(false)
-  userAgent        String?
-  registeredAt     DateTime @default(now())
+  id           String   @id @default(cuid())
+  userId       String
+  credentialId String   @unique
+  publicKey    Bytes
+  counter      BigInt   @default(0)
+  transports   String[]
+  deviceType   String
+  backedUp     Boolean  @default(false)
+  userAgent    String?
+  registeredAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -155,18 +230,439 @@ model Course {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  lecturer     User                @relation("LecturerCourses", fields: [lecturerId], references: [id])
-  enrollments  Enrollment[]
-  sessions     AttendanceSession[]
+  organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lecturer                User                     @relation("LecturerCourses", fields: [lecturerId], references: [id])
+  enrollments             Enrollment[]
+  sessions                AttendanceSession[]
+  timetableEntries        TimetableEntry[]
+  classUpdates            ClassUpdate[]
+  assignmentAnnouncements AssignmentAnnouncement[]
+  materialSections        MaterialSection[]
+  courseMaterials         CourseMaterial[]
+  courseRepScopes         CourseRepScope[]
+  courseRepInvites        CourseRepInvite[]
+  examEntries             ExamEntry[]
+  groupFormationSessions  GroupFormationSession[]
 
   @@unique([code, organizationId])
   @@index([organizationId])
   @@index([lecturerId])
 }
 
-model Enrollment {
+model Cohort {
+  id             String   @id @default(cuid())
+  organizationId String
+  department     String   @default("CS")
+  level          Int
+  groupCode      String
+  displayName    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users                   User[]
+  timetableEntries        TimetableEntry[]
+  classUpdates            ClassUpdate[]
+  assignmentAnnouncements AssignmentAnnouncement[]
+  materialSections        MaterialSection[]
+  courseMaterials         CourseMaterial[]
+  courseRepScopes         CourseRepScope[]
+  courseRepInvites        CourseRepInvite[]
+  examEntries             ExamEntry[]
+  groupFormationSessions  GroupFormationSession[]
+
+  @@unique([organizationId, department, level, groupCode])
+  @@index([organizationId])
+}
+
+model CourseRepScope {
+  id               String   @id @default(cuid())
+  userId           String
+  organizationId   String
+  cohortId         String?
+  courseId         String?
+  active           Boolean  @default(true)
+  assignedByUserId String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user         User         @relation("CourseRepScopes", fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cohort       Cohort?      @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  course       Course?      @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  assignedBy   User         @relation("CourseRepScopesAssignedBy", fields: [assignedByUserId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cohortId, courseId])
+  @@index([organizationId])
+  @@index([userId, active])
+  @@index([cohortId])
+  @@index([courseId])
+}
+
+model CourseRepInvite {
+  id              String    @id @default(cuid())
+  organizationId  String
+  invitedEmail    String
+  targetUserId    String?
+  cohortId        String?
+  courseId        String?
+  tokenHash       String    @unique
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  invitedByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  targetUser   User?        @relation("CourseRepInvites", fields: [targetUserId], references: [id], onDelete: SetNull)
+  cohort       Cohort?      @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  course       Course?      @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  invitedBy    User         @relation("CourseRepInvitesCreatedBy", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([invitedEmail])
+  @@index([expiresAt])
+}
+
+model TimetableEntry {
+  id              String        @id @default(cuid())
+  organizationId  String
+  cohortId        String
+  courseId        String?
+  courseCode      String
+  courseTitle     String
+  lecturerName    String?
+  taName          String?
+  dayOfWeek       Int
+  startTime       String
+  endTime         String
+  venue           String?
+  mode            TimetableMode @default(PHYSICAL)
+  onlineLink      String?
+  notes           String?
+  createdByUserId String
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cohort       Cohort       @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  course       Course?      @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  createdBy    User         @relation("TimetableEntriesCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, cohortId, dayOfWeek])
+  @@index([courseId])
+  @@index([createdByUserId])
+}
+
+model ClassUpdate {
+  id              String          @id @default(cuid())
+  organizationId  String
+  cohortId        String?
+  courseId        String?
+  type            ClassUpdateType
+  title           String
+  message         String
+  effectiveAt     DateTime
+  payload         Json            @default("{}")
+  createdByUserId String
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cohort       Cohort?      @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  course       Course?      @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  createdBy    User         @relation("ClassUpdatesCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, effectiveAt])
+  @@index([cohortId, effectiveAt])
+  @@index([courseId, effectiveAt])
+}
+
+model AssignmentAnnouncement {
+  id                String   @id @default(cuid())
+  organizationId    String
+  cohortId          String?
+  courseId          String?
+  title             String
+  body              String
+  dueAt             DateTime
+  submissionNote    String?
+  isGroupAssignment Boolean  @default(false)
+  createdByUserId   String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cohort       Cohort?                @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  course       Course?                @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  createdBy    User                   @relation("AssignmentAnnouncementsCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  attachments  AssignmentAttachment[]
+
+  @@index([organizationId, dueAt])
+  @@index([cohortId, dueAt])
+  @@index([courseId, dueAt])
+}
+
+model AssignmentAttachment {
+  id             String   @id @default(cuid())
+  announcementId String
+  publicId       String   @unique
+  resourceType   String
+  url            String
+  fileName       String
+  bytes          Int
+  mime           String
+  createdAt      DateTime @default(now())
+
+  announcement AssignmentAnnouncement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@index([announcementId])
+}
+
+model MaterialSection {
+  id              String   @id @default(cuid())
+  organizationId  String
+  courseId        String
+  cohortId        String?
+  title           String
+  description     String?
+  orderIndex      Int      @default(0)
+  createdByUserId String
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  course       Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  cohort       Cohort?          @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  createdBy    User             @relation("MaterialSectionsCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  materials    CourseMaterial[]
+
+  @@index([organizationId, courseId, isActive])
+  @@index([cohortId])
+  @@index([createdByUserId])
+}
+
+model CourseMaterial {
+  id              String         @id @default(cuid())
+  organizationId  String
+  courseId        String
+  cohortId        String?
+  sectionId       String
+  title           String
+  description     String?
+  status          MaterialStatus @default(PUBLISHED)
+  publicId        String         @unique
+  resourceType    String
+  url             String
+  fileName        String
+  bytes           Int
+  mime            String
+  viewCount       Int            @default(0)
+  downloadCount   Int            @default(0)
+  createdByUserId String
+  uploadedAt      DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  course       Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  cohort       Cohort?         @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  section      MaterialSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  createdBy    User            @relation("CourseMaterialsCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, courseId, status, uploadedAt])
+  @@index([sectionId, uploadedAt])
+  @@index([cohortId])
+  @@index([createdByUserId])
+}
+
+model JobQueue {
+  id             String    @id @default(cuid())
+  organizationId String?
+  type           JobType
+  payload        Json
+  status         JobStatus @default(PENDING)
+  runAt          DateTime  @default(now())
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(5)
+  lastError      String?
+  lockedAt       DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([status, runAt])
+  @@index([organizationId, status])
+  @@index([type, status])
+}
+
+model NotificationPreference {
+  id                           String   @id @default(cuid())
+  userId                       String   @unique
+  classRemindersEnabled        Boolean  @default(true)
+  assignmentRemindersEnabled   Boolean  @default(true)
+  examRemindersEnabled         Boolean  @default(true)
+  reverifyPushEnabled          Boolean  @default(true)
+  classReminderOffsetsMin      Int[]    @default([120, 60, 15])
+  assignmentReminderOffsetsMin Int[]    @default([1440, 360, 120, 60])
+  examReminderOffsetsMin       Int[]    @default([1440, 360, 60])
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ExamEntry {
+  id              String    @id @default(cuid())
+  organizationId  String
+  cohortId        String?
+  courseId        String?
+  title           String
+  examDate        DateTime
+  endAt           DateTime?
+  venue           String?
+  allowAnyHall    Boolean   @default(false)
+  instructions    String?
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cohort       Cohort?          @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  course       Course?          @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  attachments  ExamAttachment[]
+  updates      ExamUpdate[]
+
+  @@index([organizationId, examDate])
+  @@index([cohortId, examDate])
+  @@index([courseId, examDate])
+}
+
+model ExamAttachment {
+  id           String   @id @default(cuid())
+  examEntryId  String
+  publicId     String   @unique
+  resourceType String
+  url          String
+  fileName     String
+  bytes        Int
+  mime         String
+  createdAt    DateTime @default(now())
+
+  examEntry ExamEntry @relation(fields: [examEntryId], references: [id], onDelete: Cascade)
+
+  @@index([examEntryId])
+}
+
+model ExamUpdate {
+  id              String   @id @default(cuid())
+  examEntryId     String
+  updateType      String
+  message         String
+  effectiveAt     DateTime
+  payload         Json     @default("{}")
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+
+  examEntry ExamEntry @relation(fields: [examEntryId], references: [id], onDelete: Cascade)
+
+  @@index([examEntryId, effectiveAt])
+}
+
+model GroupFormationSession {
+  id              String             @id @default(cuid())
+  organizationId  String
+  cohortId        String?
+  courseId        String?
+  title           String?
+  groupSize       Int                @default(5)
+  mode            GroupFormationMode
+  leaderMode      GroupLeaderMode
+  startsAt        DateTime
+  endsAt          DateTime
+  active          Boolean            @default(true)
+  createdByUserId String
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cohort       Cohort?        @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  course       Course?        @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  createdBy    User           @relation("GroupFormationSessionsCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  groups       StudentGroup[]
+
+  @@index([organizationId, startsAt, endsAt])
+  @@index([cohortId])
+  @@index([courseId])
+}
+
+model StudentGroup {
   id        String   @id @default(cuid())
+  sessionId String
+  name      String
+  capacity  Int
+  leaderId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session     GroupFormationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  leader      User?                 @relation("StudentGroupLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+  memberships GroupMembership[]
+  votes       GroupLeaderVote[]
+  link        GroupLink?
+
+  @@index([sessionId])
+  @@index([leaderId])
+}
+
+model GroupMembership {
+  id        String   @id @default(cuid())
+  groupId   String
+  studentId String
+  joinedAt  DateTime @default(now())
+
+  group   StudentGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  student User         @relation("StudentGroupMemberships", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, studentId])
+  @@index([studentId])
+}
+
+model GroupLeaderVote {
+  id                 String   @id @default(cuid())
+  groupId            String
+  voterId            String
+  candidateStudentId String
+  createdAt          DateTime @default(now())
+
+  group StudentGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  voter User         @relation("GroupLeaderVotesCast", fields: [voterId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, voterId])
+  @@index([candidateStudentId])
+}
+
+model GroupLink {
+  id                String   @id @default(cuid())
+  groupId           String   @unique
+  inviteUrl         String
+  postedByStudentId String
+  postedAt          DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  group    StudentGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  postedBy User         @relation("GroupLinksPostedBy", fields: [postedByStudentId], references: [id], onDelete: Cascade)
+
+  @@index([postedByStudentId])
+}
+
+model Enrollment {
+  id         String   @id @default(cuid())
   courseId   String
   studentId  String
   enrolledAt DateTime @default(now())
@@ -178,36 +674,36 @@ model Enrollment {
 }
 
 model AttendanceSession {
-  id           String        @id @default(cuid())
-  courseId      String
-  lecturerId   String
-  status       SessionStatus @default(ACTIVE)
-  phase        AttendancePhase @default(INITIAL)
-  initialEndsAt DateTime?
-  reverifyEndsAt DateTime?
-  qrRotationMs Int           @default(5000)
-  qrGraceMs    Int           @default(1000)
-  reverifySelectionRate Float @default(0.3)
-  reverifySelectionDone Boolean @default(false)
-  reverifySelectedCount Int  @default(0)
-  gpsLat       Float
-  gpsLng       Float
-  radiusMeters Int           @default(500)
-  qrSecret     String
-  startedAt    DateTime      @default(now())
-  closedAt     DateTime?
-  
+  id                    String          @id @default(cuid())
+  courseId              String
+  lecturerId            String
+  status                SessionStatus   @default(ACTIVE)
+  phase                 AttendancePhase @default(INITIAL)
+  initialEndsAt         DateTime?
+  reverifyEndsAt        DateTime?
+  qrRotationMs          Int             @default(5000)
+  qrGraceMs             Int             @default(1000)
+  reverifySelectionRate Float           @default(0.3)
+  reverifySelectionDone Boolean         @default(false)
+  reverifySelectedCount Int             @default(0)
+  gpsLat                Float
+  gpsLng                Float
+  radiusMeters          Int             @default(500)
+  qrSecret              String
+  startedAt             DateTime        @default(now())
+  closedAt              DateTime?
+
   // BLE relay configuration
-  relayEnabled  Boolean       @default(false) // Lecturer enables relay functionality
-  relayOpenTime DateTime?     // When relay mode was opened to approved devices
-  relayAutoApprove Boolean    @default(false) // Auto-approve relay requests (less strict mode)
-  
-  course   Course                @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  lecturer User                  @relation("LecturerSessions", fields: [lecturerId], references: [id])
-  records  AttendanceRecord[]
-  relayDevices BleRelayDevice[]  @relation("RelayDevices")
+  relayEnabled     Boolean   @default(false) // Lecturer enables relay functionality
+  relayOpenTime    DateTime? // When relay mode was opened to approved devices
+  relayAutoApprove Boolean   @default(false) // Auto-approve relay requests (less strict mode)
+
+  course         Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lecturer       User                 @relation("LecturerSessions", fields: [lecturerId], references: [id])
+  records        AttendanceRecord[]
+  relayDevices   BleRelayDevice[]     @relation("RelayDevices")
   broadcastState RelayBroadcastState? @relation("BroadcastState")
-  qrPortRequests QrPortRequest[] @relation("SessionQrPortRequests")
+  qrPortRequests QrPortRequest[]      @relation("SessionQrPortRequests")
 
   @@index([courseId])
   @@index([lecturerId])
@@ -217,38 +713,38 @@ model AttendanceSession {
 }
 
 model AttendanceRecord {
-  id           String   @id @default(cuid())
-  sessionId    String
-  studentId    String
-  gpsLat       Float
-  gpsLng       Float
-  gpsDistance   Float
-  ipAddress    String
-  ipTrusted    Boolean  @default(false)
-  qrToken      String
-  webauthnUsed Boolean  @default(true)
-  reverifyRequired Boolean @default(false)
-  reverifyStatus ReverifyStatus @default(NOT_REQUIRED)
-  reverifyRequestedAt DateTime?
-  reverifyDeadlineAt DateTime?
-  reverifyMarkedAt DateTime?
-  reverifyAttemptCount Int @default(0)
-  reverifyRetryCount Int @default(0)
-  reverifyPasskeyUsed Boolean @default(false)
-  reverifyManualOverride Boolean @default(false)
+  id                         String         @id @default(cuid())
+  sessionId                  String
+  studentId                  String
+  gpsLat                     Float
+  gpsLng                     Float
+  gpsDistance                Float
+  ipAddress                  String
+  ipTrusted                  Boolean        @default(false)
+  qrToken                    String
+  webauthnUsed               Boolean        @default(true)
+  reverifyRequired           Boolean        @default(false)
+  reverifyStatus             ReverifyStatus @default(NOT_REQUIRED)
+  reverifyRequestedAt        DateTime?
+  reverifyDeadlineAt         DateTime?
+  reverifyMarkedAt           DateTime?
+  reverifyAttemptCount       Int            @default(0)
+  reverifyRetryCount         Int            @default(0)
+  reverifyPasskeyUsed        Boolean        @default(false)
+  reverifyManualOverride     Boolean        @default(false)
   reverifyManualOverriddenAt DateTime?
-  confidence   Int
-  flagged      Boolean  @default(false)
+  confidence                 Int
+  flagged                    Boolean        @default(false)
   // New device and security fields
-  deviceToken  String?  // Which device submitted this
-  bleSignalStrength Int? // RSSI value (-100 to -20, higher is stronger)
-  deviceConsistency Float? // 0-100 score
-  gpsVelocity  Float?   // Movement speed in m/s
-  anomalyScore Float?   // 0-100, higher = more suspicious
-  markedAt     DateTime @default(now())
+  deviceToken                String? // Which device submitted this
+  bleSignalStrength          Int? // RSSI value (-100 to -20, higher is stronger)
+  deviceConsistency          Float? // 0-100 score
+  gpsVelocity                Float? // Movement speed in m/s
+  anomalyScore               Float? // 0-100, higher = more suspicious
+  markedAt                   DateTime       @default(now())
 
-  session AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  student User              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  session     AttendanceSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student     User                   @relation(fields: [studentId], references: [id], onDelete: Cascade)
   relayRecord RelayAttendanceRecord?
 
   @@unique([sessionId, studentId])
@@ -287,30 +783,30 @@ model TrustedIpRange {
 }
 
 model Subscription {
-  id             String           @id @default(cuid())
-  organizationId String           @unique
-  plan           SubscriptionPlan @default(FREE)
-  maxStudents    Int              @default(100)
-  maxCourses     Int              @default(10)
-  stripeCustomerId   String?
+  id                   String           @id @default(cuid())
+  organizationId       String           @unique
+  plan                 SubscriptionPlan @default(FREE)
+  maxStudents          Int              @default(100)
+  maxCourses           Int              @default(10)
+  stripeCustomerId     String?
   stripeSubscriptionId String?
-  currentPeriodEnd DateTime?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  currentPeriodEnd     DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
 model LecturerInvite {
-  id             String   @id @default(cuid())
-  organizationId String
-  invitedEmail   String
-  tokenHash      String   @unique
+  id              String    @id @default(cuid())
+  organizationId  String
+  invitedEmail    String
+  tokenHash       String    @unique
   invitedByUserId String
-  expiresAt      DateTime
-  acceptedAt     DateTime?
-  revokedAt      DateTime?
-  createdAt      DateTime @default(now())
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   invitedBy    User         @relation("LecturerInvitesCreatedBy", fields: [invitedByUserId], references: [id], onDelete: Cascade)
@@ -321,14 +817,14 @@ model LecturerInvite {
 }
 
 model EmailVerificationToken {
-  id        String   @id @default(cuid())
+  id        String                     @id @default(cuid())
   userId    String
   email     String
-  tokenHash String   @unique
+  tokenHash String                     @unique
   type      EmailVerificationTokenType @default(PERSONAL_EMAIL_VERIFY)
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime                   @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -338,13 +834,13 @@ model EmailVerificationToken {
 }
 
 model PasswordResetToken {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
   email     String
-  tokenHash String   @unique
+  tokenHash String    @unique
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -369,15 +865,15 @@ model PushSubscription {
 }
 
 model UserNotification {
-  id        String   @id @default(cuid())
+  id        String           @id @default(cuid())
   userId    String
   type      NotificationType @default(SYSTEM)
   title     String
   body      String
-  metadata  Json     @default("{}")
+  metadata  Json             @default("{}")
   readAt    DateTime?
   sentAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime         @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -388,23 +884,23 @@ model UserNotification {
 
 // Device linking for multi-device attendance and BLE verification
 model UserDevice {
-  id               String   @id @default(cuid())
-  userId           String
-  deviceToken      String   @unique // Device identifier (Android/iOS)
-  deviceName       String   // e.g., "iPhone 14 Pro"
-  deviceType       String   // "iOS" | "Android" | "Web"
-  osVersion        String?
-  appVersion       String?
-  bleSignature     String?  // BLE advertiser identifier (platform-specific)
-  bleLastSeen      DateTime?
-  fingerprint      String?  // Hardware fingerprint for spoofing detection
-  lastUsedAt       DateTime @default(now())
-  trustedAt        DateTime? // Manually verified by admin
-  revokedAt        DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id           String    @id @default(cuid())
+  userId       String
+  deviceToken  String    @unique // Device identifier (Android/iOS)
+  deviceName   String // e.g., "iPhone 14 Pro"
+  deviceType   String // "iOS" | "Android" | "Web"
+  osVersion    String?
+  appVersion   String?
+  bleSignature String? // BLE advertiser identifier (platform-specific)
+  bleLastSeen  DateTime?
+  fingerprint  String? // Hardware fingerprint for spoofing detection
+  lastUsedAt   DateTime  @default(now())
+  trustedAt    DateTime? // Manually verified by admin
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   bleDeviceSignature BleDeviceSignature?
   bleRelayDevice     BleRelayDevice?
 
@@ -416,21 +912,21 @@ model UserDevice {
 
 // Enhanced attendance records with device and velocity info
 model AttendanceRecordExtended {
-  id                String   @id @default(cuid())
-  attendanceRecordId String  @unique // References AttendanceRecord.id
-  deviceToken       String?  // Which device was used
-  bleSignalStrength Int?     // RSSI value from source device (-100 to -20)
-  deviceConsistency Float?   // Historical device match score (0-100)
-  gpsVelocity       Float?   // Calculated movement speed (m/s)
-  lastLocationLat   Float?   // Last known location for velocity
-  lastLocationLng   Float?
-  lastLocationTime  DateTime?
-  anomalyScore      Float?   // 0-100, higher = more suspicious
-  anomalyFlags      String[] // Array of detected anomalies
-  locationJump      Boolean @default(false) // Teleportation detected
-  velocityAnomaly   Boolean @default(false) // Movement too fast
-  deviceMismatch    Boolean @default(false) // Different device than usual
-  createdAt         DateTime @default(now())
+  id                 String    @id @default(cuid())
+  attendanceRecordId String    @unique // References AttendanceRecord.id
+  deviceToken        String? // Which device was used
+  bleSignalStrength  Int? // RSSI value from source device (-100 to -20)
+  deviceConsistency  Float? // Historical device match score (0-100)
+  gpsVelocity        Float? // Calculated movement speed (m/s)
+  lastLocationLat    Float? // Last known location for velocity
+  lastLocationLng    Float?
+  lastLocationTime   DateTime?
+  anomalyScore       Float? // 0-100, higher = more suspicious
+  anomalyFlags       String[] // Array of detected anomalies
+  locationJump       Boolean   @default(false) // Teleportation detected
+  velocityAnomaly    Boolean   @default(false) // Movement too fast
+  deviceMismatch     Boolean   @default(false) // Different device than usual
+  createdAt          DateTime  @default(now())
 
   @@index([attendanceRecordId])
   @@index([anomalyScore])
@@ -438,33 +934,33 @@ model AttendanceRecordExtended {
 
 // Anomaly detection and security monitoring
 enum AnomalyType {
-  LOCATION_JUMP      // Distance/time impossible
-  VELOCITY_ANOMALY   // Moving too fast
-  DEVICE_MISMATCH    // Different device than normal
-  RAPID_SUBMISSIONS  // Too many attempts in short time
-  GPS_SPOOFING       // Invalid movement pattern
-  QR_REUSE           // Same QR used by multiple students
-  IP_MISMATCH        // IP doesn't match student location
-  TIMEZONE_ANOMALY   // Timestamp doesn't match timezone
-  BEHAVIORAL_CHANGE  // Unusual attendance pattern
+  LOCATION_JUMP // Distance/time impossible
+  VELOCITY_ANOMALY // Moving too fast
+  DEVICE_MISMATCH // Different device than normal
+  RAPID_SUBMISSIONS // Too many attempts in short time
+  GPS_SPOOFING // Invalid movement pattern
+  QR_REUSE // Same QR used by multiple students
+  IP_MISMATCH // IP doesn't match student location
+  TIMEZONE_ANOMALY // Timestamp doesn't match timezone
+  BEHAVIORAL_CHANGE // Unusual attendance pattern
 }
 
 model AttendanceAnomaly {
-  id          String     @id @default(cuid())
-  studentId   String
-  sessionId   String?
-  anomalyType AnomalyType
-  severity    Int        @default(50) // 0-100
-  confidence  Float      @default(0.5) // 0.0-1.0
-  details     Json       @default("{}")
-  flaggedAt   DateTime   @default(now())
-  reviewedAt  DateTime?
-  reviewedBy  String?    // Admin user ID
-  action      String?    // "none" | "flag" | "invalidate" | "investigate"
+  id           String      @id @default(cuid())
+  studentId    String
+  sessionId    String?
+  anomalyType  AnomalyType
+  severity     Int         @default(50) // 0-100
+  confidence   Float       @default(0.5) // 0.0-1.0
+  details      Json        @default("{}")
+  flaggedAt    DateTime    @default(now())
+  reviewedAt   DateTime?
+  reviewedBy   String? // Admin user ID
+  action       String? // "none" | "flag" | "invalidate" | "investigate"
   actionReason String?
-  createdAt   DateTime   @default(now())
+  createdAt    DateTime    @default(now())
 
-  student    User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student User @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@index([studentId])
   @@index([sessionId])
@@ -476,16 +972,16 @@ model AttendanceAnomaly {
 
 // Session monitoring for real-time admin dashboard
 model SessionMonitoring {
-  id          String   @id @default(cuid())
-  sessionId   String   @unique
-  totalEnrolled    Int     @default(0)
-  totalAttempted   Int     @default(0)
-  totalVerified    Int     @default(0)
-  flaggedCount     Int     @default(0)
-  anomalyCount     Int     @default(0)
-  lastUpdated      DateTime @default(now())
+  id                  String    @id @default(cuid())
+  sessionId           String    @unique
+  totalEnrolled       Int       @default(0)
+  totalAttempted      Int       @default(0)
+  totalVerified       Int       @default(0)
+  flaggedCount        Int       @default(0)
+  anomalyCount        Int       @default(0)
+  lastUpdated         DateTime  @default(now())
   estimatedCompletion DateTime? // Projected completion time
-  
+
   createdAt DateTime @default(now())
 
   @@index([sessionId])
@@ -493,14 +989,14 @@ model SessionMonitoring {
 
 // BLE device signature storage for proximity verification
 model BleDeviceSignature {
-  id             String   @id @default(cuid())
-  userDeviceId   String   @unique
-  bleAddress     String   // BLE MAC or permanent address
-  bleUuid        String?  // BLE UUID if using
-  txPower        Int?     // Transmission power (calibration)
-  lastVerified   DateTime @default(now())
-  verificationCount Int   @default(0)
-  createdAt      DateTime @default(now())
+  id                String   @id @default(cuid())
+  userDeviceId      String   @unique
+  bleAddress        String // BLE MAC or permanent address
+  bleUuid           String? // BLE UUID if using
+  txPower           Int? // Transmission power (calibration)
+  lastVerified      DateTime @default(now())
+  verificationCount Int      @default(0)
+  createdAt         DateTime @default(now())
 
   userDevice UserDevice @relation(fields: [userDeviceId], references: [id], onDelete: Cascade)
 
@@ -510,41 +1006,41 @@ model BleDeviceSignature {
 
 // BLE Relay System - Students who pass verification become relay nodes
 enum RelayStatus {
-  PENDING        // Awaiting lecturer approval
-  APPROVED       // Approved to broadcast QR
-  REJECTED       // Rejected by lecturer
-  REVOKED        // Revoked after being approved
+  PENDING // Awaiting lecturer approval
+  APPROVED // Approved to broadcast QR
+  REJECTED // Rejected by lecturer
+  REVOKED // Revoked after being approved
 }
 
 model BleRelayDevice {
-  id              String        @id @default(cuid())
-  sessionId       String
-  studentId       String
-  userDeviceId    String        @unique // One device per student
-  status          RelayStatus   @default(PENDING)
-  
+  id           String      @id @default(cuid())
+  sessionId    String
+  studentId    String
+  userDeviceId String      @unique // One device per student
+  status       RelayStatus @default(PENDING)
+
   // Relay broadcasting info
-  bleBeaconUuid   String?       // UUID for this relay broadcast
-  qrDataEncrypted String?       // Encrypted QR data for relay
-  broadcastPower  Int           @default(-5) // TX power in dBm
-  broadcastRangeMeters Int      @default(15) // Approximate range
-  
+  bleBeaconUuid        String? // UUID for this relay broadcast
+  qrDataEncrypted      String? // Encrypted QR data for relay
+  broadcastPower       Int     @default(-5) // TX power in dBm
+  broadcastRangeMeters Int     @default(15) // Approximate range
+
   // Timestamps
-  verifiedAt      DateTime      // When student marked attendance
-  approvedAt      DateTime?     // When lecturer approved
+  verifiedAt      DateTime // When student marked attendance
+  approvedAt      DateTime? // When lecturer approved
   rejectedAt      DateTime?
   revokedAt       DateTime?
-  lastBroadcasted DateTime?     // Last time BLE was broadcasting
-  expiresAt       DateTime?     // Auto-expire after session closes
-  
-  // Tracking
-  relayScansCount Int           @default(0) // How many students scanned via this relay
-  approvalMessage String?       // Message from lecturer
-  createdAt       DateTime      @default(now())
+  lastBroadcasted DateTime? // Last time BLE was broadcasting
+  expiresAt       DateTime? // Auto-expire after session closes
 
-  session         AttendanceSession @relation("RelayDevices", fields: [sessionId], references: [id], onDelete: Cascade)
-  student         User              @relation("RelayDevices", fields: [studentId], references: [id], onDelete: Cascade)
-  userDevice      UserDevice        @relation(fields: [userDeviceId], references: [id], onDelete: Cascade)
+  // Tracking
+  relayScansCount Int      @default(0) // How many students scanned via this relay
+  approvalMessage String? // Message from lecturer
+  createdAt       DateTime @default(now())
+
+  session                AttendanceSession       @relation("RelayDevices", fields: [sessionId], references: [id], onDelete: Cascade)
+  student                User                    @relation("RelayDevices", fields: [studentId], references: [id], onDelete: Cascade)
+  userDevice             UserDevice              @relation(fields: [userDeviceId], references: [id], onDelete: Cascade)
   relayAttendanceRecords RelayAttendanceRecord[]
 
   @@unique([sessionId, studentId])
@@ -557,19 +1053,19 @@ model BleRelayDevice {
 
 // Track students who scanned QR from relay device instead of direct
 model RelayAttendanceRecord {
-  id              String   @id @default(cuid())
+  id                 String @id @default(cuid())
   attendanceRecordId String @unique // Reference to main attendance record
-  relayDeviceId   String   // Which relay device provided the QR
-  
+  relayDeviceId      String // Which relay device provided the QR
+
   // BLE proximity data from relay scan
-  bleSignalRssi   Int?     // RSSI when scanning the relay
-  bleDistance     Float?   // Estimated distance to relay device
-  scanTimestamp   DateTime @default(now())
-  
-  createdAt       DateTime @default(now())
+  bleSignalRssi Int? // RSSI when scanning the relay
+  bleDistance   Float? // Estimated distance to relay device
+  scanTimestamp DateTime @default(now())
+
+  createdAt DateTime @default(now())
 
   attendanceRecord AttendanceRecord @relation(fields: [attendanceRecordId], references: [id], onDelete: Cascade)
-  relayDevice     BleRelayDevice   @relation(fields: [relayDeviceId], references: [id], onDelete: Cascade)
+  relayDevice      BleRelayDevice   @relation(fields: [relayDeviceId], references: [id], onDelete: Cascade)
 
   @@index([relayDeviceId])
   @@index([attendanceRecordId])
@@ -583,13 +1079,13 @@ enum QrPortStatus {
 }
 
 model QrPortRequest {
-  id        String       @id @default(cuid())
-  sessionId String
-  studentId String
-  status    QrPortStatus  @default(PENDING)
-  requestedAt DateTime   @default(now())
+  id          String       @id @default(cuid())
+  sessionId   String
+  studentId   String
+  status      QrPortStatus @default(PENDING)
+  requestedAt DateTime     @default(now())
   reviewedAt  DateTime?
-  reviewedBy  String?    // Lecturer user ID
+  reviewedBy  String? // Lecturer user ID
 
   session AttendanceSession @relation("SessionQrPortRequests", fields: [sessionId], references: [id], onDelete: Cascade)
   student User              @relation("QrPortRequests", fields: [studentId], references: [id], onDelete: Cascade)

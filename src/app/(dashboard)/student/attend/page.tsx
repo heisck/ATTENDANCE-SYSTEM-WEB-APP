@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { QrScanner, type QrScanPayload, type QrScanResult } from "@/components/qr-scanner";
 import { QrDisplay } from "@/components/qr-display";
 import { GpsCheck } from "@/components/gps-check";
@@ -21,7 +21,6 @@ import {
   Share2,
   Loader2,
 } from "lucide-react";
-import { PageHeader } from "@/components/dashboard/page-header";
 
 type Step = "webauthn" | "session" | "gps" | "qr" | "result";
 type QrPortStatus = "PENDING" | "APPROVED" | "REJECTED" | null;
@@ -118,6 +117,7 @@ function detectDeviceTypeFromUserAgent(userAgent: string): "iOS" | "Android" | "
 
 export default function AttendPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [step, setStep] = useState<Step>("webauthn");
   const [webauthnVerified, setWebauthnVerified] = useState(false);
   const [gps, setGps] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
@@ -138,6 +138,10 @@ export default function AttendPage() {
   const [reverifyError, setReverifyError] = useState<string | null>(null);
   const [serverClockOffsetMs, setServerClockOffsetMs] = useState(0);
   const [clockTick, setClockTick] = useState(() => Date.now());
+  const [initialVerifyTrigger, setInitialVerifyTrigger] = useState(0);
+  const [initialScanTrigger, setInitialScanTrigger] = useState(0);
+  const [reverifyVerifyTrigger, setReverifyVerifyTrigger] = useState(0);
+  const [reverifyScanTrigger, setReverifyScanTrigger] = useState(0);
   const reverifyToastKeyRef = useRef<string | number | null>(null);
 
   const reverifyStatus = syncState?.attendance?.reverifyStatus;
@@ -188,6 +192,41 @@ export default function AttendPage() {
     });
     setStep("result");
   }
+
+  useEffect(() => {
+    const mode = searchParams.get("mode");
+    if (mode !== "verify" && mode !== "scan") return;
+
+    if (mode === "verify") {
+      if (isPendingReverify && !reverifyPasskeyVerified) {
+        setReverifyVerifyTrigger((value) => value + 1);
+      } else if (step === "webauthn") {
+        setInitialVerifyTrigger((value) => value + 1);
+      } else if (isPendingReverify && reverifyPasskeyVerified) {
+        toast.info("Passkey already verified for this reverification round.");
+      } else {
+        toast.info("Passkey is already verified for this attendance flow.");
+      }
+    }
+
+    if (mode === "scan") {
+      if (step === "qr") {
+        setInitialScanTrigger((value) => value + 1);
+      } else if (isPendingReverify) {
+        if (!reverifyPasskeyVerified) {
+          toast.info("Verify passkey first.");
+        } else if (!reverifySlotActive) {
+          toast.info("Wait for your assigned QR slot to open.");
+        } else {
+          setReverifyScanTrigger((value) => value + 1);
+        }
+      } else {
+        toast.info("Complete passkey, session selection, and GPS checks before scanning.");
+      }
+    }
+
+    router.replace("/student/attend");
+  }, [isPendingReverify, reverifyPasskeyVerified, reverifySlotActive, router, searchParams, step]);
 
   useEffect(() => {
     async function checkDevice() {
@@ -709,12 +748,6 @@ export default function AttendPage() {
 
   return (
     <div className="w-full max-w-none space-y-6">
-      <PageHeader
-        eyebrow="Student"
-        title="Mark Attendance"
-        description="Verify passkey first, then select a live session and scan."
-      />
-
       <BleProximityCheck />
 
       {hasDevice === null && (
@@ -747,7 +780,13 @@ export default function AttendPage() {
             </span>
           </div>
 
-          {step === "webauthn" && <WebAuthnPrompt onVerified={handleWebAuthnVerified} />}
+          {step === "webauthn" && (
+            <WebAuthnPrompt
+              onVerified={handleWebAuthnVerified}
+              triggerSignal={initialVerifyTrigger}
+              hideActionButton
+            />
+          )}
 
           {step === "session" && (
             <div className="surface space-y-3 p-4 sm:p-5">
@@ -798,7 +837,8 @@ export default function AttendPage() {
             >
               <QrScanner
                 onScan={handleInitialQrScan}
-                triggerLabel="Open Full Camera"
+                openSignal={initialScanTrigger}
+                hideTriggerButton
                 description="Continuous scan is active. Invalid or expired codes will prompt you and keep scanning."
               />
             </div>
@@ -950,7 +990,11 @@ export default function AttendPage() {
                   </div>
 
                   {!reverifyPasskeyVerified ? (
-                    <WebAuthnPrompt onVerified={() => setReverifyPasskeyVerified(true)} />
+                    <WebAuthnPrompt
+                      onVerified={() => setReverifyPasskeyVerified(true)}
+                      triggerSignal={reverifyVerifyTrigger}
+                      hideActionButton
+                    />
                   ) : (
                     <div className="space-y-2">
                       <p className="text-xs font-medium text-foreground">
@@ -978,8 +1022,8 @@ export default function AttendPage() {
                       ) : (
                         <QrScanner
                           onScan={handleReverifyQrScan}
-                          autoOpen
-                          triggerLabel="Open Reverification Camera"
+                          openSignal={reverifyScanTrigger}
+                          hideTriggerButton
                           description="Keep camera pointed at the live board. Scan continues until your exact slot is accepted."
                         />
                       )}

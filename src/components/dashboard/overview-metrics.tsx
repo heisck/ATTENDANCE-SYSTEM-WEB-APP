@@ -14,13 +14,23 @@ type OverviewMetricsProps = {
   title: string;
   items: OverviewMetric[];
   compact?: boolean;
+  showTitle?: boolean;
+  showTopBorder?: boolean;
 };
 
-export function OverviewMetrics({ title, items, compact = false }: OverviewMetricsProps) {
+export function OverviewMetrics({
+  title,
+  items,
+  compact = false,
+  showTitle = true,
+  showTopBorder = true,
+}: OverviewMetricsProps) {
   if (compact) {
     return (
-      <section className="space-y-2 border-t border-border/70 pt-4">
-        <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">{title}</p>
+      <section className={cn("space-y-2", showTopBorder ? "border-t border-border/70 pt-4" : "pt-0")}>
+        {showTitle ? (
+          <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">{title}</p>
+        ) : null}
         <div className="mt-2 grid gap-2 grid-cols-2 lg:grid-cols-4">
           {items.map((item) => (
             <div
@@ -54,10 +64,12 @@ export function OverviewMetrics({ title, items, compact = false }: OverviewMetri
   if (!selected) return null;
 
   return (
-    <section className="space-y-4 border-t border-border/70 pt-4">
+    <section className={cn("space-y-4", showTopBorder ? "border-t border-border/70 pt-4" : "pt-0")}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">{title}</p>
+          {showTitle ? (
+            <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">{title}</p>
+          ) : null}
           <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">{selected.value}</p>
           <p className="text-sm font-medium text-foreground">{selected.label}</p>
           {selected.hint && <p className="mt-0.5 text-xs text-muted-foreground">{selected.hint}</p>}

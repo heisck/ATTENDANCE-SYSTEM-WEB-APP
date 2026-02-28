@@ -171,7 +171,7 @@ export function BleProximityCheck({
             {scanning ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Scanning for devices...
+                Scanning nearby BLE devices...
               </>
             ) : deviceFound ? (
               <>
@@ -181,7 +181,7 @@ export function BleProximityCheck({
             ) : (
               <>
                 <Radio className="h-4 w-4" />
-                Scan Nearby Devices
+                Start BLE Proximity Check
               </>
             )}
           </button>

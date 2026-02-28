@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { runReminderEngine } from "@/services/notification.service";
+import { runDueJobs } from "@/lib/job-queue";
+import { reminderRunSchema } from "@/lib/validators";
 
 function isCronAuthorized(request: NextRequest): boolean {
   const secret = process.env.REMINDER_CRON_SECRET;
@@ -23,9 +24,19 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await runReminderEngine();
+    const body = await request
+      .json()
+      .catch(() => ({}));
+    const parsed = reminderRunSchema.parse(body);
+    const result = await runDueJobs(parsed.batchSize);
     return NextResponse.json({ success: true, ...result });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === "ZodError") {
+      return NextResponse.json(
+        { error: error?.issues?.[0]?.message || error?.errors?.[0]?.message || "Invalid payload" },
+        { status: 400 }
+      );
+    }
     console.error("Reminder engine failed:", error);
     return NextResponse.json({ error: "Reminder engine failed" }, { status: 500 });
   }

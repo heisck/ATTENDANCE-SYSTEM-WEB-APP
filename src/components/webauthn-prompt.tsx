@@ -1,17 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { startAuthentication } from "@simplewebauthn/browser";
 import { Fingerprint, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface WebAuthnPromptProps {
   onVerified: () => void;
+  triggerSignal?: number;
+  hideActionButton?: boolean;
 }
 
-export function WebAuthnPrompt({ onVerified }: WebAuthnPromptProps) {
+export function WebAuthnPrompt({
+  onVerified,
+  triggerSignal,
+  hideActionButton = false,
+}: WebAuthnPromptProps) {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState("");
+  const lastTriggerSignalRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     if (status === "error" && error) toast.error(error);
@@ -83,6 +90,15 @@ export function WebAuthnPrompt({ onVerified }: WebAuthnPromptProps) {
     }
   }
 
+  useEffect(() => {
+    if (triggerSignal === undefined || triggerSignal === 0) return;
+    if (lastTriggerSignalRef.current === triggerSignal) return;
+    lastTriggerSignalRef.current = triggerSignal;
+
+    if (status === "loading" || status === "success") return;
+    void handleVerify();
+  }, [status, triggerSignal]);
+
   return (
     <div className="w-full max-w-md mx-auto">
       <div className="rounded-lg border border-border/70 bg-background/40 p-6 space-y-4">
@@ -102,7 +118,7 @@ export function WebAuthnPrompt({ onVerified }: WebAuthnPromptProps) {
         </div>
 
         <div className="flex gap-3 pt-2">
-          {(status === "idle" || status === "error") && (
+          {!hideActionButton && (status === "idle" || status === "error") && (
             <button
               onClick={handleVerify}
               className="flex-1 rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
@@ -131,6 +147,12 @@ export function WebAuthnPrompt({ onVerified }: WebAuthnPromptProps) {
             </button>
           )}
         </div>
+
+        {hideActionButton && (status === "idle" || status === "error") ? (
+          <p className="text-xs text-center text-muted-foreground">
+            Use the top-right quick actions menu to verify passkey.
+          </p>
+        ) : null}
 
         <p className="text-xs text-muted-foreground text-center">
           Biometric verification is required to ensure only you can mark attendance.

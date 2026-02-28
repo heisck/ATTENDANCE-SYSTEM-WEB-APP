@@ -13,7 +13,6 @@ import {
   User,
 } from "lucide-react";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/dashboard/page-header";
 
 type StudentProfile = {
   id: string;
@@ -167,11 +166,9 @@ export default function StudentProfilePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Student"
-        title="Profile"
-        description="Manage your account details and security settings."
-      />
+      <p className="text-sm text-muted-foreground">
+        Manage your account details and security settings.
+      </p>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
         <section className="space-y-6">

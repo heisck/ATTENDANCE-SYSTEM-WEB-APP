@@ -27,6 +27,9 @@ type RegisterForm = {
   studentId: string;
   indexNumber: string;
   organizationSlug: string;
+  department: string;
+  level: string;
+  groupCode: string;
 };
 
 const INITIAL_FORM: RegisterForm = {
@@ -37,6 +40,9 @@ const INITIAL_FORM: RegisterForm = {
   studentId: "",
   indexNumber: "",
   organizationSlug: "",
+  department: "CS",
+  level: "100",
+  groupCode: "",
 };
 
 export default function RegisterPage() {
@@ -60,16 +66,13 @@ export default function RegisterPage() {
       { key: "studentId", label: "Student ID" },
       { key: "indexNumber", label: "Index number" },
       { key: "organizationSlug", label: "University code" },
+      { key: "level", label: "Level" },
+      { key: "groupCode", label: "Group" },
     ];
 
     const missingField = requiredFields.find(({ key }) => !form[key].trim());
     if (missingField) {
       toast.error(`${missingField.label} is required.`);
-      return false;
-    }
-
-    if (!form.institutionalEmail.trim().toLowerCase().endsWith("@st.knust.edu.gh")) {
-      toast.error("Institutional email must end with @st.knust.edu.gh");
       return false;
     }
 
@@ -96,7 +99,12 @@ export default function RegisterPage() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          level: Number(form.level),
+          department: form.department.toUpperCase(),
+          groupCode: form.groupCode.toUpperCase(),
+        }),
       });
 
       const data = await res.json();
@@ -263,7 +271,7 @@ export default function RegisterPage() {
                     type="email"
                     value={form.institutionalEmail}
                     onChange={(e) => update("institutionalEmail", e.target.value)}
-                    placeholder="Institutional email (@st.knust.edu.gh)"
+                    placeholder="Institutional email (school domain)"
                     className="flex h-11 w-full rounded-xl border border-border/70 bg-muted/35 py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />
                 </Field>
@@ -343,6 +351,40 @@ export default function RegisterPage() {
                     className="flex h-11 w-full rounded-xl border border-border/70 bg-muted/35 py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />
                 </Field>
+                <Field label="Department" htmlFor="department">
+                  <Building2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    id="department"
+                    value={form.department}
+                    onChange={(e) => update("department", e.target.value)}
+                    placeholder="Department (e.g. CS)"
+                    className="flex h-11 w-full rounded-xl border border-border/70 bg-muted/35 py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                </Field>
+                <Field label="Level" htmlFor="level">
+                  <GraduationCap className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <select
+                    id="level"
+                    value={form.level}
+                    onChange={(e) => update("level", e.target.value)}
+                    className="flex h-11 w-full rounded-xl border border-border/70 bg-muted/35 py-2 pl-10 pr-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                    <option value="300">300</option>
+                    <option value="400">400</option>
+                  </select>
+                </Field>
+                <Field label="Group" htmlFor="groupCode">
+                  <BadgeCheck className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    id="groupCode"
+                    value={form.groupCode}
+                    onChange={(e) => update("groupCode", e.target.value)}
+                    placeholder="Group (e.g. G1)"
+                    className="flex h-11 w-full rounded-xl border border-border/70 bg-muted/35 py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                </Field>
               </div>
             </div>
           </Step>
@@ -362,6 +404,9 @@ export default function RegisterPage() {
                   <SummaryRow label="Student ID" value={form.studentId || "Not set"} />
                   <SummaryRow label="Index number" value={form.indexNumber || "Not set"} />
                   <SummaryRow label="University code" value={form.organizationSlug || "Not set"} />
+                  <SummaryRow label="Department" value={form.department || "Not set"} />
+                  <SummaryRow label="Level" value={form.level || "Not set"} />
+                  <SummaryRow label="Group" value={form.groupCode || "Not set"} />
                 </dl>
               </div>
 

@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import {
+  getAcademicCalendarSettings,
+  getFeatureFlags,
+  getStudentHubAccessState,
+} from "@/lib/organization-settings";
 
 export async function GET() {
   const session = await auth();
@@ -23,8 +28,24 @@ export async function GET() {
     db.user.findUnique({
       where: { id: user.id },
       select: {
+        id: true,
+        organizationId: true,
         personalEmail: true,
         personalEmailVerifiedAt: true,
+        organization: {
+          select: {
+            settings: true,
+          },
+        },
+        cohort: {
+          select: {
+            id: true,
+            department: true,
+            level: true,
+            groupCode: true,
+            displayName: true,
+          },
+        },
       },
     }),
     db.webAuthnCredential.count({
@@ -40,6 +61,34 @@ export async function GET() {
   const personalEmailVerified = Boolean(student.personalEmailVerifiedAt);
   const hasPasskey = credentialCount > 0;
   const canProceed = !requiresProfileCompletion && personalEmailVerified && hasPasskey;
+  const settings = student.organization?.settings;
+  const rawFeatureFlags = getFeatureFlags(settings);
+  const studentHubAccess = getStudentHubAccessState(settings);
+  const featureFlags = studentHubAccess.accessAllowed
+    ? rawFeatureFlags
+    : {
+        ...rawFeatureFlags,
+        studentHubCore: false,
+        courseRepTools: false,
+        examHub: false,
+        groupFormation: false,
+      };
+  const academicCalendar = getAcademicCalendarSettings(settings);
+  const scopes =
+    student.organizationId
+      ? await db.courseRepScope.findMany({
+          where: {
+            userId: student.id,
+            organizationId: student.organizationId,
+            active: true,
+          },
+          select: {
+            id: true,
+            cohortId: true,
+            courseId: true,
+          },
+        })
+      : [];
 
   return NextResponse.json({
     role: user.role,
@@ -47,5 +96,11 @@ export async function GET() {
     personalEmailVerified,
     hasPasskey,
     canProceed,
+    featureFlags,
+    studentHubAccess,
+    academicCalendar,
+    cohort: student.cohort,
+    isCourseRep: scopes.length > 0,
+    courseRepScopes: scopes,
   });
 }

@@ -3,6 +3,13 @@ import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { StudentHubGovernanceForm } from "@/components/admin/student-hub-governance-form";
+import {
+  getAcademicCalendarSettings,
+  getAcademicProgressionSettings,
+  getFeatureFlags,
+  getStudentHubBillingSettings,
+} from "@/lib/organization-settings";
 
 export default async function AdminSettingsPage() {
   const session = await auth();
@@ -19,6 +26,10 @@ export default async function AdminSettingsPage() {
   if (!org) redirect("/login");
 
   const settings = org.settings as any;
+  const featureFlags = getFeatureFlags(settings);
+  const academicCalendar = getAcademicCalendarSettings(settings);
+  const academicProgression = getAcademicProgressionSettings(settings);
+  const studentHubBilling = getStudentHubBillingSettings(settings);
   const settingRows: Array<{ label: string; value: string }> = [
     { label: "Campus latitude", value: settings?.campusLat ? String(settings.campusLat) : "Not set" },
     { label: "Campus longitude", value: settings?.campusLng ? String(settings.campusLng) : "Not set" },
@@ -63,6 +74,18 @@ export default async function AdminSettingsPage() {
               <InfoItem key={row.label} label={row.label} value={row.value} />
             ))}
           </dl>
+        </SettingsSection>
+
+        <SettingsSection
+          title="Student Hub Governance"
+          description="Configure module availability, academic calendar state, and trial/payment lock behavior."
+        >
+          <StudentHubGovernanceForm
+            initialFeatureFlags={featureFlags}
+            initialAcademicCalendar={academicCalendar}
+            initialAcademicProgression={academicProgression}
+            initialBilling={studentHubBilling}
+          />
         </SettingsSection>
 
         <SettingsSection

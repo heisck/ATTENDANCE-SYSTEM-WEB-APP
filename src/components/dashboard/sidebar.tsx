@@ -1,26 +1,35 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import Dock, { type DockItemData } from "@/components/Dock";
 import { UserMenu } from "@/components/dashboard/user-menu";
+import { QuickActionsMenu } from "@/components/dashboard/quick-actions-menu";
 import {
+  Bell,
   BarChart3,
   BookOpen,
   Building2,
+  CalendarDays,
+  ClipboardList,
+  FileEdit,
   FileText,
   Fingerprint,
+  GraduationCap,
   History,
   Home,
+  LayoutList,
+  Megaphone,
   Play,
   QrCode,
   Settings,
   User,
   UserPlus,
   Users,
+  UsersRound,
 } from "lucide-react";
 
 interface NavItem {
@@ -29,7 +38,17 @@ interface NavItem {
   icon: LucideIcon;
 }
 
-const navByRole: Record<string, NavItem[]> = {
+type StudentNavFlags = {
+  studentHubCore: boolean;
+  courseRepTools: boolean;
+  examHub: boolean;
+  groupFormation: boolean;
+  isCourseRep: boolean;
+};
+
+type StudentHubMode = "attendance" | "studentHub";
+
+const baseNavByRole: Record<string, NavItem[]> = {
   STUDENT: [
     { label: "Dashboard", href: "/student", icon: Home },
     { label: "Mark Attendance", href: "/student/attend", icon: QrCode },
@@ -48,6 +67,7 @@ const navByRole: Record<string, NavItem[]> = {
     { label: "Dashboard", href: "/admin", icon: Home },
     { label: "Users", href: "/admin/users", icon: Users },
     { label: "Lecturer Invites", href: "/admin/lecturer-invites", icon: UserPlus },
+    { label: "Course Reps", href: "/admin/course-reps", icon: User },
     { label: "Courses", href: "/admin/courses", icon: BookOpen },
     { label: "Passkey Management", href: "/admin/passkeys", icon: Fingerprint },
     { label: "Settings", href: "/admin/settings", icon: Settings },
@@ -57,6 +77,42 @@ const navByRole: Record<string, NavItem[]> = {
     { label: "Organizations", href: "/super-admin/organizations", icon: Building2 },
     { label: "Analytics", href: "/super-admin/analytics", icon: BarChart3 },
   ],
+};
+
+const studentHubNav: NavItem[] = [
+  { label: "Timetable", href: "/student/hub/timetable", icon: CalendarDays },
+  { label: "Updates", href: "/student/hub/updates", icon: Bell },
+  { label: "Deadlines", href: "/student/hub/deadlines", icon: ClipboardList },
+];
+
+const studentHubExamNav: NavItem = {
+  label: "Exams",
+  href: "/student/hub/exams",
+  icon: GraduationCap,
+};
+
+const studentHubGroupNav: NavItem = {
+  label: "Groups",
+  href: "/student/hub/groups",
+  icon: UsersRound,
+};
+
+const courseRepNav: NavItem[] = [
+  { label: "Rep Timetable", href: "/student/rep/timetable", icon: LayoutList },
+  { label: "Rep Updates", href: "/student/rep/updates", icon: Megaphone },
+  { label: "Rep Assignments", href: "/student/rep/assignments", icon: FileEdit },
+];
+
+const courseRepExamNav: NavItem = {
+  label: "Rep Exams",
+  href: "/student/rep/exams",
+  icon: GraduationCap,
+};
+
+const courseRepGroupNav: NavItem = {
+  label: "Rep Groups",
+  href: "/student/rep/groups",
+  icon: UsersRound,
 };
 
 function isRouteActive(pathname: string, href: string, rolePath: string) {
@@ -118,10 +174,152 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const items = navByRole[role] || [];
+  const [studentHubMode, setStudentHubMode] = useState<StudentHubMode>("attendance");
+  const [studentFlags, setStudentFlags] = useState<StudentNavFlags>({
+    studentHubCore: false,
+    courseRepTools: false,
+    examHub: false,
+    groupFormation: false,
+    isCourseRep: false,
+  });
+  const items = useMemo<NavItem[]>(() => {
+    const base = baseNavByRole[role] || [];
+    if (role !== "STUDENT") return base;
+
+    const dashboard = base.find((item) => item.href === "/student");
+    const attend = base.find((item) => item.href === "/student/attend");
+    const history = base.find((item) => item.href === "/student/history");
+    const devices = base.find((item) => item.href === "/student/devices");
+    const profile = base.find((item) => item.href === "/student/profile");
+
+    const attendanceHubItems: NavItem[] = [];
+    if (dashboard) attendanceHubItems.push(dashboard);
+    if (attend) attendanceHubItems.push(attend);
+    if (history) attendanceHubItems.push(history);
+    if (devices) attendanceHubItems.push(devices);
+    if (profile) attendanceHubItems.push(profile);
+
+    const studentHubItems: NavItem[] = [];
+    if (studentFlags.studentHubCore) {
+      studentHubItems.push(...studentHubNav);
+      if (studentFlags.examHub) studentHubItems.push(studentHubExamNav);
+      if (studentFlags.groupFormation) studentHubItems.push(studentHubGroupNav);
+
+      if (studentFlags.courseRepTools && studentFlags.isCourseRep) {
+        studentHubItems.push(...courseRepNav);
+        if (studentFlags.examHub) studentHubItems.push(courseRepExamNav);
+        if (studentFlags.groupFormation) studentHubItems.push(courseRepGroupNav);
+      }
+    }
+    if (profile) {
+      const hasProfile = studentHubItems.some((item) => item.href === profile.href);
+      if (!hasProfile) studentHubItems.push(profile);
+    }
+
+    if (!studentFlags.studentHubCore) {
+      return attendanceHubItems;
+    }
+    return studentHubMode === "studentHub" ? studentHubItems : attendanceHubItems;
+  }, [
+    role,
+    studentFlags.courseRepTools,
+    studentFlags.examHub,
+    studentFlags.groupFormation,
+    studentFlags.isCourseRep,
+    studentFlags.studentHubCore,
+    studentHubMode,
+  ]);
   const rolePath = `/${role.toLowerCase().replace(/_/g, "-")}`;
   const currentPage = useMemo(() => deriveCurrentPage(pathname, rolePath, items), [items, pathname, rolePath]);
   const profileHref = useMemo(() => profileHrefByRole(role), [role]);
+
+  useEffect(() => {
+    if (role !== "STUDENT") return;
+
+    let cancelled = false;
+    const syncStudentFlags = async () => {
+      try {
+        const response = await fetch("/api/auth/student-status", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (cancelled) return;
+
+        const featureFlags = data?.featureFlags || {};
+        setStudentFlags({
+          studentHubCore: Boolean(featureFlags.studentHubCore),
+          courseRepTools: Boolean(featureFlags.courseRepTools),
+          examHub: Boolean(featureFlags.examHub),
+          groupFormation: Boolean(featureFlags.groupFormation),
+          isCourseRep: Boolean(data?.isCourseRep),
+        });
+      } catch {
+        if (!cancelled) {
+          setStudentFlags((prev) => prev);
+        }
+      }
+    };
+
+    void syncStudentFlags();
+    return () => {
+      cancelled = true;
+    };
+  }, [role]);
+
+  useEffect(() => {
+    if (role !== "STUDENT") return;
+
+    const pathImpliesStudentHub = pathname.startsWith("/student/hub") || pathname.startsWith("/student/rep");
+    const pathImpliesAttendanceHub =
+      pathname === "/student" ||
+      pathname.startsWith("/student/attend") ||
+      pathname.startsWith("/student/history") ||
+      pathname.startsWith("/student/devices");
+
+    if (pathImpliesStudentHub) {
+      setStudentHubMode("studentHub");
+      try {
+        localStorage.setItem("student.hub.mode", "studentHub");
+      } catch {}
+      return;
+    }
+
+    if (pathImpliesAttendanceHub) {
+      setStudentHubMode("attendance");
+      try {
+        localStorage.setItem("student.hub.mode", "attendance");
+      } catch {}
+      return;
+    }
+
+    try {
+      const saved = localStorage.getItem("student.hub.mode");
+      if (saved === "attendance" || saved === "studentHub") {
+        setStudentHubMode(saved);
+      }
+    } catch {}
+  }, [pathname, role]);
+
+  const handleHubSwitch = (nextMode: StudentHubMode) => {
+    if (role !== "STUDENT") return;
+    if (nextMode === studentHubMode) return;
+
+    setStudentHubMode(nextMode);
+    try {
+      localStorage.setItem("student.hub.mode", nextMode);
+    } catch {}
+
+    if (nextMode === "attendance") {
+      if (pathname.startsWith("/student/hub") || pathname.startsWith("/student/rep")) {
+        router.push("/student");
+      }
+      return;
+    }
+
+    if (!studentFlags.studentHubCore) return;
+    if (!(pathname.startsWith("/student/hub") || pathname.startsWith("/student/rep"))) {
+      router.push("/student/hub/timetable");
+    }
+  };
 
   useEffect(() => {
     const targets = new Set(items.map((item) => item.href));
@@ -167,11 +365,25 @@ export function Sidebar({
           </Link>
           <span className="hidden h-6 w-px bg-border/70 sm:block" />
           <div className="hidden min-w-0 sm:block">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{roleLabel(role)}</p>
+            {role !== "STUDENT" ? (
+              <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{roleLabel(role)}</p>
+            ) : null}
             <p className="truncate text-sm font-medium text-foreground">{currentPage}</p>
           </div>
         </div>
-        <UserMenu role={role} userName={userName} userEmail={userEmail} profileHref={profileHref} />
+        <div className="flex items-center gap-2">
+          <QuickActionsMenu role={role} />
+          <UserMenu
+            role={role}
+            userName={userName}
+            userEmail={userEmail}
+            profileHref={profileHref}
+            canSwitchHubs={role === "STUDENT"}
+            studentHubEnabled={studentFlags.studentHubCore}
+            hubMode={studentHubMode}
+            onHubModeChange={handleHubSwitch}
+          />
+        </div>
       </header>
 
       {dockItems.length > 0 && (

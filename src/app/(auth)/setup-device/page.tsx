@@ -115,7 +115,7 @@ export default function SetupDevicePage() {
           <div className="text-center space-y-2">
             <h1 className="text-2xl font-bold">Register Your Device</h1>
             <p className="text-sm text-muted-foreground">
-              Create a passkey with your device&apos;s biometric (fingerprint or face) to securely mark attendance
+              Create a passkey with your device&apos;s biometric (fingerprint or face) for secure attendance verification
             </p>
           </div>
 
@@ -181,7 +181,7 @@ export default function SetupDevicePage() {
                 ) : (
                   <>
                     <Fingerprint className="h-5 w-5" />
-                    Register Biometric
+                    Register New Device
                   </>
                 )}
               </button>

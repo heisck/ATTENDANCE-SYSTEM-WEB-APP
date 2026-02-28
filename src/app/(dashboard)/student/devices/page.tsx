@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Loader2, Smartphone, Laptop, Trash2, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/dashboard/page-header";
 
 interface Device {
   id: string;
@@ -116,28 +115,26 @@ export default function DevicesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Student"
-        title="Registered Devices"
-        description="Manage the devices and passkeys used for attendance verification."
-        action={
-          <button
-            type="button"
-            onClick={() => router.push("/setup-device")}
-            disabled={!canRegisterNewPasskey}
-            title={
-              loading
-                ? "Loading passkey state"
-                : passkeysLockedUntilAdminReset
-                ? "Ask admin to unlock passkeys first"
-                : "Delete your current passkey before registering a new one"
-            }
-            className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-primary/40"
-          >
-            Register New Passkey
-          </button>
-        }
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          Manage the devices and passkeys used for attendance verification.
+        </p>
+        <button
+          type="button"
+          onClick={() => router.push("/setup-device")}
+          disabled={!canRegisterNewPasskey}
+          title={
+            loading
+              ? "Loading passkey state"
+              : passkeysLockedUntilAdminReset
+              ? "Ask admin to unlock passkeys first"
+              : "Delete your current passkey before registering a new one"
+          }
+          className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-primary/40"
+        >
+          Register New Passkey
+        </button>
+      </div>
 
       {passkeysLockedUntilAdminReset && (
         <div className="surface-muted p-4 text-sm text-foreground/80">

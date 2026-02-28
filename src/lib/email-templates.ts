@@ -180,3 +180,35 @@ export function lecturerInviteEmailHtml(params: {
 
   return baseLayout(content);
 }
+
+export function courseRepInviteEmailHtml(params: {
+  organizationName: string;
+  acceptUrl: string;
+  expiresAt: Date;
+  isResend?: boolean;
+}): string {
+  const { organizationName, acceptUrl, expiresAt, isResend } = params;
+
+  const content = `
+<p style="margin: 0 0 16px 0; font-size: 16px; color: ${TEXT_COLOR};">
+  ${isResend ? "Your Course Rep invite has been refreshed." : "You have been invited to join ATTENDANCE IQ as a Course Rep."}
+</p>
+<p style="margin: 0 0 18px 0; font-size: 15px; color: ${MUTED_COLOR};">
+  ${isResend ? "Use the link below to accept your updated invite." : `You&apos;ve been invited by <strong style="color: ${TEXT_COLOR};">${organizationName}</strong>. Create your student account (or sign in if you already have one) and your Course Rep tools will be unlocked after verification.`}
+</p>
+<p style="margin: 0 0 8px 0; font-size: 13px; color: ${MUTED_COLOR};">
+  This invite expires on <strong style="color: ${TEXT_COLOR};">${expiresAt.toUTCString()}</strong>.
+</p>
+<div style="text-align: center; margin: 28px 0 0 0;">
+  ${ctaButton(acceptUrl, "Open invite")}
+</div>
+<p style="margin: 24px 0 0 0; font-size: 12px; color: ${MUTED_COLOR};">
+  If the button doesn&apos;t work, copy and paste this link into your browser:
+</p>
+<p style="margin: 8px 0 0 0; font-size: 12px; word-break: break-all;">
+  <a href="${acceptUrl}" style="color: ${BUTTON_COLOR}; text-decoration: underline;">${acceptUrl}</a>
+</p>
+`.trim();
+
+  return baseLayout(content);
+}

@@ -3,7 +3,6 @@ import { db } from "@/lib/db";
 import { getStudentGateState } from "@/lib/student-gates";
 import { redirect } from "next/navigation";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
-import { PageHeader } from "@/components/dashboard/page-header";
 
 export default async function StudentHistoryPage() {
   const session = await auth();
@@ -119,11 +118,9 @@ export default async function StudentHistoryPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Student"
-        title="Attendance History"
-        description="Detailed monthly and course-level attendance records."
-      />
+      <p className="text-sm text-muted-foreground">
+        Detailed monthly and course-level attendance records.
+      </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
         {courseSummary.map((course) => (

@@ -5,11 +5,11 @@ import { TOTAL_SESSION_MS, deriveAttendancePhase } from "@/lib/attendance";
 import { redirect } from "next/navigation";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
 import { OverviewMetrics } from "@/components/dashboard/overview-metrics";
-import { PageHeader, SectionHeading } from "@/components/dashboard/page-header";
+import { SectionHeading } from "@/components/dashboard/page-header";
 import { StudentLiveSessionsTable } from "@/components/dashboard/student-live-sessions-table";
-import { PushNotificationToggle } from "@/components/push-notification-toggle";
-import { QrCode, AlertTriangle } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
+import { getStudentHubContext } from "@/lib/student-hub";
 
 export default async function StudentDashboard() {
   const session = await auth();
@@ -85,23 +85,12 @@ export default async function StudentDashboard() {
     where: { userId },
   });
 
+  const hubContext = await getStudentHubContext(userId);
+  const studentHubAccess = hubContext?.hubAccess;
+  const studentHubLocked = Boolean(studentHubAccess && !studentHubAccess.accessAllowed);
+
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Student"
-        title="Student Workspace"
-        description="Attendance tracking and verification status in one place."
-        action={
-          <Link
-            href="/student/attend"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            <QrCode className="h-4 w-4" />
-            Mark Attendance
-          </Link>
-        }
-      />
-
       {!hasCredential && (
         <section className="surface-muted p-4">
           <div className="flex items-start gap-3">
@@ -120,11 +109,25 @@ export default async function StudentDashboard() {
         </section>
       )}
 
-      <PushNotificationToggle />
+      {studentHubLocked && studentHubAccess?.reason === "TRIAL_EXPIRED_UNPAID" ? (
+        <section className="surface-muted p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-foreground/70" />
+            <div>
+              <p className="text-sm font-medium">Student Hub is locked for this organization</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Free trial has ended and payment is required (
+                {studentHubAccess.paymentCurrency} {studentHubAccess.paymentAmount}). Attendance remains active.
+              </p>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <OverviewMetrics
         title="Attendance Snapshot"
         compact
+        showTopBorder={false}
         items={[
           { key: "courses", label: "Enrolled Courses", value: enrollments },
           { key: "attendance", label: "Total Attendance", value: totalAttendance },

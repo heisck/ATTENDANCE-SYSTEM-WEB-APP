@@ -15,6 +15,8 @@ export type QrScanResult = "accepted" | "retry" | "stop";
 interface QrScannerProps {
   onScan: (data: QrScanPayload) => Promise<QrScanResult> | QrScanResult;
   autoOpen?: boolean;
+  openSignal?: number;
+  hideTriggerButton?: boolean;
   triggerLabel?: string;
   description?: string;
 }
@@ -104,6 +106,8 @@ function getTouchDistance(touches: TouchListLike) {
 export function QrScanner({
   onScan,
   autoOpen = false,
+  openSignal,
+  hideTriggerButton = false,
   triggerLabel = "Open Camera",
   description = "Point your camera at the live rotating QR code.",
 }: QrScannerProps) {
@@ -131,6 +135,7 @@ export function QrScanner({
 
   const pinchStartDistanceRef = useRef<number | null>(null);
   const pinchStartZoomRef = useRef(1);
+  const lastOpenSignalRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     if (error) toast.error(error);
@@ -270,6 +275,15 @@ export function QrScanner({
   }, [autoOpen, overlayOpen, cameraActive]);
 
   useEffect(() => {
+    if (openSignal === undefined || openSignal === 0) return;
+    if (lastOpenSignalRef.current === openSignal) return;
+    lastOpenSignalRef.current = openSignal;
+
+    if (overlayOpen || cameraActive) return;
+    void startCamera();
+  }, [cameraActive, openSignal, overlayOpen]);
+
+  useEffect(() => {
     if (!cameraActive) return;
 
     let frame = 0;
@@ -406,14 +420,20 @@ export function QrScanner({
   return (
     <div className="space-y-3">
       {!overlayOpen ? (
-        <button
-          onClick={startCamera}
-          className="flex w-full flex-col items-center gap-3 rounded-xl border border-border bg-background/70 p-8 transition-colors hover:bg-accent/50"
-        >
-          <Camera className="h-10 w-10 text-primary" />
-          <span className="text-base font-semibold">{triggerLabel}</span>
-          <span className="text-center text-sm text-muted-foreground">{description}</span>
-        </button>
+        hideTriggerButton ? (
+          <div className="rounded-xl border border-border bg-background/50 px-4 py-3 text-center text-sm text-muted-foreground">
+            {description}
+          </div>
+        ) : (
+          <button
+            onClick={startCamera}
+            className="flex w-full flex-col items-center gap-3 rounded-xl border border-border bg-background/70 p-8 transition-colors hover:bg-accent/50"
+          >
+            <Camera className="h-10 w-10 text-primary" />
+            <span className="text-base font-semibold">{triggerLabel}</span>
+            <span className="text-center text-sm text-muted-foreground">{description}</span>
+          </button>
+        )
       ) : (
         <div className="fixed inset-0 z-[70]">
           <div className="absolute inset-0 bg-black/85 md:bg-black/70" />

@@ -16,6 +16,8 @@ export async function GET(request: NextRequest) {
       user: {
         select: {
           id: true,
+          email: true,
+          organizationId: true,
           personalEmail: true,
         },
       },
@@ -38,16 +40,81 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  await db.$transaction([
-    db.user.update({
+  await db.$transaction(async (tx) => {
+    await tx.user.update({
       where: { id: verification.userId },
       data: { personalEmailVerifiedAt: now },
-    }),
-    db.emailVerificationToken.update({
+    });
+
+    await tx.emailVerificationToken.update({
       where: { id: verification.id },
       data: { usedAt: now },
-    }),
-  ]);
+    });
+
+    if (verification.user?.organizationId) {
+      const pendingInvites = await tx.courseRepInvite.findMany({
+        where: {
+          organizationId: verification.user.organizationId,
+          invitedEmail: verification.user.email.toLowerCase(),
+          acceptedAt: null,
+          revokedAt: null,
+          expiresAt: { gt: now },
+        },
+        select: {
+          id: true,
+          cohortId: true,
+          courseId: true,
+          invitedByUserId: true,
+          organizationId: true,
+        },
+      });
+
+      for (const invite of pendingInvites) {
+        if (!invite.cohortId && !invite.courseId) {
+          continue;
+        }
+
+        const existingScope = await tx.courseRepScope.findFirst({
+          where: {
+            userId: verification.userId,
+            organizationId: invite.organizationId,
+            cohortId: invite.cohortId,
+            courseId: invite.courseId,
+          },
+          select: { id: true },
+        });
+
+        if (existingScope) {
+          await tx.courseRepScope.update({
+            where: { id: existingScope.id },
+            data: {
+              active: true,
+              assignedByUserId: invite.invitedByUserId,
+            },
+          });
+        } else {
+          await tx.courseRepScope.create({
+            data: {
+              userId: verification.userId,
+              organizationId: invite.organizationId,
+              cohortId: invite.cohortId,
+              courseId: invite.courseId,
+              active: true,
+              assignedByUserId: invite.invitedByUserId,
+            },
+          });
+        }
+
+        await tx.courseRepInvite.update({
+          where: { id: invite.id },
+          data: {
+            acceptedAt: now,
+            targetUserId: verification.userId,
+          },
+        });
+      }
+    }
+  });
 
   return NextResponse.json({ success: true });
 }
