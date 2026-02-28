@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { StudentHubShell } from "@/components/student-hub/student-hub-shell";
+import { StudentHubExperienceBadge } from "@/components/student-hub/student-hub-experience-badge";
 
 type GroupRow = {
   id: string;
@@ -159,17 +159,26 @@ export default function StudentHubGroupsPage() {
 
   return (
     <div className="space-y-6">
-      <StudentHubShell
-        title="Group Formation"
-        description="Join groups, vote leaders, and publish invite links with the updated Student Hub experience."
-        activeRoute="groups"
-        metrics={[
-          { label: "Active Sessions", value: String(sessions.length) },
-          { label: "Your Memberships", value: String(memberships.length) },
-          { label: "Available Groups", value: String(totalGroups) },
-          { label: "Open Slots", value: String(openSlots) },
-        ]}
-      />
+      <StudentHubExperienceBadge />
+
+      <section className="surface grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Active Sessions</p>
+          <p className="mt-1 text-lg font-semibold">{sessions.length}</p>
+        </div>
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Your Memberships</p>
+          <p className="mt-1 text-lg font-semibold">{memberships.length}</p>
+        </div>
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Available Groups</p>
+          <p className="mt-1 text-lg font-semibold">{totalGroups}</p>
+        </div>
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Open Slots</p>
+          <p className="mt-1 text-lg font-semibold">{openSlots}</p>
+        </div>
+      </section>
 
       {loading ? (
         <div className="flex items-center justify-center py-10">

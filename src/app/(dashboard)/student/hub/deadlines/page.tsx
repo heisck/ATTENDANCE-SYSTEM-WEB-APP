@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getStudentHubContext } from "@/lib/student-hub";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
-import { StudentHubShell } from "@/components/student-hub/student-hub-shell";
+import { StudentHubExperienceBadge } from "@/components/student-hub/student-hub-experience-badge";
 
 function formatDueDelta(dueAt: Date) {
   const now = Date.now();
@@ -81,22 +81,21 @@ export default async function StudentHubDeadlinesPage() {
   const dueWithin48Hours = assignments.filter(
     (assignment) => assignment.dueAt.getTime() - now.getTime() <= 48 * 60 * 60 * 1000,
   ).length;
-  const attachmentCount = assignments.reduce((sum, assignment) => sum + assignment.attachments.length, 0);
-  const nearestDue = assignments[0]?.dueAt;
 
   return (
     <div className="space-y-6">
-      <StudentHubShell
-        title="Deadlines"
-        description="Upcoming assignment due dates for your cohort and enrolled courses with fast prioritization at a glance."
-        activeRoute="deadlines"
-        metrics={[
-          { label: "Upcoming Tasks", value: String(assignments.length) },
-          { label: "Due in 48h", value: String(Math.max(dueWithin48Hours, 0)) },
-          { label: "Attached Files", value: String(attachmentCount) },
-          { label: "Nearest Due", value: nearestDue ? nearestDue.toLocaleDateString() : "None" },
-        ]}
-      />
+      <StudentHubExperienceBadge />
+
+      <section className="surface grid gap-3 p-4 sm:grid-cols-2">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Upcoming Deadlines</p>
+          <p className="mt-1 text-lg font-semibold">{assignments.length}</p>
+        </div>
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Due in 48 Hours</p>
+          <p className="mt-1 text-lg font-semibold">{Math.max(dueWithin48Hours, 0)}</p>
+        </div>
+      </section>
 
       <AttendanceTable
         columns={[

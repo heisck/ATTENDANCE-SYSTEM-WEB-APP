@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { StudentHubShell } from "@/components/student-hub/student-hub-shell";
+import { StudentHubExperienceBadge } from "@/components/student-hub/student-hub-experience-badge";
 
 type SearchResult = {
   page: number;
@@ -60,17 +60,28 @@ export default function ExamPdfSearchPage() {
 
   return (
     <div className="space-y-6">
-      <StudentHubShell
-        title="Exam PDF Search"
-        description="Search text-based exam PDFs by keyword, name, or student ID from the refreshed Student Hub layout."
-        activeRoute="search"
-        metrics={[
-          { label: "Exam Target", value: examId ? "Linked" : "Missing" },
-          { label: "Current Query", value: queryPreview },
-          { label: "Matches", value: String(results.length) },
-          { label: "Search State", value: loading ? "Searching" : searchUnavailable ? "Unavailable" : "Ready" },
-        ]}
-      />
+      <StudentHubExperienceBadge />
+
+      <section className="surface grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Exam Target</p>
+          <p className="mt-1 text-sm font-semibold">{examId ? "Linked" : "Missing"}</p>
+        </div>
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Current Query</p>
+          <p className="mt-1 text-sm font-semibold">{queryPreview}</p>
+        </div>
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Matches</p>
+          <p className="mt-1 text-sm font-semibold">{results.length}</p>
+        </div>
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Search State</p>
+          <p className="mt-1 text-sm font-semibold">
+            {loading ? "Searching" : searchUnavailable ? "Unavailable" : "Ready"}
+          </p>
+        </div>
+      </section>
 
       <form onSubmit={runSearch} className="surface space-y-3 p-4">
         <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">

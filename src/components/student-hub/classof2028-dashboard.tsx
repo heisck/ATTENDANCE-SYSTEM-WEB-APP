@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { CalendarClock, ChevronLeft, ChevronRight, MapPin, Play, Repeat2, UserRound } from "lucide-react";
 import styles from "./classof2028-dashboard.module.css";
+import { StudentHubExperienceBadge } from "@/components/student-hub/student-hub-experience-badge";
 
 const CELL_SIZE = 120;
 const GRID_COLORS = ["oklch(0.72 0.2 352.53)", "#A764FF", "#4B94FD", "#FD4B4E", "#FF8743"];
@@ -276,9 +277,9 @@ function InteractiveGrid() {
   );
 }
 
-function UpcomingEvents() {
+function HubNotice() {
   const [active, setActive] = useState(0);
-  const [autoplay] = useState(false);
+  const [autoplay] = useState(true);
 
   const handleNext = useCallback(() => {
     setActive((prev) => (prev + 1) % testimonials.length);
@@ -297,113 +298,86 @@ function UpcomingEvents() {
   const isActive = (index: number) => index === active;
 
   return (
-    <section className="mb-20 sm:mb-10 lg:mb-0">
-      <div className="bg-muted min-h-auto rounded-2xl border border-border/70 py-14">
-        <div className="mx-auto w-full max-w-6xl px-6">
-          <motion.div
-            className="mb-4"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+    <section className="rounded-2xl border border-border/70 bg-muted/20 p-4 sm:p-5">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold tracking-tight">Hub Notice</h2>
+        <div className="flex justify-center gap-2">
+          <motion.button
+            onClick={handlePrev}
+            className="group/button bg-background flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition-all duration-200 hover:scale-105"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            type="button"
+            aria-label="Previous notice"
           >
-            <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-12">
-              <div className="flex flex-col justify-center">
-                <h2 className="text-foreground mb-4 text-3xl font-semibold lg:text-4xl">Upcoming events</h2>
-                <p className="text-foreground/70 text-base text-balance lg:text-lg">
-                  This section highlights some of the upcoming events and important announcements.
-                  Stay tuned for more updates and make sure to participate. You never know what exciting
-                  opportunities await.
-                </p>
-              </div>
-
-              <div className="relative flex min-h-fit flex-col items-end">
-                <div className="mb-4 flex justify-center gap-2">
-                  <motion.button
-                    onClick={handlePrev}
-                    className="group/button bg-background flex h-8 w-8 items-center justify-center rounded-full border shadow-lg transition-all duration-200 hover:scale-110 hover:shadow-xl"
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.95 }}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.3, delay: 0.4 }}
-                    type="button"
-                    aria-label="Previous event"
-                  >
-                    <ChevronLeft className="text-foreground h-5 w-5 transition-transform duration-300 group-hover/button:-rotate-12" />
-                  </motion.button>
-                  <motion.button
-                    onClick={handleNext}
-                    className="group/button bg-background flex h-8 w-8 items-center justify-center rounded-full border shadow-lg transition-all duration-200 hover:scale-110 hover:shadow-xl"
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.95 }}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.3, delay: 0.4 }}
-                    type="button"
-                    aria-label="Next event"
-                  >
-                    <ChevronRight className="text-foreground h-5 w-5 transition-transform duration-300 group-hover/button:rotate-12" />
-                  </motion.button>
-                </div>
-
-                <div className="relative h-full w-full max-w-md">
-                  <AnimatePresence>
-                    {testimonials.map((testimonial, index) => (
-                      <motion.div
-                        key={testimonial.name}
-                        initial={{ opacity: 0, scale: 0.9, y: 30 }}
-                        animate={{
-                          opacity: isActive(index) ? 1 : 0,
-                          scale: isActive(index) ? 1 : 0.95,
-                          y: isActive(index) ? 0 : 30,
-                        }}
-                        exit={{ opacity: 0, scale: 0.9, y: -30 }}
-                        transition={{ duration: 0.4, ease: "easeInOut" }}
-                        className={`absolute inset-0 min-h-fit ${isActive(index) ? "z-10" : "z-0"}`}
-                      >
-                        <div className="bg-background rounded-2xl border px-6 py-6 shadow-lg transition-all duration-200">
-                          <motion.p
-                            key={active}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.3 }}
-                            className="text-foreground mb-6 text-lg"
-                          >
-                            {(testimonial.content || "").split(" ").map((word, wordIndex) => (
-                              <motion.span
-                                key={`${testimonial.name}-word-${wordIndex}`}
-                                initial={{ filter: "blur(4px)", opacity: 0, y: 5 }}
-                                animate={{ filter: "blur(0px)", opacity: 1, y: 0 }}
-                                transition={{ duration: 0.2, ease: "easeInOut", delay: wordIndex * 0.02 }}
-                                className="inline-block"
-                              >
-                                {word}&nbsp;
-                              </motion.span>
-                            ))}
-                          </motion.p>
-                          <motion.div
-                            className="flex items-center gap-3"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.3, delay: 0.2 }}
-                          >
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-accent-foreground text-sm font-semibold">
-                              {testimonial.avatar}
-                            </div>
-                            <div>
-                              <div className="text-foreground font-semibold">{testimonial.name}</div>
-                              <span className="text-muted-foreground text-sm">{testimonial.role}</span>
-                            </div>
-                          </motion.div>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                </div>
-              </div>
-            </div>
-          </motion.div>
+            <ChevronLeft className="text-foreground h-4 w-4 transition-transform duration-300 group-hover/button:-rotate-12" />
+          </motion.button>
+          <motion.button
+            onClick={handleNext}
+            className="group/button bg-background flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition-all duration-200 hover:scale-105"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            type="button"
+            aria-label="Next notice"
+          >
+            <ChevronRight className="text-foreground h-4 w-4 transition-transform duration-300 group-hover/button:rotate-12" />
+          </motion.button>
         </div>
+      </div>
+
+      <div className="relative mt-4 min-h-[170px]">
+        <AnimatePresence>
+          {testimonials.map((testimonial, index) => (
+            <motion.div
+              key={testimonial.name}
+              initial={{ opacity: 0, scale: 0.9, y: 30 }}
+              animate={{
+                opacity: isActive(index) ? 1 : 0,
+                scale: isActive(index) ? 1 : 0.95,
+                y: isActive(index) ? 0 : 30,
+              }}
+              exit={{ opacity: 0, scale: 0.9, y: -30 }}
+              transition={{ duration: 0.4, ease: "easeInOut" }}
+              className={`absolute inset-0 ${isActive(index) ? "z-10" : "z-0"}`}
+            >
+              <div className="bg-background rounded-2xl border px-6 py-5 shadow-sm">
+                <motion.p
+                  key={active}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="text-foreground mb-4 text-base"
+                >
+                  {(testimonial.content || "").split(" ").map((word, wordIndex) => (
+                    <motion.span
+                      key={`${testimonial.name}-word-${wordIndex}`}
+                      initial={{ filter: "blur(4px)", opacity: 0, y: 5 }}
+                      animate={{ filter: "blur(0px)", opacity: 1, y: 0 }}
+                      transition={{ duration: 0.2, ease: "easeInOut", delay: wordIndex * 0.02 }}
+                      className="inline-block"
+                    >
+                      {word}&nbsp;
+                    </motion.span>
+                  ))}
+                </motion.p>
+                <motion.div
+                  className="flex items-center gap-3"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: 0.2 }}
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-accent-foreground text-sm font-semibold">
+                    {testimonial.avatar}
+                  </div>
+                  <div>
+                    <div className="text-foreground font-semibold">{testimonial.name}</div>
+                    <span className="text-muted-foreground text-sm">{testimonial.role}</span>
+                  </div>
+                </motion.div>
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
     </section>
   );
@@ -581,7 +555,7 @@ function HeroStatusCard({
 
   return (
     <motion.div
-      className="pointer-events-auto mx-auto w-full max-w-3xl rounded-3xl border border-border/70 bg-background/85 p-4 text-left shadow-lg backdrop-blur-sm sm:p-5"
+      className="pointer-events-auto w-full rounded-3xl border border-border/70 bg-background/85 p-4 text-left shadow-lg backdrop-blur-sm sm:p-5"
       initial={{ opacity: 0, y: 14, filter: "blur(6px)" }}
       animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
       transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
@@ -663,52 +637,23 @@ export function Classof2028Dashboard({
   examInfo: DashboardHeroInfo | null;
 }) {
   return (
-    <div className="h-full w-full">
-      <section className="relative overflow-hidden pb-10 pt-10 md:py-24">
+    <div className="h-full w-full space-y-6">
+      <section className="relative overflow-hidden rounded-3xl border border-border/70 bg-background/60 p-4 sm:p-6 lg:p-8">
         <InteractiveGrid />
-        <AnimatedGroup className="pointer-events-none relative z-10 flex flex-col items-center gap-6 text-center" preset="blur-slide">
-          <div>
-            <AnimatedText as="h1" className="mb-6 text-pretty text-2xl font-bold tracking-tight lg:text-5xl">
-              Student Hub Live Dashboard <br />
-              <span className="text-cyan-600">Course + Exam </span>
-              <span className="text-foreground">Status Board</span>
-            </AnimatedText>
-            <AnimatedText
-              as="p"
-              className="mx-auto max-w-3xl px-6 text-muted-foreground lg:px-0 lg:text-xl"
-              delay={0.15}
-            >
-              Clean, real-time visibility for class changes and upcoming exams.
-              Switch between class and exam info with one tap.
-            </AnimatedText>
+        <div className="pointer-events-none relative z-10 flex flex-col gap-5">
+          <div className="pointer-events-auto">
+            <StudentHubExperienceBadge />
           </div>
           <HeroStatusCard classInfo={classInfo} examInfo={examInfo} />
-
-          <AnimatedGroup className="pointer-events-auto mt-6 flex justify-center gap-3 w-full" preset="slide">
-            <div className="h-full w-full">
-              <UpcomingEvents />
-            </div>
-          </AnimatedGroup>
-
-          <div id="lecturers">
-            <AnimatedText as="h2" className="mb-6 text-pretty text-2xl font-bold tracking-tight lg:text-5xl">
-              Meet Our Lecturers
-            </AnimatedText>
-          </div>
-          <AnimatedText
-            as="p"
-            className="mx-auto max-w-3xl px-6 text-muted-foreground lg:px-0 lg:text-xl"
-            delay={0.15}
-          >
-            Our dedicated lecturers are here to guide you through your learning journey.
-            Click the images below to view their office numbers and contact details.
-          </AnimatedText>
-        </AnimatedGroup>
+        </div>
       </section>
 
-      <div>
+      <HubNotice />
+
+      <section id="lecturers" className="space-y-3">
+        <h2 className="text-sm font-semibold tracking-tight">Lecturers</h2>
         <ExpandableCards cards={cards} />
-      </div>
+      </section>
     </div>
   );
 }

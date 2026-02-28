@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { getStudentHubContext } from "@/lib/student-hub";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
-import { StudentHubShell } from "@/components/student-hub/student-hub-shell";
+import { StudentHubExperienceBadge } from "@/components/student-hub/student-hub-experience-badge";
 
 export default async function StudentHubExamsPage() {
   const session = await auth();
@@ -68,25 +68,29 @@ export default async function StudentHubExamsPage() {
           take: 150,
         });
   const now = new Date();
-  const attachmentCount = exams.reduce((sum, exam) => sum + exam.attachments.length, 0);
   const searchableCount = exams.filter((exam) =>
     exam.attachments.some((attachment) => attachment.mime.toLowerCase().includes("pdf")),
   ).length;
-  const nextExam = exams.find((exam) => new Date(exam.examDate).getTime() >= now.getTime())?.examDate;
+  const upcomingCount = exams.filter((exam) => new Date(exam.examDate).getTime() >= now.getTime()).length;
 
   return (
     <div className="space-y-6">
-      <StudentHubShell
-        title="Exams"
-        description="Exam timetable, updates, and searchable exam PDF attachments in the refreshed Student Hub interface."
-        activeRoute="exams"
-        metrics={[
-          { label: "Exam Entries", value: String(exams.length) },
-          { label: "PDF Search Ready", value: String(searchableCount) },
-          { label: "Attachments", value: String(attachmentCount) },
-          { label: "Next Exam", value: nextExam ? nextExam.toLocaleDateString() : "Not scheduled" },
-        ]}
-      />
+      <StudentHubExperienceBadge />
+
+      <section className="surface grid gap-3 p-4 sm:grid-cols-3">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Exam Entries</p>
+          <p className="mt-1 text-lg font-semibold">{exams.length}</p>
+        </div>
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Upcoming Exams</p>
+          <p className="mt-1 text-lg font-semibold">{upcomingCount}</p>
+        </div>
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">PDF Search Ready</p>
+          <p className="mt-1 text-lg font-semibold">{searchableCount}</p>
+        </div>
+      </section>
 
       <AttendanceTable
         columns={[
