@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getStudentHubContext } from "@/lib/student-hub";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
+import { StudentHubShell } from "@/components/student-hub/student-hub-shell";
 
 export default async function StudentHubUpdatesPage() {
   const session = await auth();
@@ -64,13 +65,22 @@ export default async function StudentHubUpdatesPage() {
     orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
     take: 100,
   });
+  const updateTypeCount = new Set(updates.map((item) => item.type)).size;
+  const courseScopedCount = updates.filter((item) => Boolean(item.course)).length;
+  const latestEffective = updates[0]?.effectiveAt;
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Student Hub"
+      <StudentHubShell
         title="Class Updates"
-        description="Latest cancellation, reschedule, venue, and notice updates."
+        description="Latest cancellation, reschedule, venue, and notice updates in a richer Student Hub experience."
+        activeRoute="updates"
+        metrics={[
+          { label: "Total Updates", value: String(updates.length) },
+          { label: "Update Types", value: String(updateTypeCount) },
+          { label: "Course-specific", value: String(courseScopedCount) },
+          { label: "Latest Effective", value: latestEffective ? latestEffective.toLocaleDateString() : "None" },
+        ]}
       />
 
       <AttendanceTable
@@ -95,4 +105,3 @@ export default async function StudentHubUpdatesPage() {
     </div>
   );
 }
-

@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { StudentHubShell } from "@/components/student-hub/student-hub-shell";
 
 type SearchResult = {
   page: number;
@@ -18,6 +18,10 @@ export default function ExamPdfSearchPage() {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searchUnavailable, setSearchUnavailable] = useState<string | null>(null);
+  const currentQuery = query.trim();
+  const queryPreview = currentQuery
+    ? `${currentQuery.slice(0, 18)}${currentQuery.length > 18 ? "..." : ""}`
+    : "None";
 
   async function runSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -56,10 +60,16 @@ export default function ExamPdfSearchPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Student Hub"
+      <StudentHubShell
         title="Exam PDF Search"
-        description="Search text-based exam PDFs by keyword, name, or student ID."
+        description="Search text-based exam PDFs by keyword, name, or student ID from the refreshed Student Hub layout."
+        activeRoute="search"
+        metrics={[
+          { label: "Exam Target", value: examId ? "Linked" : "Missing" },
+          { label: "Current Query", value: queryPreview },
+          { label: "Matches", value: String(results.length) },
+          { label: "Search State", value: loading ? "Searching" : searchUnavailable ? "Unavailable" : "Ready" },
+        ]}
       />
 
       <form onSubmit={runSearch} className="surface space-y-3 p-4">
@@ -107,4 +117,3 @@ export default function ExamPdfSearchPage() {
     </div>
   );
 }
-

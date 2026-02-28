@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getStudentHubContext } from "@/lib/student-hub";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
+import { StudentHubShell } from "@/components/student-hub/student-hub-shell";
 
 function formatDueDelta(dueAt: Date) {
   const now = Date.now();
@@ -77,13 +78,24 @@ export default async function StudentHubDeadlinesPage() {
           orderBy: { dueAt: "asc" },
           take: 100,
         });
+  const dueWithin48Hours = assignments.filter(
+    (assignment) => assignment.dueAt.getTime() - now.getTime() <= 48 * 60 * 60 * 1000,
+  ).length;
+  const attachmentCount = assignments.reduce((sum, assignment) => sum + assignment.attachments.length, 0);
+  const nearestDue = assignments[0]?.dueAt;
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Student Hub"
+      <StudentHubShell
         title="Deadlines"
-        description="Upcoming assignment due dates for your cohort and enrolled courses."
+        description="Upcoming assignment due dates for your cohort and enrolled courses with fast prioritization at a glance."
+        activeRoute="deadlines"
+        metrics={[
+          { label: "Upcoming Tasks", value: String(assignments.length) },
+          { label: "Due in 48h", value: String(Math.max(dueWithin48Hours, 0)) },
+          { label: "Attached Files", value: String(attachmentCount) },
+          { label: "Nearest Due", value: nearestDue ? nearestDue.toLocaleDateString() : "None" },
+        ]}
       />
 
       <AttendanceTable
@@ -108,4 +120,3 @@ export default async function StudentHubDeadlinesPage() {
     </div>
   );
 }
-

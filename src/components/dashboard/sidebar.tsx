@@ -80,6 +80,7 @@ const baseNavByRole: Record<string, NavItem[]> = {
 };
 
 const studentHubNav: NavItem[] = [
+  { label: "Dashboard", href: "/student/hub/dashboard", icon: Home },
   { label: "Timetable", href: "/student/hub/timetable", icon: CalendarDays },
   { label: "Updates", href: "/student/hub/updates", icon: Bell },
   { label: "Deadlines", href: "/student/hub/deadlines", icon: ClipboardList },
@@ -317,7 +318,7 @@ export function Sidebar({
 
     if (!studentFlags.studentHubCore) return;
     if (!(pathname.startsWith("/student/hub") || pathname.startsWith("/student/rep"))) {
-      router.push("/student/hub/timetable");
+      router.push("/student/hub/dashboard");
     }
   };
 

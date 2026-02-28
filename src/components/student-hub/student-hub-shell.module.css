@@ -1,0 +1,23 @@
+.mainGrid {
+  display: grid;
+  gap: 0;
+}
+
+.subgrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  width: 100%;
+  height: 100%;
+}
+
+.cell {
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color 180ms ease, border-color 180ms ease;
+}
+
+.cell:hover {
+  border-color: color-mix(in oklch, var(--foreground) 18%, transparent);
+}

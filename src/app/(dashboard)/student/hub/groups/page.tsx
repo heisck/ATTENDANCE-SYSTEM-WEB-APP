@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { StudentHubShell } from "@/components/student-hub/student-hub-shell";
 
 type GroupRow = {
   id: string;
@@ -150,12 +150,25 @@ export default function StudentHubGroupsPage() {
     }
   }
 
+  const totalGroups = sessions.reduce((sum, session) => sum + session.groups.length, 0);
+  const openSlots = sessions.reduce(
+    (sum, session) =>
+      sum + session.groups.reduce((groupSum, group) => groupSum + Math.max(group.capacity - group._count.memberships, 0), 0),
+    0,
+  );
+
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Student Hub"
+      <StudentHubShell
         title="Group Formation"
-        description="Join groups, vote leaders, and access your group invite link."
+        description="Join groups, vote leaders, and publish invite links with the updated Student Hub experience."
+        activeRoute="groups"
+        metrics={[
+          { label: "Active Sessions", value: String(sessions.length) },
+          { label: "Your Memberships", value: String(memberships.length) },
+          { label: "Available Groups", value: String(totalGroups) },
+          { label: "Open Slots", value: String(openSlots) },
+        ]}
       />
 
       {loading ? (
@@ -286,4 +299,3 @@ export default function StudentHubGroupsPage() {
     </div>
   );
 }
-

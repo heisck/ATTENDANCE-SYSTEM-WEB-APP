@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getStudentHubContext } from "@/lib/student-hub";
 import { PageHeader, SectionHeading } from "@/components/dashboard/page-header";
+import { StudentHubShell } from "@/components/student-hub/student-hub-shell";
 
 const weekdayLabels: Record<number, string> = {
   1: "Monday",
@@ -71,20 +72,26 @@ export default async function StudentHubTimetablePage() {
     acc[entry.dayOfWeek].push(entry);
     return acc;
   }, {});
+  const activeDayCount = Object.keys(grouped).length;
+  const onlineOrHybridCount = entries.filter((entry) => /online|hybrid/i.test(String(entry.mode))).length;
+  const cohortName = entries[0]?.cohort?.displayName || "Current cohort timetable";
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Student Hub"
+      <StudentHubShell
         title="Timetable"
-        description="Your cohort schedule grouped by day."
+        description="Your cohort schedule grouped by day with quick section switching inspired by the new Student Hub style."
+        activeRoute="timetable"
+        metrics={[
+          { label: "Published Classes", value: String(entries.length) },
+          { label: "Active Weekdays", value: String(activeDayCount) },
+          { label: "Online/Hybrid", value: String(onlineOrHybridCount) },
+          { label: "Cohort", value: entries[0]?.cohort?.displayName || "Not linked" },
+        ]}
       />
 
       <section className="space-y-3">
-        <SectionHeading
-          title="Week View"
-          description={entries[0]?.cohort?.displayName || "Current cohort timetable"}
-        />
+        <SectionHeading title="Week View" description={cohortName} />
         <div className="space-y-4">
           {Object.entries(grouped).length === 0 ? (
             <div className="surface p-5 text-sm text-muted-foreground">
@@ -139,4 +146,3 @@ export default async function StudentHubTimetablePage() {
     </div>
   );
 }
-

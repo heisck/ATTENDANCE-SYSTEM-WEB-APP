@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { StudentHubGovernanceForm } from "@/components/admin/student-hub-governance-form";
 import {
@@ -15,15 +16,58 @@ export default async function AdminSettingsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const orgId = (session.user as any).organizationId;
-  if (!orgId) redirect("/login");
+  const user = session.user as any;
+  if (user.role === "SUPER_ADMIN") {
+    redirect("/super-admin/organizations");
+  }
+  if (user.role !== "ADMIN") {
+    redirect("/login");
+  }
+
+  const orgId = user.organizationId as string | null;
+  if (!orgId) {
+    return (
+      <div className="space-y-8">
+        <PageHeader
+          eyebrow="Admin"
+          title="Settings"
+          description="No organization is linked to this admin account."
+        />
+        <section className="surface-muted p-4">
+          <p className="text-sm text-muted-foreground">
+            Your account is authenticated but missing an organization assignment. Contact a super-admin to assign an
+            organization before opening Admin Settings.
+          </p>
+        </section>
+      </div>
+    );
+  }
 
   const org = await db.organization.findUnique({
     where: { id: orgId },
     include: { subscription: true },
   });
 
-  if (!org) redirect("/login");
+  if (!org) {
+    return (
+      <div className="space-y-8">
+        <PageHeader
+          eyebrow="Admin"
+          title="Settings"
+          description="Organization record not found."
+        />
+        <section className="surface-muted space-y-2 p-4">
+          <p className="text-sm text-muted-foreground">
+            The linked organization could not be found. If this organization was removed, a super-admin must relink
+            your account.
+          </p>
+          <Link href="/admin" className="inline-flex text-sm font-medium text-foreground underline underline-offset-2">
+            Return to Admin Dashboard
+          </Link>
+        </section>
+      </div>
+    );
+  }
 
   const settings = org.settings as any;
   const featureFlags = getFeatureFlags(settings);
