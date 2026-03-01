@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getFeatureFlags } from "@/lib/organization-settings";
+import { getEffectiveFeatureFlags } from "@/lib/organization-settings";
 
 export async function GET() {
   const session = await auth();
@@ -44,7 +44,7 @@ export async function GET() {
     });
   }
 
-  const flags = getFeatureFlags(user.organization?.settings);
+  const flags = getEffectiveFeatureFlags(user.organization?.settings, user.cohortId);
   const courseRepToolsEnabled = flags.studentHubCore && flags.courseRepTools;
 
   const scopes = await db.courseRepScope.findMany({

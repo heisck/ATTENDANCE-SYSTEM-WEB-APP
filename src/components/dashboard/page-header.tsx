@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 type PageHeaderProps = {
-  title: string;
+  title?: string;
   description?: string;
   eyebrow?: string;
   action?: ReactNode;
@@ -30,8 +30,8 @@ export function PageHeader({
             {eyebrow}
           </p>
         ) : null}
-        <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground">{title}</h1>
-        {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
+        {title ? <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground">{title}</h1> : null}
+        {description ? <p className={title ? "mt-1 text-sm text-muted-foreground" : "text-sm text-muted-foreground"}>{description}</p> : null}
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </header>

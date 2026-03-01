@@ -7,6 +7,8 @@ export type FeatureFlags = {
   groupFormation: boolean;
 };
 
+export type ClassHubFeatureFlags = Partial<FeatureFlags>;
+
 export type AcademicCalendarSettings = {
   currentSemester: 1 | 2;
   examMode: boolean;
@@ -110,6 +112,48 @@ export function getFeatureFlags(settings: unknown): FeatureFlags {
   };
 }
 
+function toPartialFeatureFlags(value: unknown): ClassHubFeatureFlags {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const raw = value as Record<string, unknown>;
+  const overrides: ClassHubFeatureFlags = {};
+  if (typeof raw.studentHubCore === "boolean") overrides.studentHubCore = raw.studentHubCore;
+  if (typeof raw.courseRepTools === "boolean") overrides.courseRepTools = raw.courseRepTools;
+  if (typeof raw.examHub === "boolean") overrides.examHub = raw.examHub;
+  if (typeof raw.groupFormation === "boolean") overrides.groupFormation = raw.groupFormation;
+  return overrides;
+}
+
+export function getClassHubFeatureOverrides(settings: unknown, cohortId?: string | null): ClassHubFeatureFlags {
+  if (!cohortId) return {};
+  const parsed = getOrganizationSettings(settings);
+  const rawMap = parsed.classHubGovernance;
+  if (!rawMap || typeof rawMap !== "object" || Array.isArray(rawMap)) {
+    return {};
+  }
+
+  const rawEntry = (rawMap as Record<string, unknown>)[cohortId];
+  if (!rawEntry || typeof rawEntry !== "object" || Array.isArray(rawEntry)) {
+    return {};
+  }
+
+  const entryObject = rawEntry as Record<string, unknown>;
+  const rawFeatureFlags = "featureFlags" in entryObject ? entryObject.featureFlags : rawEntry;
+  return toPartialFeatureFlags(rawFeatureFlags);
+}
+
+export function getEffectiveFeatureFlags(settings: unknown, cohortId?: string | null): FeatureFlags {
+  const organizationFlags = getFeatureFlags(settings);
+  const classOverrides = getClassHubFeatureOverrides(settings, cohortId);
+
+  return {
+    ...organizationFlags,
+    ...classOverrides,
+  };
+}
+
 export function isFeatureEnabled(settings: unknown, key: keyof FeatureFlags): boolean {
   const flags = getFeatureFlags(settings);
   return flags[key];
@@ -185,8 +229,12 @@ function computeWithinTrial(billing: StudentHubBillingSettings, now: Date): bool
   return now.getTime() <= end.getTime();
 }
 
-export function getStudentHubAccessState(settings: unknown, now: Date = new Date()): StudentHubAccessState {
-  const flags = getFeatureFlags(settings);
+export function getStudentHubAccessState(
+  settings: unknown,
+  now: Date = new Date(),
+  cohortId?: string | null
+): StudentHubAccessState {
+  const flags = getEffectiveFeatureFlags(settings, cohortId);
   const billing = getStudentHubBillingSettings(settings);
   const withinTrial = computeWithinTrial(billing, now);
 

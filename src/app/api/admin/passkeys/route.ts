@@ -26,9 +26,19 @@ export async function GET(request: NextRequest) {
         email: true,
         name: true,
         role: true,
+        studentId: true,
+        indexNumber: true,
+        createdAt: true,
         passkeysLockedUntilAdminReset: true,
         firstPasskeyCreatedAt: true,
-        _count: { select: { credentials: true } },
+        cohort: {
+          select: {
+            id: true,
+            displayName: true,
+            level: true,
+          },
+        },
+        _count: { select: { credentials: true, attendances: true } },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -39,9 +49,21 @@ export async function GET(request: NextRequest) {
         email: u.email,
         name: u.name,
         role: u.role,
+        studentId: u.studentId,
+        indexNumber: u.indexNumber,
+        joinedAt: u.createdAt,
         passkeysLockedUntilAdminReset: u.passkeysLockedUntilAdminReset,
         firstPasskeyCreatedAt: u.firstPasskeyCreatedAt,
         credentialCount: u._count.credentials,
+        attendanceCount: u._count.attendances,
+        deviceRegistered: u._count.credentials > 0,
+        classGroup: u.cohort
+          ? {
+              id: u.cohort.id,
+              displayName: u.cohort.displayName,
+              level: u.cohort.level,
+            }
+          : null,
       })),
     });
   } catch (error: any) {

@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import {
   getAcademicCalendarSettings,
-  getFeatureFlags,
+  getEffectiveFeatureFlags,
   getStudentHubAccessState,
   type AcademicCalendarSettings,
   type StudentHubAccessState,
@@ -48,8 +48,8 @@ export async function getStudentHubContext(userId: string): Promise<StudentHubCo
   }
 
   const settings = user.organization?.settings;
-  const rawFeatureFlags = getFeatureFlags(settings);
-  const hubAccess = getStudentHubAccessState(settings);
+  const rawFeatureFlags = getEffectiveFeatureFlags(settings, user.cohortId);
+  const hubAccess = getStudentHubAccessState(settings, new Date(), user.cohortId);
   const featureFlags = hubAccess.accessAllowed
     ? rawFeatureFlags
     : {

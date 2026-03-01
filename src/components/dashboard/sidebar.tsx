@@ -25,10 +25,8 @@ import {
   Megaphone,
   Play,
   QrCode,
-  Settings,
   User,
   UserPlus,
-  Users,
   UsersRound,
 } from "lucide-react";
 
@@ -67,12 +65,10 @@ const baseNavByRole: Record<string, NavItem[]> = {
   ],
   ADMIN: [
     { label: "Dashboard", href: "/admin", icon: Home },
-    { label: "Users", href: "/admin/users", icon: Users },
-    { label: "Lecturer Invites", href: "/admin/lecturer-invites", icon: UserPlus },
-    { label: "Course Reps", href: "/admin/course-reps", icon: User },
+    { label: "Manage Staff", href: "/admin/manage-staff", icon: UserPlus },
     { label: "Courses", href: "/admin/courses", icon: BookOpen },
+    { label: "Class Groups", href: "/admin/classes", icon: LayoutList },
     { label: "Passkey Management", href: "/admin/passkeys", icon: Fingerprint },
-    { label: "Settings", href: "/admin/settings", icon: Settings },
   ],
   SUPER_ADMIN: [
     { label: "Dashboard", href: "/super-admin", icon: Home },
@@ -156,7 +152,7 @@ function profileHrefByRole(role: string) {
     case "STUDENT":
       return "/student/profile";
     case "ADMIN":
-      return "/admin/settings";
+      return "/admin/passkeys";
     case "LECTURER":
       return "/lecturer/profile";
     case "SUPER_ADMIN":

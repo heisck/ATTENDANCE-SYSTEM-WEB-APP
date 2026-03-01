@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   getAcademicCalendarSettings,
-  getFeatureFlags,
+  getEffectiveFeatureFlags,
   getStudentHubAccessState,
 } from "@/lib/organization-settings";
 
@@ -62,8 +62,9 @@ export async function GET() {
   const hasPasskey = credentialCount > 0;
   const canProceed = !requiresProfileCompletion && personalEmailVerified && hasPasskey;
   const settings = student.organization?.settings;
-  const rawFeatureFlags = getFeatureFlags(settings);
-  const studentHubAccess = getStudentHubAccessState(settings);
+  const cohortId = student.cohort?.id || null;
+  const rawFeatureFlags = getEffectiveFeatureFlags(settings, cohortId);
+  const studentHubAccess = getStudentHubAccessState(settings, new Date(), cohortId);
   const featureFlags = studentHubAccess.accessAllowed
     ? rawFeatureFlags
     : {

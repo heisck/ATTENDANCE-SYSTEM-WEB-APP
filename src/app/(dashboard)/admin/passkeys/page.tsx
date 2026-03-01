@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { CheckCircle2, Lock, Unlock, Loader2, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { CheckCircle2, Loader2, Lock, Trash2, Unlock } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
 import { toast } from "sonner";
@@ -12,9 +12,19 @@ interface PasskeyUser {
   email: string;
   name: string;
   role: string;
+  studentId: string | null;
+  indexNumber: string | null;
+  joinedAt: string;
   passkeysLockedUntilAdminReset: boolean;
   firstPasskeyCreatedAt: string | null;
   credentialCount: number;
+  attendanceCount: number;
+  deviceRegistered: boolean;
+  classGroup: {
+    id: string;
+    displayName: string;
+    level: number;
+  } | null;
 }
 
 export default function PasskeyManagementPage() {
@@ -22,6 +32,10 @@ export default function PasskeyManagementPage() {
   const [users, setUsers] = useState<PasskeyUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionInProgress, setActionInProgress] = useState(false);
+  const [query, setQuery] = useState("");
+  const [classFilter, setClassFilter] = useState("all");
+  const [levelFilter, setLevelFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   if (!session?.user) {
     redirect("/login");
@@ -33,7 +47,7 @@ export default function PasskeyManagementPage() {
   }
 
   useEffect(() => {
-    fetchUsers();
+    void fetchUsers();
   }, []);
 
   async function fetchUsers() {
@@ -42,7 +56,7 @@ export default function PasskeyManagementPage() {
       const res = await fetch("/api/admin/passkeys");
       if (!res.ok) throw new Error("Failed to fetch users");
       const data = await res.json();
-      setUsers(data.users);
+      setUsers(Array.isArray(data.users) ? data.users : []);
     } catch (err: any) {
       toast.error(err.message || "Failed to fetch users");
     } finally {
@@ -62,7 +76,7 @@ export default function PasskeyManagementPage() {
         throw new Error(data.error || "Failed to unlock passkeys");
       }
 
-      toast.success(`Passkeys unlocked for ${users.find(u => u.id === userId)?.name}`);
+      toast.success(`Passkeys unlocked for ${users.find((u) => u.id === userId)?.name}`);
       await fetchUsers();
     } catch (err: any) {
       toast.error(err.message || "Failed to unlock passkeys");
@@ -108,7 +122,7 @@ export default function PasskeyManagementPage() {
         throw new Error(data.error || "Failed to delete credentials");
       }
 
-      toast.success(`Passkeys deleted for ${users.find(u => u.id === userId)?.name}`);
+      toast.success(`Passkeys deleted for ${users.find((u) => u.id === userId)?.name}`);
       await fetchUsers();
     } catch (err: any) {
       toast.error(err.message || "Failed to delete credentials");
@@ -117,13 +131,112 @@ export default function PasskeyManagementPage() {
     }
   }
 
+  const classOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const user of users) {
+      if (user.classGroup) {
+        map.set(user.classGroup.id, user.classGroup.displayName);
+      }
+    }
+    return Array.from(map.entries()).map(([id, label]) => ({ id, label }));
+  }, [users]);
+
+  const levelOptions = useMemo(() => {
+    const uniqueLevels = Array.from(
+      new Set(users.map((user) => user.classGroup?.level).filter((level): level is number => typeof level === "number"))
+    );
+    return uniqueLevels.sort((a, b) => a - b);
+  }, [users]);
+
+  const filteredUsers = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+
+    return users.filter((user) => {
+      if (classFilter !== "all" && user.classGroup?.id !== classFilter) return false;
+      if (levelFilter !== "all" && String(user.classGroup?.level ?? "") !== levelFilter) return false;
+      if (statusFilter === "locked" && !user.passkeysLockedUntilAdminReset) return false;
+      if (statusFilter === "active" && user.passkeysLockedUntilAdminReset) return false;
+
+      if (!normalizedQuery) return true;
+
+      const searchFields = [
+        user.name,
+        user.email,
+        user.role,
+        user.studentId || "",
+        user.indexNumber || "",
+        user.classGroup?.displayName || "",
+        user.passkeysLockedUntilAdminReset ? "locked" : "active",
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchFields.includes(normalizedQuery);
+    });
+  }, [classFilter, levelFilter, query, statusFilter, users]);
+
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Admin"
-        title="Passkey Management"
-        description="Manage user passkeys and control lock state for legitimate access recovery."
-      />
+      <PageHeader description="Search users, manage passkeys, and review user access details in one place." />
+
+      <section className="surface grid gap-3 p-4 md:grid-cols-4">
+        <label className="space-y-1 text-sm md:col-span-2">
+          <span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Search</span>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search name, email, role, status, index or student ID..."
+            className="h-10 w-full rounded-md border border-input bg-background px-3"
+          />
+        </label>
+
+        <label className="space-y-1 text-sm">
+          <span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Class Group</span>
+          <select
+            value={classFilter}
+            onChange={(event) => setClassFilter(event.target.value)}
+            className="h-10 w-full rounded-md border border-input bg-background px-3"
+          >
+            <option value="all">All class groups</option>
+            {classOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="space-y-1 text-sm">
+            <span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Level</span>
+            <select
+              value={levelFilter}
+              onChange={(event) => setLevelFilter(event.target.value)}
+              className="h-10 w-full rounded-md border border-input bg-background px-3"
+            >
+              <option value="all">All levels</option>
+              {levelOptions.map((level) => (
+                <option key={level} value={String(level)}>
+                  {level}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="space-y-1 text-sm">
+            <span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Status</span>
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              className="h-10 w-full rounded-md border border-input bg-background px-3"
+            >
+              <option value="all">All status</option>
+              <option value="active">Active</option>
+              <option value="locked">Locked</option>
+            </select>
+          </label>
+        </div>
+      </section>
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
@@ -132,37 +245,43 @@ export default function PasskeyManagementPage() {
       ) : (
         <div className="surface overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[1180px] text-sm">
               <thead className="border-b border-border bg-muted/30">
                 <tr>
                   <th className="px-4 py-3 text-left font-medium">User</th>
-                  <th className="px-4 py-3 text-left font-medium">Email</th>
+                  <th className="px-4 py-3 text-left font-medium">Institution Email</th>
+                  <th className="px-4 py-3 text-left font-medium">Role</th>
+                  <th className="px-4 py-3 text-left font-medium">Student ID / Index</th>
+                  <th className="px-4 py-3 text-left font-medium">Class Group</th>
+                  <th className="px-4 py-3 text-left font-medium">Device</th>
+                  <th className="px-4 py-3 text-left font-medium">Attendance</th>
                   <th className="px-4 py-3 text-left font-medium">Status</th>
                   <th className="px-4 py-3 text-left font-medium">Passkeys</th>
-                  <th className="px-4 py-3 text-left font-medium">Created</th>
+                  <th className="px-4 py-3 text-left font-medium">Joined</th>
                   <th className="px-4 py-3 text-left font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {users.map((user) => (
-                  <tr key={user.id} className="hover:bg-muted/30 transition-colors">
+                {filteredUsers.map((user) => (
+                  <tr key={user.id} className="transition-colors hover:bg-muted/30">
                     <td className="px-4 py-3 font-medium">{user.name}</td>
                     <td className="px-4 py-3 text-muted-foreground">{user.email}</td>
+                    <td className="px-4 py-3">{user.role}</td>
+                    <td className="px-4 py-3">{user.studentId || user.indexNumber || "-"}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{user.classGroup?.displayName || "-"}</td>
+                    <td className="px-4 py-3">{user.deviceRegistered ? "Registered" : "No"}</td>
+                    <td className="px-4 py-3">{user.attendanceCount}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {user.passkeysLockedUntilAdminReset ? (
                           <>
                             <Lock className="h-4 w-4 text-destructive" />
-                            <span className="text-xs font-medium text-destructive">
-                              Locked
-                            </span>
+                            <span className="text-xs font-medium text-destructive">Locked</span>
                           </>
                         ) : (
                           <>
                             <CheckCircle2 className="h-4 w-4 text-foreground" />
-                            <span className="text-xs font-medium text-foreground">
-                              Active
-                            </span>
+                            <span className="text-xs font-medium text-foreground">Active</span>
                           </>
                         )}
                       </div>
@@ -172,53 +291,39 @@ export default function PasskeyManagementPage() {
                         {user.credentialCount}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs">
-                      {user.firstPasskeyCreatedAt
-                        ? new Date(user.firstPasskeyCreatedAt).toLocaleDateString()
-                        : "-"}
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      {new Date(user.joinedAt).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {user.passkeysLockedUntilAdminReset ? (
                           <button
-                            onClick={() => handleUnlockPasskeys(user.id)}
+                            onClick={() => void handleUnlockPasskeys(user.id)}
                             disabled={actionInProgress}
                             title="Allow user to create new passkey"
-                            className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 disabled:opacity-50 transition-colors"
+                            className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
                           >
-                            {actionInProgress ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <Unlock className="h-3 w-3" />
-                            )}
+                            {actionInProgress ? <Loader2 className="h-3 w-3 animate-spin" /> : <Unlock className="h-3 w-3" />}
                             Unlock
                           </button>
                         ) : (
                           <button
-                            onClick={() => handleLockPasskeys(user.id)}
+                            onClick={() => void handleLockPasskeys(user.id)}
                             disabled={actionInProgress}
                             title="Lock passkey changes until admin unlocks"
-                            className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted/80 disabled:opacity-50 transition-colors"
+                            className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50"
                           >
-                            {actionInProgress ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <Lock className="h-3 w-3" />
-                            )}
+                            {actionInProgress ? <Loader2 className="h-3 w-3 animate-spin" /> : <Lock className="h-3 w-3" />}
                             Lock
                           </button>
                         )}
                         <button
-                          onClick={() => handleDeleteCredentials(user.id)}
+                          onClick={() => void handleDeleteCredentials(user.id)}
                           disabled={actionInProgress}
                           title="Delete all passkeys for this user"
-                          className="inline-flex items-center gap-1 rounded-md bg-destructive/10 px-2.5 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/20 disabled:opacity-50 transition-colors"
+                          className="inline-flex items-center gap-1 rounded-md bg-destructive/10 px-2.5 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-50"
                         >
-                          {actionInProgress ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-3 w-3" />
-                          )}
+                          {actionInProgress ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                           Delete
                         </button>
                       </div>
@@ -229,35 +334,13 @@ export default function PasskeyManagementPage() {
             </table>
           </div>
 
-          {users.length === 0 && (
+          {filteredUsers.length === 0 && (
             <div className="py-8 text-center">
-              <p className="text-muted-foreground">No users found</p>
+              <p className="text-muted-foreground">No users found for the current filters.</p>
             </div>
           )}
         </div>
       )}
-
-      <div className="surface-muted space-y-3 p-4">
-        <h3 className="font-semibold">How this works</h3>
-        <ul className="space-y-2 text-sm text-muted-foreground">
-          <li className="flex gap-2">
-            <span className="font-medium text-foreground">Locked:</span>
-            <span>User cannot create new passkeys. Prevents unauthorized device registration.</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="font-medium text-foreground">Unlock:</span>
-            <span>Allow user to register a new passkey on a different device (e.g., lost device).</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="font-medium text-foreground">Lock:</span>
-            <span>Disable passkey delete/add actions again until an admin re-unlocks the user.</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="font-medium text-foreground">Delete:</span>
-            <span>Remove all passkeys and unlock account for fresh re-registration.</span>
-          </li>
-        </ul>
-      </div>
     </div>
   );
 }

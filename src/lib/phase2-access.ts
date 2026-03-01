@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { hasMatchingScope } from "@/lib/course-rep";
 import { getStudentRepContext } from "@/lib/course-rep-auth";
 import { isAdminLike, resolveOrganizationIdForStaff } from "@/lib/permissions";
-import { getFeatureFlags } from "@/lib/organization-settings";
+import { getEffectiveFeatureFlags } from "@/lib/organization-settings";
 
 type SessionUserLike = {
   id: string;
@@ -48,7 +48,7 @@ export async function resolveRepOrAdminWriteAccess(input: {
       return { ok: false, status: 404, error: "Organization not found" };
     }
 
-    const flags = getFeatureFlags(organization.settings);
+    const flags = getEffectiveFeatureFlags(organization.settings, input.cohortId ?? null);
     if (!flags.studentHubCore || !flags[input.requiredFlag]) {
       return { ok: false, status: 403, error: `${input.requiredFlag} feature is disabled` };
     }
@@ -89,4 +89,3 @@ export async function resolveRepOrAdminWriteAccess(input: {
     },
   };
 }
-

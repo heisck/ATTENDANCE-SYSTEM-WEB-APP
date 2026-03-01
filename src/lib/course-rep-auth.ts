@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { getCourseRepScopes, hasMatchingScope } from "@/lib/course-rep";
-import { getFeatureFlags, getStudentHubAccessState } from "@/lib/organization-settings";
+import { getEffectiveFeatureFlags, getStudentHubAccessState } from "@/lib/organization-settings";
 
 export async function getStudentRepContext(userId: string) {
   const user = await db.user.findUnique({
@@ -23,8 +23,8 @@ export async function getStudentRepContext(userId: string) {
   }
 
   const scopes = await getCourseRepScopes(user.id, user.organizationId);
-  const rawFeatureFlags = getFeatureFlags(user.organization?.settings);
-  const hubAccess = getStudentHubAccessState(user.organization?.settings);
+  const rawFeatureFlags = getEffectiveFeatureFlags(user.organization?.settings, user.cohortId);
+  const hubAccess = getStudentHubAccessState(user.organization?.settings, new Date(), user.cohortId);
   const featureFlags = hubAccess.accessAllowed
     ? rawFeatureFlags
     : {
