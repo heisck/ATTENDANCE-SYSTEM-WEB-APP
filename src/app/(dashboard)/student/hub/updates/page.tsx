@@ -100,7 +100,7 @@ export default async function StudentHubUpdatesPage({ searchParams }: UpdatesPag
   );
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <StudentHubExperienceBadge />
 
       <section className="surface grid gap-3 p-4 sm:grid-cols-3">
@@ -114,7 +114,7 @@ export default async function StudentHubUpdatesPage({ searchParams }: UpdatesPag
         </div>
         <div>
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Filters</p>
-          <p className="mt-1 text-sm font-medium text-muted-foreground">
+          <p className="mt-1 break-words text-sm font-medium text-muted-foreground">
             {selectedType === "ALL" ? "All types" : selectedType}
             {" · "}
             {selectedCourse === "ALL"
@@ -124,13 +124,13 @@ export default async function StudentHubUpdatesPage({ searchParams }: UpdatesPag
         </div>
       </section>
 
-      <form method="get" className="surface flex flex-wrap items-end gap-3 p-4">
-        <label className="space-y-1 text-sm">
+      <form method="get" className="surface grid gap-3 p-4 sm:flex sm:flex-wrap sm:items-end">
+        <label className="min-w-0 space-y-1 text-sm">
           <span className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Update Type</span>
           <select
             name="type"
             defaultValue={selectedType}
-            className="h-10 min-w-52 rounded-md border border-input bg-background px-3 text-sm"
+            className="h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm sm:min-w-52"
           >
             <option value="ALL">All Types</option>
             {typeOptions.map((type) => (
@@ -140,12 +140,12 @@ export default async function StudentHubUpdatesPage({ searchParams }: UpdatesPag
             ))}
           </select>
         </label>
-        <label className="space-y-1 text-sm">
+        <label className="min-w-0 space-y-1 text-sm">
           <span className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Course</span>
           <select
             name="course"
             defaultValue={selectedCourse}
-            className="h-10 min-w-64 rounded-md border border-input bg-background px-3 text-sm"
+            className="h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm sm:min-w-64"
           >
             <option value="ALL">All Courses</option>
             {courseOptions.map((course) => (
@@ -157,31 +157,57 @@ export default async function StudentHubUpdatesPage({ searchParams }: UpdatesPag
         </label>
         <button
           type="submit"
-          className="inline-flex h-10 items-center rounded-md border border-border px-4 text-sm font-medium hover:bg-accent"
+          className="inline-flex h-10 w-full items-center justify-center rounded-md border border-border px-4 text-sm font-medium hover:bg-accent sm:w-auto"
         >
           Apply Filters
         </button>
       </form>
 
-      <AttendanceTable
-        columns={[
-          { key: "type", label: "Type" },
-          { key: "title", label: "Title" },
-          { key: "course", label: "Course" },
-          { key: "cohort", label: "Cohort" },
-          { key: "effective", label: "Effective At" },
-          { key: "message", label: "Message" },
-        ]}
-        data={updates.map((update) => ({
-          type: update.type,
-          title: update.title,
-          course: update.course ? `${update.course.code} - ${update.course.name}` : "-",
-          cohort: update.cohort?.displayName || "-",
-          effective: update.effectiveAt.toLocaleString(),
-          message: update.message,
-        }))}
-        emptyMessage="No updates published yet."
-      />
+      <section className="space-y-3 sm:hidden">
+        {updates.length === 0 ? (
+          <div className="surface p-4 text-sm text-muted-foreground">No updates published yet.</div>
+        ) : (
+          updates.map((update) => (
+            <article key={update.id} className="surface space-y-2 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <p className="min-w-0 truncate text-sm font-semibold text-foreground">{update.title}</p>
+                <span className="inline-flex rounded-full border border-border/70 bg-background px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                  {update.type}
+                </span>
+              </div>
+              <p className="text-sm text-foreground/90">
+                {update.course
+                  ? `${update.course.code} - ${update.course.name}${update.cohort?.displayName ? ` (${update.cohort.displayName})` : ""}`
+                  : update.cohort?.displayName || "-"}
+              </p>
+              <p className="text-xs text-muted-foreground">{update.effectiveAt.toLocaleString()}</p>
+              <p className="break-words text-sm text-foreground/90">{update.message}</p>
+            </article>
+          ))
+        )}
+      </section>
+
+      <div className="hidden sm:block">
+        <AttendanceTable
+          columns={[
+            { key: "type", label: "Type" },
+            { key: "title", label: "Title" },
+            { key: "course", label: "Course" },
+            { key: "effective", label: "Effective At" },
+            { key: "message", label: "Message" },
+          ]}
+          data={updates.map((update) => ({
+            type: update.type,
+            title: update.title,
+            course: update.course
+              ? `${update.course.code} - ${update.course.name}${update.cohort?.displayName ? ` (${update.cohort.displayName})` : ""}`
+              : update.cohort?.displayName || "-",
+            effective: update.effectiveAt.toLocaleString(),
+            message: update.message,
+          }))}
+          emptyMessage="No updates published yet."
+        />
+      </div>
     </div>
   );
 }

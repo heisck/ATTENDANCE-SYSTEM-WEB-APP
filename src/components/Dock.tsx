@@ -136,7 +136,7 @@ function DockItem({
           onClick?.();
         }
       }}
-      className={`relative inline-flex items-center justify-center rounded-full border border-transparent bg-transparent text-black transition-colors duration-150 hover:border-black/15 hover:bg-gray-100/85 active:border-black/20 active:bg-gray-200/90 focus-visible:border-black/15 focus-visible:bg-gray-100/85 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:shadow-sm dark:shadow-black/25 dark:hover:border-white/20 dark:hover:bg-white/[0.1] dark:active:border-white/25 dark:active:bg-white/[0.14] dark:focus-visible:border-white/20 dark:focus-visible:bg-white/[0.1] ${className}`}
+      className={`relative shrink-0 inline-flex items-center justify-center rounded-full border border-transparent bg-transparent text-black transition-colors duration-150 hover:border-black/15 hover:bg-gray-100/85 active:border-black/20 active:bg-gray-200/90 focus-visible:border-black/15 focus-visible:bg-gray-100/85 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:shadow-sm dark:shadow-black/25 dark:hover:border-white/20 dark:hover:bg-white/[0.1] dark:active:border-white/25 dark:active:bg-white/[0.14] dark:focus-visible:border-white/20 dark:focus-visible:bg-white/[0.1] ${className}`}
       tabIndex={0}
       role="button"
       aria-haspopup="true"

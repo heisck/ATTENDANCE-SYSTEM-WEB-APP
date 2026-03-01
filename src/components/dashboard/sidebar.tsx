@@ -47,6 +47,8 @@ type StudentNavFlags = {
 };
 
 type StudentHubMode = "attendance" | "studentHub";
+const STUDENT_HUB_UPDATES_READ_KEY = "student.hub.read.updates.signature";
+const STUDENT_HUB_DEADLINES_READ_KEY = "student.hub.read.deadlines.signature";
 
 const baseNavByRole: Record<string, NavItem[]> = {
   STUDENT: [
@@ -164,6 +166,85 @@ function profileHrefByRole(role: string) {
   }
 }
 
+function compactCount(value: number) {
+  if (value > 99) return "99+";
+  return String(value);
+}
+
+function signatureFromIds(rows: Array<{ id?: unknown }>) {
+  return rows
+    .map((row) => {
+      if (typeof row.id === "string") return row.id;
+      if (typeof row.id === "number") return String(row.id);
+      return "";
+    })
+    .filter((value) => value.length > 0)
+    .join("|");
+}
+
+function readStoredSignature(key: string) {
+  try {
+    return localStorage.getItem(key) || "";
+  } catch {
+    return "";
+  }
+}
+
+function writeStoredSignature(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {}
+}
+
+function StudentHubHeaderIndicators({
+  updatesCount,
+  deadlinesCount,
+  updatesUnread,
+  deadlinesUnread,
+  onOpenUpdates,
+  onOpenDeadlines,
+}: {
+  updatesCount: number;
+  deadlinesCount: number;
+  updatesUnread: boolean;
+  deadlinesUnread: boolean;
+  onOpenUpdates: () => void;
+  onOpenDeadlines: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        onClick={onOpenUpdates}
+        className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-border/70 bg-card/70 transition-colors hover:bg-muted/60"
+        aria-label={updatesUnread && updatesCount > 0 ? `Open updates (${updatesCount} unread)` : "Open updates"}
+      >
+        <Bell className="h-4.5 w-4.5 text-foreground/90" />
+        {updatesUnread && updatesCount > 0 ? (
+          <span className="absolute -top-1 -right-1 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white">
+            {compactCount(updatesCount)}
+          </span>
+        ) : null}
+      </button>
+      <button
+        type="button"
+        onClick={onOpenDeadlines}
+        className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-border/70 bg-card/70 transition-colors hover:bg-muted/60"
+        aria-label={
+          deadlinesUnread && deadlinesCount > 0 ? `Open deadlines (${deadlinesCount} unread)` : "Open deadlines"
+        }
+      >
+        <ClipboardList className="h-4.5 w-4.5 text-foreground/90" />
+        {deadlinesUnread && deadlinesCount > 0 ? (
+          <span className="absolute -top-1 -right-1 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold leading-none text-white">
+            {compactCount(deadlinesCount)}
+          </span>
+        ) : null}
+      </button>
+    </div>
+  );
+}
+
 export function Sidebar({
   role,
   userName,
@@ -175,6 +256,7 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [isCompactViewport, setIsCompactViewport] = useState(false);
   const [studentHubMode, setStudentHubMode] = useState<StudentHubMode>("attendance");
   const [studentFlags, setStudentFlags] = useState<StudentNavFlags>({
     studentHubCore: false,
@@ -182,6 +264,14 @@ export function Sidebar({
     examHub: false,
     groupFormation: false,
     isCourseRep: false,
+  });
+  const [studentHubIndicators, setStudentHubIndicators] = useState({
+    updatesCount: 0,
+    deadlinesCount: 0,
+    updatesSignature: "",
+    deadlinesSignature: "",
+    updatesUnread: false,
+    deadlinesUnread: false,
   });
   const items = useMemo<NavItem[]>(() => {
     const base = baseNavByRole[role] || [];
@@ -233,6 +323,16 @@ export function Sidebar({
   const rolePath = `/${role.toLowerCase().replace(/_/g, "-")}`;
   const currentPage = useMemo(() => deriveCurrentPage(pathname, rolePath, items), [items, pathname, rolePath]);
   const profileHref = useMemo(() => profileHrefByRole(role), [role]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 375px)");
+    const syncCompactViewport = () => setIsCompactViewport(media.matches);
+    syncCompactViewport();
+    media.addEventListener("change", syncCompactViewport);
+    return () => {
+      media.removeEventListener("change", syncCompactViewport);
+    };
+  }, []);
 
   useEffect(() => {
     if (role !== "STUDENT") return;
@@ -300,6 +400,123 @@ export function Sidebar({
     } catch {}
   }, [pathname, role]);
 
+  useEffect(() => {
+    if (role !== "STUDENT" || !studentFlags.studentHubCore || studentHubMode !== "studentHub") {
+      setStudentHubIndicators({
+        updatesCount: 0,
+        deadlinesCount: 0,
+        updatesSignature: "",
+        deadlinesSignature: "",
+        updatesUnread: false,
+        deadlinesUnread: false,
+      });
+      return;
+    }
+
+    let cancelled = false;
+    const syncIndicators = async () => {
+      try {
+        const [updatesResponse, deadlinesResponse] = await Promise.all([
+          fetch("/api/student/hub/class-updates?limit=25", { cache: "no-store" }),
+          fetch("/api/student/hub/deadlines", { cache: "no-store" }),
+        ]);
+
+        if (cancelled) return;
+
+        let updatesCount = 0;
+        let deadlinesCount = 0;
+        let updatesSignature = "";
+        let deadlinesSignature = "";
+
+        if (updatesResponse.ok) {
+          const updatesPayload = await updatesResponse.json();
+          const updatesRows = Array.isArray(updatesPayload?.updates)
+            ? (updatesPayload.updates as Array<{ id?: unknown }>)
+            : [];
+          updatesCount = updatesRows.length;
+          updatesSignature = signatureFromIds(updatesRows);
+        }
+
+        if (deadlinesResponse.ok) {
+          const deadlinesPayload = await deadlinesResponse.json();
+          const deadlinesRows = Array.isArray(deadlinesPayload?.deadlines)
+            ? (deadlinesPayload.deadlines as Array<{ id?: unknown }>)
+            : [];
+          deadlinesCount = deadlinesRows.length;
+          deadlinesSignature = signatureFromIds(deadlinesRows);
+        }
+
+        if (!cancelled) {
+          const seenUpdates = readStoredSignature(STUDENT_HUB_UPDATES_READ_KEY);
+          const seenDeadlines = readStoredSignature(STUDENT_HUB_DEADLINES_READ_KEY);
+          setStudentHubIndicators({
+            updatesCount,
+            deadlinesCount,
+            updatesSignature,
+            deadlinesSignature,
+            updatesUnread: updatesCount > 0 && updatesSignature.length > 0 && updatesSignature !== seenUpdates,
+            deadlinesUnread: deadlinesCount > 0 && deadlinesSignature.length > 0 && deadlinesSignature !== seenDeadlines,
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          setStudentHubIndicators((prev) => prev);
+        }
+      }
+    };
+
+    void syncIndicators();
+    const intervalId = setInterval(() => {
+      void syncIndicators();
+    }, 60_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [role, studentFlags.studentHubCore, studentHubMode]);
+
+  useEffect(() => {
+    if (role !== "STUDENT") return;
+
+    if (pathname.startsWith("/student/hub/updates") && studentHubIndicators.updatesSignature.length > 0) {
+      writeStoredSignature(STUDENT_HUB_UPDATES_READ_KEY, studentHubIndicators.updatesSignature);
+      if (studentHubIndicators.updatesUnread) {
+        setStudentHubIndicators((prev) => ({ ...prev, updatesUnread: false }));
+      }
+    }
+
+    if (pathname.startsWith("/student/hub/deadlines") && studentHubIndicators.deadlinesSignature.length > 0) {
+      writeStoredSignature(STUDENT_HUB_DEADLINES_READ_KEY, studentHubIndicators.deadlinesSignature);
+      if (studentHubIndicators.deadlinesUnread) {
+        setStudentHubIndicators((prev) => ({ ...prev, deadlinesUnread: false }));
+      }
+    }
+  }, [
+    pathname,
+    role,
+    studentHubIndicators.deadlinesSignature,
+    studentHubIndicators.deadlinesUnread,
+    studentHubIndicators.updatesSignature,
+    studentHubIndicators.updatesUnread,
+  ]);
+
+  const openUpdatesFromIndicator = () => {
+    if (studentHubIndicators.updatesSignature.length > 0) {
+      writeStoredSignature(STUDENT_HUB_UPDATES_READ_KEY, studentHubIndicators.updatesSignature);
+    }
+    setStudentHubIndicators((prev) => ({ ...prev, updatesUnread: false }));
+    router.push("/student/hub/updates");
+  };
+
+  const openDeadlinesFromIndicator = () => {
+    if (studentHubIndicators.deadlinesSignature.length > 0) {
+      writeStoredSignature(STUDENT_HUB_DEADLINES_READ_KEY, studentHubIndicators.deadlinesSignature);
+    }
+    setStudentHubIndicators((prev) => ({ ...prev, deadlinesUnread: false }));
+    router.push("/student/hub/deadlines");
+  };
+
   const handleHubSwitch = (nextMode: StudentHubMode) => {
     if (role !== "STUDENT") return;
     if (nextMode === studentHubMode) return;
@@ -356,6 +573,15 @@ export function Sidebar({
       }),
     [items, pathname, rolePath, router]
   );
+  const hasDenseDock = isCompactViewport && dockItems.length >= 8;
+  const dockPanelHeight = hasDenseDock ? 50 : isCompactViewport ? 54 : 60;
+  const dockBaseItemSize = hasDenseDock ? 28 : isCompactViewport ? 32 : 40;
+  const dockMagnification = hasDenseDock ? 40 : isCompactViewport ? 48 : 62;
+  const dockDistance = hasDenseDock ? 90 : isCompactViewport ? 110 : 140;
+  const dockOuterHeightClass = isCompactViewport ? "h-[80px]" : "h-[88px] sm:h-[92px]";
+  const dockClassName = isCompactViewport
+    ? "max-w-[calc(100vw-0.5rem)] !gap-1 !px-1.5"
+    : "max-w-[calc(100vw-0.75rem)] !gap-2 !px-2 sm:max-w-[min(90vw,980px)] sm:!gap-3 sm:!px-3";
 
   return (
     <>
@@ -373,6 +599,16 @@ export function Sidebar({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {role === "STUDENT" && studentFlags.studentHubCore && studentHubMode === "studentHub" ? (
+            <StudentHubHeaderIndicators
+              updatesCount={studentHubIndicators.updatesCount}
+              deadlinesCount={studentHubIndicators.deadlinesCount}
+              updatesUnread={studentHubIndicators.updatesUnread}
+              deadlinesUnread={studentHubIndicators.deadlinesUnread}
+              onOpenUpdates={openUpdatesFromIndicator}
+              onOpenDeadlines={openDeadlinesFromIndicator}
+            />
+          ) : null}
           <QuickActionsMenu role={role} />
           <UserMenu
             role={role}
@@ -392,14 +628,14 @@ export function Sidebar({
           className="pointer-events-none fixed inset-x-0 bottom-0 z-50"
           style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
         >
-          <div className="pointer-events-auto relative mx-auto h-[88px] w-full sm:h-[92px]">
+          <div className={`pointer-events-auto relative mx-auto w-full ${dockOuterHeightClass}`}>
             <Dock
               items={dockItems}
-              panelHeight={60}
-              baseItemSize={40}
-              magnification={62}
-              distance={140}
-              className="max-w-[calc(100vw-0.75rem)] !gap-2 !px-2 sm:max-w-[min(90vw,980px)] sm:!gap-3 sm:!px-3"
+              panelHeight={dockPanelHeight}
+              baseItemSize={dockBaseItemSize}
+              magnification={dockMagnification}
+              distance={dockDistance}
+              className={dockClassName}
             />
           </div>
         </div>

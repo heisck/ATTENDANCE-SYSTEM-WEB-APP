@@ -101,15 +101,15 @@ export default async function StudentHubDeadlinesPage() {
         columns={[
           { key: "title", label: "Assignment" },
           { key: "course", label: "Course" },
-          { key: "cohort", label: "Cohort" },
           { key: "dueAt", label: "Due At" },
           { key: "timeLeft", label: "Time Left" },
           { key: "files", label: "Files" },
         ]}
         data={assignments.map((assignment) => ({
           title: assignment.title,
-          course: assignment.course ? `${assignment.course.code} - ${assignment.course.name}` : "-",
-          cohort: assignment.cohort?.displayName || "-",
+          course: assignment.course
+            ? `${assignment.course.code} - ${assignment.course.name}${assignment.cohort?.displayName ? ` (${assignment.cohort.displayName})` : ""}`
+            : assignment.cohort?.displayName || "-",
           dueAt: assignment.dueAt.toLocaleString(),
           timeLeft: formatDueDelta(assignment.dueAt),
           files: assignment.attachments.length,

@@ -37,6 +37,8 @@ export type DashboardHeroInfo = {
   courseName: string;
   courseCode: string;
   timeLabel: string;
+  startAt?: string | null;
+  endAt?: string | null;
   state: DashboardHeroStatus;
   venueLabel?: string | null;
   updatedBy?: string | null;
@@ -135,66 +137,6 @@ function getRandomColor() {
   return GRID_COLORS[Math.floor(Math.random() * GRID_COLORS.length)];
 }
 
-function AnimatedGroup({
-  children,
-  className,
-  preset = "fade",
-}: {
-  children: React.ReactNode;
-  className?: string;
-  preset?: "fade" | "slide" | "blur-slide";
-}) {
-  const itemVariants =
-    preset === "slide"
-      ? { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }
-      : preset === "blur-slide"
-        ? { hidden: { opacity: 0, filter: "blur(4px)", y: 20 }, visible: { opacity: 1, filter: "blur(0px)", y: 0 } }
-        : { hidden: { opacity: 0 }, visible: { opacity: 1 } };
-
-  return (
-    <motion.div
-      initial="hidden"
-      animate="visible"
-      variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
-      className={className}
-    >
-      {Array.isArray(children)
-        ? children.map((child, idx) => (
-            <motion.div key={idx} variants={itemVariants}>
-              {child}
-            </motion.div>
-          ))
-        : (
-          <motion.div variants={itemVariants}>{children}</motion.div>
-        )}
-    </motion.div>
-  );
-}
-
-function AnimatedText({
-  as: Tag = "span",
-  children,
-  className,
-  delay = 0,
-  ...rest
-}: {
-  as?: React.ElementType;
-  children: React.ReactNode;
-  className?: string;
-  delay?: number;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, filter: "blur(12px)", y: 12 }}
-      animate={{ opacity: 1, filter: "blur(0px)", y: 0 }}
-      transition={{ type: "spring", bounce: 0.3, duration: 1.5, delay }}
-      {...rest}
-    >
-      <Tag className={className}>{children}</Tag>
-    </motion.div>
-  );
-}
-
 function SubGrid() {
   const [cellColors, setCellColors] = useState<Array<string | null>>([null, null, null, null]);
   const leaveTimeouts = useRef<Array<ReturnType<typeof setTimeout> | null>>([null, null, null, null]);
@@ -280,6 +222,7 @@ function InteractiveGrid() {
 function HubNotice() {
   const [active, setActive] = useState(0);
   const [autoplay] = useState(true);
+  const [paused, setPaused] = useState(false);
 
   const handleNext = useCallback(() => {
     setActive((prev) => (prev + 1) % testimonials.length);
@@ -290,42 +233,49 @@ function HubNotice() {
   }, []);
 
   useEffect(() => {
-    if (!autoplay) return;
+    if (!autoplay || paused) return;
     const interval = setInterval(handleNext, 5000);
     return () => clearInterval(interval);
-  }, [autoplay, handleNext]);
+  }, [autoplay, handleNext, paused]);
 
   const isActive = (index: number) => index === active;
 
   return (
-    <section className="rounded-2xl border border-border/70 bg-muted/20 p-4 sm:p-5">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold tracking-tight">Hub Notice</h2>
-        <div className="flex justify-center gap-2">
-          <motion.button
-            onClick={handlePrev}
-            className="group/button bg-background flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition-all duration-200 hover:scale-105"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            type="button"
-            aria-label="Previous notice"
-          >
-            <ChevronLeft className="text-foreground h-4 w-4 transition-transform duration-300 group-hover/button:-rotate-12" />
-          </motion.button>
-          <motion.button
-            onClick={handleNext}
-            className="group/button bg-background flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition-all duration-200 hover:scale-105"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            type="button"
-            aria-label="Next notice"
-          >
-            <ChevronRight className="text-foreground h-4 w-4 transition-transform duration-300 group-hover/button:rotate-12" />
-          </motion.button>
+    <section className="space-y-3">
+      <div className="flex items-center justify-end gap-2">
+        <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1">
+          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Hub Notice</span>
         </div>
+        <motion.button
+          onClick={handlePrev}
+          className="group/button bg-background flex h-8 w-8 items-center justify-center rounded-full border shadow-lg transition-all duration-200 hover:scale-110 hover:shadow-xl"
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
+          type="button"
+          aria-label="Previous notice"
+        >
+          <ChevronLeft className="text-foreground h-5 w-5 transition-transform duration-300 group-hover/button:-rotate-12" />
+        </motion.button>
+        <motion.button
+          onClick={handleNext}
+          className="group/button bg-background flex h-8 w-8 items-center justify-center rounded-full border shadow-lg transition-all duration-200 hover:scale-110 hover:shadow-xl"
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
+          type="button"
+          aria-label="Next notice"
+        >
+          <ChevronRight className="text-foreground h-5 w-5 transition-transform duration-300 group-hover/button:rotate-12" />
+        </motion.button>
       </div>
 
-      <div className="relative mt-4 min-h-[170px]">
+      <div
+        className="relative mx-auto h-full w-full max-w-md min-h-[260px]"
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
+        onPointerDown={() => setPaused(true)}
+        onPointerUp={() => setPaused(false)}
+        onPointerCancel={() => setPaused(false)}
+      >
         <AnimatePresence>
           {testimonials.map((testimonial, index) => (
             <motion.div
@@ -338,15 +288,15 @@ function HubNotice() {
               }}
               exit={{ opacity: 0, scale: 0.9, y: -30 }}
               transition={{ duration: 0.4, ease: "easeInOut" }}
-              className={`absolute inset-0 ${isActive(index) ? "z-10" : "z-0"}`}
+              className={`absolute inset-0 min-h-fit ${isActive(index) ? "z-10" : "z-0"}`}
             >
-              <div className="bg-background rounded-2xl border px-6 py-5 shadow-sm">
+              <div className="bg-background rounded-2xl border px-6 py-6 shadow-lg transition-all duration-200">
                 <motion.p
                   key={active}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3 }}
-                  className="text-foreground mb-4 text-base"
+                  className="text-foreground mb-6 text-base sm:text-lg"
                 >
                   {(testimonial.content || "").split(" ").map((word, wordIndex) => (
                     <motion.span
@@ -360,6 +310,7 @@ function HubNotice() {
                     </motion.span>
                   ))}
                 </motion.p>
+
                 <motion.div
                   className="flex items-center gap-3"
                   initial={{ opacity: 0, y: 10 }}
@@ -529,22 +480,45 @@ function formatChangedAt(value?: string | null) {
   return parsed.toLocaleString();
 }
 
+function splitDateAndTime(info: DashboardHeroInfo | null) {
+  if (!info?.startAt) {
+    return { dateText: "Not set", timeText: info?.timeLabel || "Not set" };
+  }
+
+  const start = new Date(info.startAt);
+  if (Number.isNaN(start.getTime())) {
+    return { dateText: "Not set", timeText: info.timeLabel || "Not set" };
+  }
+
+  const dateText = start.toLocaleDateString();
+  const startTime = start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  if (info.endAt) {
+    const end = new Date(info.endAt);
+    if (!Number.isNaN(end.getTime())) {
+      const endTime = end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      return { dateText, timeText: `${startTime} - ${endTime}` };
+    }
+  }
+
+  return { dateText, timeText: startTime };
+}
+
 function HeroStatusCard({
+  mode,
   classInfo,
   examInfo,
+  hasExamInfo,
+  onToggleMode,
+  showInlineToggle,
 }: {
+  mode: "class" | "exam";
   classInfo: DashboardHeroInfo | null;
   examInfo: DashboardHeroInfo | null;
+  hasExamInfo: boolean;
+  onToggleMode: () => void;
+  showInlineToggle: boolean;
 }) {
-  const hasExamInfo = Boolean(examInfo);
-  const [mode, setMode] = useState<"class" | "exam">(hasExamInfo ? "class" : "class");
-
-  useEffect(() => {
-    if (mode === "exam" && !hasExamInfo) {
-      setMode("class");
-    }
-  }, [hasExamInfo, mode]);
-
   const activeInfo = mode === "exam" ? examInfo : classInfo;
   const status = getStatusMeta(activeInfo?.state ?? "COMING_ON");
   const fallbackTitle = mode === "exam" ? "No upcoming exam found" : "No upcoming class found";
@@ -553,6 +527,8 @@ function HeroStatusCard({
       ? "Publish exam timetable entries to show an exam status snapshot here."
       : "Publish timetable entries for this cohort to show the next class snapshot.";
 
+  const { dateText, timeText } = splitDateAndTime(activeInfo);
+
   return (
     <motion.div
       className="pointer-events-auto w-full rounded-3xl border border-border/70 bg-background/85 p-4 text-left shadow-lg backdrop-blur-sm sm:p-5"
@@ -560,43 +536,60 @@ function HeroStatusCard({
       animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
       transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className={showInlineToggle ? "flex items-start justify-between gap-3" : ""}>
         <div>
-          <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Live Course Signal</p>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
-            {activeInfo ? activeInfo.courseName : fallbackTitle}
-          </h2>
+          <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            {showInlineToggle
+              ? "Live Course Signal"
+              : activeInfo?.contextLabel || (mode === "class" ? "Next Class" : "Upcoming Exam")}
+          </p>
+          <div className="mt-1 max-w-full overflow-x-auto whitespace-nowrap">
+            <h2 className="inline text-lg font-semibold tracking-tight sm:text-xl lg:text-2xl">
+              {activeInfo ? activeInfo.courseName : fallbackTitle}
+            </h2>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setMode((prev) => (prev === "class" ? "exam" : "class"))}
-          disabled={!hasExamInfo}
-          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-xs font-medium text-foreground transition hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Repeat2 className="h-3.5 w-3.5" />
-          {mode === "class" ? "Show Exams" : "Show Class"}
-        </button>
+        {showInlineToggle ? (
+          <button
+            type="button"
+            onClick={onToggleMode}
+            disabled={!hasExamInfo}
+            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-xs font-medium text-foreground transition hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Repeat2 className="h-3.5 w-3.5" />
+            {mode === "class" ? "Show Exams" : "Show Class"}
+          </button>
+        ) : null}
       </div>
 
-      <div className="mt-4 rounded-2xl border border-border/60 bg-muted/20 p-4">
+      <div className="mt-4 border-t border-border/70 pt-3">
         {activeInfo ? (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex rounded-full border border-border/70 bg-background px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">
-                {activeInfo.contextLabel}
+                Course
               </span>
               <span className="inline-flex rounded-full border border-border/70 bg-background px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">
                 {activeInfo.courseCode}
               </span>
-              <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${status.className}`}>
+              <span
+                className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${status.className}`}
+              >
                 {status.label}
+              </span>
+              <span className="inline-flex rounded-full border border-border/70 bg-background px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80 sm:hidden">
+                {dateText}
               </span>
             </div>
 
-            <div className="grid gap-2.5 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2">
+              <div className="hidden rounded-xl border border-border/60 bg-background/70 p-3 sm:block">
+                <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Date</p>
+                <p className="mt-1 text-sm font-medium text-foreground">{dateText}</p>
+              </div>
               <div className="rounded-xl border border-border/60 bg-background/70 p-3">
                 <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Time</p>
-                <p className="mt-1 text-sm font-medium text-foreground">{activeInfo.timeLabel}</p>
+                <p className="mt-1 text-sm font-medium text-foreground">{timeText}</p>
               </div>
               <div className="rounded-xl border border-border/60 bg-background/70 p-3">
                 <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Venue</p>
@@ -612,7 +605,7 @@ function HeroStatusCard({
                   {activeInfo.updatedBy || "No editor recorded"}
                 </p>
               </div>
-              <div className="rounded-xl border border-border/60 bg-background/70 p-3">
+              <div className="rounded-xl border border-border/60 bg-background/70 p-3 sm:col-span-2">
                 <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Changed At</p>
                 <p className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-foreground">
                   <CalendarClock className="h-3.5 w-3.5 text-muted-foreground" />
@@ -636,22 +629,66 @@ export function Classof2028Dashboard({
   classInfo: DashboardHeroInfo | null;
   examInfo: DashboardHeroInfo | null;
 }) {
+  const [mode, setMode] = useState<"class" | "exam">("class");
+  const hasExamInfo = Boolean(examInfo);
+
+  useEffect(() => {
+    if (mode === "exam" && !hasExamInfo) {
+      setMode("class");
+    }
+  }, [hasExamInfo, mode]);
+
   return (
     <div className="h-full w-full space-y-6">
-      <section className="relative overflow-hidden rounded-3xl border border-border/70 bg-background/60 p-4 sm:p-6 lg:p-8">
+      <div className="space-y-4 lg:hidden">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+          <StudentHubExperienceBadge className="min-w-0 max-w-full justify-self-start" />
+          <button
+            type="button"
+            onClick={() => setMode((prev) => (prev === "class" ? "exam" : "class"))}
+            disabled={!hasExamInfo}
+            aria-label={mode === "class" ? "Show exams" : "Show class"}
+            className="inline-flex h-[26px] items-center gap-1.5 rounded-full border border-border bg-background px-2.5 text-[11px] font-medium text-foreground transition hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Repeat2 className="h-3.5 w-3.5" />
+            <span className="sm:hidden whitespace-nowrap">{mode === "class" ? "Exams" : "Class"}</span>
+            <span className="hidden whitespace-nowrap sm:inline">{mode === "class" ? "Show Exams" : "Show Class"}</span>
+          </button>
+        </div>
+
+        <HeroStatusCard
+          mode={mode}
+          classInfo={classInfo}
+          examInfo={examInfo}
+          hasExamInfo={hasExamInfo}
+          onToggleMode={() => setMode((prev) => (prev === "class" ? "exam" : "class"))}
+          showInlineToggle={false}
+        />
+      </div>
+
+      <section className="relative hidden overflow-hidden rounded-3xl border border-border/70 bg-background/60 p-4 sm:p-6 lg:block lg:p-8">
         <InteractiveGrid />
         <div className="pointer-events-none relative z-10 flex flex-col gap-5">
           <div className="pointer-events-auto">
             <StudentHubExperienceBadge />
           </div>
-          <HeroStatusCard classInfo={classInfo} examInfo={examInfo} />
+          <HeroStatusCard
+            mode={mode}
+            classInfo={classInfo}
+            examInfo={examInfo}
+            hasExamInfo={hasExamInfo}
+            onToggleMode={() => setMode((prev) => (prev === "class" ? "exam" : "class"))}
+            showInlineToggle
+          />
         </div>
       </section>
 
       <HubNotice />
 
       <section id="lecturers" className="space-y-3">
-        <h2 className="text-sm font-semibold tracking-tight">Lecturers</h2>
+        <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1">
+          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Lecturers</span>
+        </div>
         <ExpandableCards cards={cards} />
       </section>
     </div>
