@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { TOTAL_SESSION_MS, deriveAttendancePhase } from "@/lib/attendance";
+import { cacheGet, cacheSet } from "@/lib/cache";
 
 const ACTIVE_POLL_MS = 15_000;
 const IDLE_POLL_MS = 45_000;
@@ -15,6 +16,16 @@ export async function GET() {
   const user = session.user as any;
   if (user.role !== "STUDENT") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const cacheKey = `student:live-sessions:${user.id}`;
+  const cached = await cacheGet<any>(cacheKey);
+  if (cached) {
+    return NextResponse.json(cached, {
+      headers: {
+        "Cache-Control": "private, no-store, max-age=0",
+      },
+    });
   }
 
   const now = new Date();
@@ -48,6 +59,7 @@ export async function GET() {
       const phase = deriveAttendancePhase(
         {
           status: sessionRow.status,
+          phase: sessionRow.phase,
           startedAt: sessionRow.startedAt,
           initialEndsAt: sessionRow.initialEndsAt,
           reverifyEndsAt: sessionRow.reverifyEndsAt,
@@ -64,17 +76,16 @@ export async function GET() {
     })
     .filter((sessionRow) => sessionRow.phase !== "CLOSED");
 
-  return NextResponse.json(
-    {
-      sessions: normalized,
-      polledAt: now.toISOString(),
-      nextPollMs: normalized.length > 0 ? ACTIVE_POLL_MS : IDLE_POLL_MS,
-    },
-    {
-      headers: {
-        "Cache-Control": "private, no-store, max-age=0",
-      },
-    }
-  );
-}
+  const payload = {
+    sessions: normalized,
+    polledAt: now.toISOString(),
+    nextPollMs: normalized.length > 0 ? ACTIVE_POLL_MS : IDLE_POLL_MS,
+  };
+  await cacheSet(cacheKey, payload, 2);
 
+  return NextResponse.json(payload, {
+    headers: {
+      "Cache-Control": "private, no-store, max-age=0",
+    },
+  });
+}

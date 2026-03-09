@@ -11,9 +11,12 @@ interface QrDisplayProps {
 
 export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const nextRotateAtRef = useRef<number>(Date.now() + 5000);
+  const nextRotateAtServerRef = useRef<number>(Date.now() + 5000);
   const rotationWindowRef = useRef<number>(5000);
   const clockOffsetRef = useRef<number>(0);
+  const pendingDataUrlRef = useRef<string | null>(null);
+  const pendingSequenceIdRef = useRef<string | null>(null);
+  const isFetchingRef = useRef(false);
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -26,7 +29,26 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
   const [brightnessBoost, setBrightnessBoost] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  const buildDataUrl = useCallback(async (payload: unknown) => {
+    const svg = await QRCode.toString(JSON.stringify(payload), {
+      type: "svg",
+      width: 1024,
+      margin: 4,
+      color: { dark: "#000000", light: "#FFFFFF" },
+      errorCorrectionLevel: "M",
+    });
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  }, []);
+
+  const bumpSequenceId = useCallback((value: string): string => {
+    const parsed = Number.parseInt(value.replace(/^E/i, ""), 10);
+    if (!Number.isFinite(parsed)) return value;
+    return `E${String(parsed + 1).padStart(3, "0")}`;
+  }, []);
+
   const fetchAndRender = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     try {
       const endpoint = mode === "port" ? "qr-port" : "qr";
       const res = await fetch(`/api/attendance/sessions/${sessionId}/${endpoint}`);
@@ -44,19 +66,14 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
         phaseEndsAt,
         sequenceId,
         nextSequenceId,
+        nextQr,
         cueColor,
         rotationMs,
       } = await res.json();
-      const payload = JSON.stringify(qr);
-
-      const svg = await QRCode.toString(payload, {
-        type: "svg",
-        width: 1024,
-        margin: 4,
-        color: { dark: "#000000", light: "#FFFFFF" },
-        errorCorrectionLevel: "M",
-      });
-      const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+      const [dataUrl, nextDataUrl] = await Promise.all([
+        buildDataUrl(qr),
+        buildDataUrl(nextQr ?? qr),
+      ]);
 
       setQrDataUrl(dataUrl);
       setPhase(phase);
@@ -76,37 +93,68 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
       }
 
       rotationWindowRef.current = safeRotationMs;
+      pendingDataUrlRef.current = nextDataUrl;
+      pendingSequenceIdRef.current = nextSequenceId ?? bumpSequenceId(sequenceId ?? "E000");
+
       if (typeof nextRotationAtTs === "number" && Number.isFinite(nextRotationAtTs)) {
-        nextRotateAtRef.current = nextRotationAtTs - clockOffsetRef.current;
+        nextRotateAtServerRef.current = nextRotationAtTs;
       } else {
-        nextRotateAtRef.current = Date.now() + safeNextRotationMs;
+        nextRotateAtServerRef.current =
+          Date.now() + clockOffsetRef.current + safeNextRotationMs;
       }
-      setCountdownMs(safeNextRotationMs);
+      setCountdownMs(
+        Math.max(
+          0,
+          nextRotateAtServerRef.current - (Date.now() + clockOffsetRef.current)
+        )
+      );
       setError("");
       setLoading(false);
     } catch (err: any) {
       setError(err.message);
       setLoading(false);
+    } finally {
+      isFetchingRef.current = false;
     }
-  }, [mode, sessionId]);
+  }, [bumpSequenceId, buildDataUrl, mode, sessionId]);
 
   useEffect(() => {
-    fetchAndRender();
-    const interval = setInterval(fetchAndRender, 2000);
-    return () => clearInterval(interval);
+    void fetchAndRender();
+    const heartbeat = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void fetchAndRender();
+      }
+    }, 15_000);
+    return () => window.clearInterval(heartbeat);
   }, [fetchAndRender]);
 
   useEffect(() => {
-    const ticker = setInterval(() => {
-      const now = Date.now();
-      while (nextRotateAtRef.current <= now) {
-        nextRotateAtRef.current += rotationWindowRef.current;
-      }
-      setCountdownMs(nextRotateAtRef.current - now);
-    }, 100);
+    const ticker = window.setInterval(() => {
+      const nowServer = Date.now() + clockOffsetRef.current;
+      const remainingMs = nextRotateAtServerRef.current - nowServer;
 
-    return () => clearInterval(ticker);
-  }, []);
+      if (remainingMs <= 0) {
+        const pendingDataUrl = pendingDataUrlRef.current;
+        const pendingSequenceId = pendingSequenceIdRef.current;
+        if (pendingDataUrl && pendingSequenceId) {
+          setQrDataUrl(pendingDataUrl);
+          setSequenceId(pendingSequenceId);
+          setNextSequenceId(bumpSequenceId(pendingSequenceId));
+          pendingDataUrlRef.current = null;
+          pendingSequenceIdRef.current = null;
+        }
+
+        nextRotateAtServerRef.current += rotationWindowRef.current;
+        setCountdownMs(0);
+        void fetchAndRender();
+        return;
+      }
+
+      setCountdownMs(remainingMs);
+    }, 50);
+
+    return () => window.clearInterval(ticker);
+  }, [bumpSequenceId, fetchAndRender]);
 
   useEffect(() => {
     const onFullScreenChange = () => {
@@ -168,7 +216,7 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
             Next: {nextSequenceId}
           </span>
           <span className={`rounded-md border px-2 py-1 text-xs font-medium ${cueStyles}`}>
-            Rotates in {(countdownMs / 1000).toFixed(1)}s
+            Rotates in {(Math.max(0, countdownMs) / 1000).toFixed(1)}s
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -211,7 +259,7 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
 
       <div className="space-y-1 text-center">
         <p className="text-xs font-medium text-foreground">
-          Phase: {phase === "INITIAL" ? "Initial Attendance" : phase === "REVERIFY" ? "Reverification" : "Closed"}
+          Phase: {phase === "INITIAL" ? "Phase 1" : phase === "REVERIFY" ? "Phase 2" : "Closed"}
         </p>
         {phaseEndsAt && (
           <p className="text-[11px] text-muted-foreground">

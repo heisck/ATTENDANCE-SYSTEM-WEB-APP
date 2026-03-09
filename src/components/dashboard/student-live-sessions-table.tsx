@@ -24,6 +24,12 @@ const DEFAULT_ACTIVE_POLL_MS = 15_000;
 const DEFAULT_IDLE_POLL_MS = 45_000;
 const ERROR_POLL_MS = 60_000;
 
+function phaseLabel(phase: LiveSession["phase"]) {
+  if (phase === "INITIAL") return "Phase 1";
+  if (phase === "REVERIFY") return "Phase 2";
+  return "Closed";
+}
+
 function withJitter(baseMs: number) {
   const delta = Math.round(baseMs * 0.15);
   return Math.max(5_000, baseMs + Math.round((Math.random() * 2 - 1) * delta));
@@ -153,7 +159,7 @@ export function StudentLiveSessionsTable({
           course: `${sessionItem.course.code} - ${sessionItem.course.name}`,
           phase: (
             <span className="inline-flex rounded-full border border-border px-2 py-0.5 text-xs font-medium">
-              {sessionItem.phase}
+              {phaseLabel(sessionItem.phase)}
             </span>
           ),
           started: new Date(sessionItem.startedAt).toLocaleTimeString(),

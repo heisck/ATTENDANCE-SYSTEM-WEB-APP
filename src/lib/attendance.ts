@@ -1,5 +1,6 @@
 import { AttendancePhase, ReverifyStatus, SessionStatus } from "@prisma/client";
 import { db } from "./db";
+import { CACHE_KEYS, cacheGet, cacheSet } from "./cache";
 import {
   formatQrSequenceId,
   getQrSequence,
@@ -7,9 +8,9 @@ import {
 } from "./qr";
 import { notifyStudentReverifySlot } from "./reverify-notifications";
 
-export const INITIAL_PHASE_MS = 60_000;
+export const INITIAL_PHASE_MS = 240_000;
 export const REVERIFY_PHASE_MS = 240_000;
-export const TOTAL_SESSION_MS = INITIAL_PHASE_MS + REVERIFY_PHASE_MS;
+export const TOTAL_SESSION_MS = Math.max(INITIAL_PHASE_MS, REVERIFY_PHASE_MS);
 export const QR_ROTATION_MS = 5_000;
 export const QR_GRACE_MS = 1_000;
 export const REVERIFY_MAX_ATTEMPTS = 3;
@@ -38,6 +39,21 @@ type ReverifySequenceBounds = {
   startSequence: number;
   endSequence: number;
   slotCount: number;
+};
+
+type SessionStateCacheRow = {
+  id: string;
+  status: SessionStatus;
+  phase: AttendancePhase;
+  startedAt: string;
+  closedAt: string | null;
+  initialEndsAt: string | null;
+  reverifyEndsAt: string | null;
+  qrRotationMs: number;
+  qrGraceMs: number;
+  reverifySelectionRate: number;
+  reverifySelectionDone: boolean;
+  reverifySelectedCount: number;
 };
 
 export type ReverifySlot = {
@@ -123,23 +139,47 @@ export function getDefaultInitialEndsAt(startedAt: Date): Date {
 }
 
 export function getDefaultReverifyEndsAt(startedAt: Date): Date {
-  return new Date(startedAt.getTime() + TOTAL_SESSION_MS);
+  return new Date(startedAt.getTime() + REVERIFY_PHASE_MS);
+}
+
+function serializeSessionStateRow(session: SessionStateRow): SessionStateCacheRow {
+  return {
+    ...session,
+    startedAt: session.startedAt.toISOString(),
+    closedAt: session.closedAt ? session.closedAt.toISOString() : null,
+    initialEndsAt: session.initialEndsAt ? session.initialEndsAt.toISOString() : null,
+    reverifyEndsAt: session.reverifyEndsAt ? session.reverifyEndsAt.toISOString() : null,
+  };
+}
+
+function deserializeSessionStateRow(session: SessionStateCacheRow): SessionStateRow {
+  return {
+    ...session,
+    startedAt: new Date(session.startedAt),
+    closedAt: session.closedAt ? new Date(session.closedAt) : null,
+    initialEndsAt: session.initialEndsAt ? new Date(session.initialEndsAt) : null,
+    reverifyEndsAt: session.reverifyEndsAt ? new Date(session.reverifyEndsAt) : null,
+  };
 }
 
 export function deriveAttendancePhase(
-  session: Pick<SessionStateRow, "status" | "startedAt" | "initialEndsAt" | "reverifyEndsAt">,
+  session: Pick<
+    SessionStateRow,
+    "status" | "phase" | "startedAt" | "initialEndsAt" | "reverifyEndsAt"
+  >,
   now: Date = new Date()
 ): AttendancePhase {
   if (session.status === "CLOSED") {
     return "CLOSED";
   }
 
-  const initialEndsAt = session.initialEndsAt ?? getDefaultInitialEndsAt(session.startedAt);
-  const reverifyEndsAt = session.reverifyEndsAt ?? getDefaultReverifyEndsAt(session.startedAt);
+  const phaseEndsAt =
+    session.phase === "REVERIFY"
+      ? session.reverifyEndsAt ?? getDefaultReverifyEndsAt(session.startedAt)
+      : session.initialEndsAt ?? getDefaultInitialEndsAt(session.startedAt);
 
-  if (now >= reverifyEndsAt) return "CLOSED";
-  if (now >= initialEndsAt) return "REVERIFY";
-  return "INITIAL";
+  if (now >= phaseEndsAt) return "CLOSED";
+  return session.phase;
 }
 
 export function computeAdaptiveSelectionCount(
@@ -450,6 +490,11 @@ export async function syncAttendanceSessionState(
   sessionId: string
 ): Promise<SessionStateRow | null> {
   const now = new Date();
+  const cacheKey = CACHE_KEYS.SESSION_STATE(sessionId);
+  const cached = await cacheGet<SessionStateCacheRow>(cacheKey);
+  if (cached) {
+    return deserializeSessionStateRow(cached);
+  }
 
   let session = await db.attendanceSession.findUnique({
     where: { id: sessionId },
@@ -471,11 +516,18 @@ export async function syncAttendanceSessionState(
 
   if (!session) return null;
 
-  const initialEndsAt = session.initialEndsAt ?? getDefaultInitialEndsAt(session.startedAt);
-  const reverifyEndsAt = session.reverifyEndsAt ?? getDefaultReverifyEndsAt(session.startedAt);
+  const initialEndsAt =
+    session.phase === "INITIAL"
+      ? session.initialEndsAt ?? getDefaultInitialEndsAt(session.startedAt)
+      : session.initialEndsAt;
+  const reverifyEndsAt =
+    session.phase === "REVERIFY"
+      ? session.reverifyEndsAt ?? getDefaultReverifyEndsAt(session.startedAt)
+      : session.reverifyEndsAt;
   const derivedPhase = deriveAttendancePhase(
     {
       status: session.status,
+      phase: session.phase,
       startedAt: session.startedAt,
       initialEndsAt,
       reverifyEndsAt,
@@ -491,8 +543,6 @@ export async function syncAttendanceSessionState(
     updateData.phase = "CLOSED";
     if (session.status !== "CLOSED") updateData.status = "CLOSED";
     if (!session.closedAt) updateData.closedAt = now;
-  } else if (session.phase !== derivedPhase) {
-    updateData.phase = derivedPhase;
   }
 
   if (Object.keys(updateData).length > 0) {
@@ -516,27 +566,8 @@ export async function syncAttendanceSessionState(
     });
   }
 
-  if (session.phase === "REVERIFY" && session.status === "ACTIVE") {
-    await ensureReverifySelection(sessionId, now);
-    await expirePendingReverify(session, now);
-
-    session = await db.attendanceSession.findUnique({
-      where: { id: sessionId },
-      select: {
-        id: true,
-        status: true,
-        phase: true,
-        startedAt: true,
-        closedAt: true,
-        initialEndsAt: true,
-        reverifyEndsAt: true,
-        qrRotationMs: true,
-        qrGraceMs: true,
-        reverifySelectionRate: true,
-        reverifySelectionDone: true,
-        reverifySelectedCount: true,
-      },
-    });
+  if (session) {
+    await cacheSet(cacheKey, serializeSessionStateRow(session), 2);
   }
 
   return session;
@@ -591,10 +622,17 @@ export async function allocateRetrySlot(
 export function getPhaseEndsAt(
   session: Pick<SessionStateRow, "phase" | "initialEndsAt" | "reverifyEndsAt" | "startedAt">
 ): Date {
+  if (session.phase === "REVERIFY") {
+    return session.reverifyEndsAt ?? getDefaultReverifyEndsAt(session.startedAt);
+  }
   if (session.phase === "INITIAL") {
     return session.initialEndsAt ?? getDefaultInitialEndsAt(session.startedAt);
   }
-  return session.reverifyEndsAt ?? getDefaultReverifyEndsAt(session.startedAt);
+  return (
+    session.reverifyEndsAt ??
+    session.initialEndsAt ??
+    getDefaultInitialEndsAt(session.startedAt)
+  );
 }
 
 export function isReverifyPending(status: ReverifyStatus): boolean {

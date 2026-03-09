@@ -43,8 +43,25 @@ export function generateQrPayload(
   nowTs: number = Date.now()
 ): QRPayload {
   const sequence = getQrSequence(nowTs, rotationMs);
+  return generateQrPayloadForSequence(sessionId, secret, phase, sequence, rotationMs, nowTs);
+}
+
+export function generateQrPayloadForSequence(
+  sessionId: string,
+  secret: string,
+  phase: AttendancePhase,
+  sequence: number,
+  rotationMs: number = DEFAULT_BUCKET_INTERVAL_MS,
+  tsOverride?: number
+): QRPayload {
   const token = generatePhaseBoundQrToken(secret, phase, sequence);
-  return { sessionId, token, ts: nowTs, seq: sequence, phase };
+  return {
+    sessionId,
+    token,
+    ts: tsOverride ?? getQrSequenceStartTs(sequence, rotationMs),
+    seq: sequence,
+    phase,
+  };
 }
 
 function safeEqual(a: string, b: string): boolean {

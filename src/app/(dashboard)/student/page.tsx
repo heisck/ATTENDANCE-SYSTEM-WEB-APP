@@ -67,6 +67,7 @@ export default async function StudentDashboard() {
       phase: deriveAttendancePhase(
         {
           status: sessionItem.status,
+          phase: sessionItem.phase,
           startedAt: sessionItem.startedAt,
           initialEndsAt: sessionItem.initialEndsAt,
           reverifyEndsAt: sessionItem.reverifyEndsAt,

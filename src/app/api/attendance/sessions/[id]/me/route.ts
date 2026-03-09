@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import {
-  REVERIFY_SLOT_NOTIFY_LEAD_MS,
-  REVERIFY_MAX_ATTEMPTS,
-  REVERIFY_MAX_RETRIES,
-  getReverifyPromptAt,
-  getReverifySlotFromRecord,
-  getPhaseEndsAt,
-  syncAttendanceSessionState,
-} from "@/lib/attendance";
+import { getPhaseEndsAt, syncAttendanceSessionState } from "@/lib/attendance";
 import { getQrPortStatus } from "@/lib/qr-port";
 import { db } from "@/lib/db";
 import { getQrSequence } from "@/lib/qr";
+import { cacheGet, cacheSet } from "@/lib/cache";
 
 export async function GET(
   _request: NextRequest,
@@ -31,6 +24,12 @@ export async function GET(
   }
 
   const { id } = await params;
+  const cacheKey = `attendance:session-me:${id}:${user.id}`;
+  const cached = await cacheGet<any>(cacheKey);
+  if (cached) {
+    return NextResponse.json(cached);
+  }
+
   const syncedSession = await syncAttendanceSessionState(id);
   if (!syncedSession) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
@@ -71,71 +70,15 @@ export async function GET(
     select: {
       id: true,
       markedAt: true,
-      reverifyRequired: true,
-      reverifyStatus: true,
-      reverifyRequestedAt: true,
-      reverifyDeadlineAt: true,
-      reverifyAttemptCount: true,
-      reverifyRetryCount: true,
-      reverifyMarkedAt: true,
-      reverifyManualOverride: true,
       flagged: true,
+      confidence: true,
     },
   });
 
-  const canRequestRetry =
-    syncedSession.status === "ACTIVE" &&
-    syncedSession.phase === "REVERIFY" &&
-    !!record &&
-    record.reverifyStatus === "MISSED" &&
-    record.reverifyRetryCount < REVERIFY_MAX_RETRIES &&
-    record.reverifyAttemptCount < REVERIFY_MAX_ATTEMPTS;
-
   const currentSequence = getQrSequence(Date.now(), syncedSession.qrRotationMs);
   const qrPortStatus = await getQrPortStatus(id, user.id);
-  const slot = record
-    ? getReverifySlotFromRecord(
-        record.reverifyRequestedAt,
-        record.reverifyDeadlineAt,
-        syncedSession.qrRotationMs,
-        syncedSession.qrGraceMs
-      )
-    : null;
-  const promptAt = slot ? getReverifyPromptAt(slot.startsAt) : null;
 
-  let reverifyBatchNumber: number | null = null;
-  let reverifyTotalBatches: number | null = null;
-  if (slot) {
-    const slotRows = await db.attendanceRecord.findMany({
-      where: {
-        sessionId: id,
-        reverifyRequired: true,
-        reverifyStatus: {
-          in: ["PENDING", "RETRY_PENDING"],
-        },
-        reverifyRequestedAt: { not: null },
-      },
-      select: {
-        reverifyRequestedAt: true,
-      },
-      orderBy: { reverifyRequestedAt: "asc" },
-    });
-
-    const uniqueSlots = Array.from(
-      new Set(
-        slotRows
-          .map((row) => row.reverifyRequestedAt?.getTime() ?? 0)
-          .filter((value) => value > 0)
-      )
-    );
-    reverifyTotalBatches = uniqueSlots.length > 0 ? uniqueSlots.length : null;
-    if (reverifyTotalBatches) {
-      const idx = uniqueSlots.findIndex((value) => value === slot.startsAt.getTime());
-      reverifyBatchNumber = idx >= 0 ? idx + 1 : null;
-    }
-  }
-
-  return NextResponse.json({
+  const payload = {
     serverNow: new Date().toISOString(),
     session: {
       id: syncedSession.id,
@@ -148,27 +91,14 @@ export async function GET(
     attendance: record
       ? {
           id: record.id,
-          initialMarkedAt: record.markedAt,
-          reverifyRequired: record.reverifyRequired,
-          reverifyStatus: record.reverifyStatus,
-          reverifyRequestedAt: record.reverifyRequestedAt,
-          reverifyDeadlineAt: record.reverifyDeadlineAt,
-          reverifySlotStartsAt: slot?.startsAt ?? null,
-          reverifySlotEndsAt: slot?.endsAt ?? null,
-          reverifyTargetSequence: slot?.sequence ?? null,
-          reverifyTargetSequenceId: slot?.sequenceId ?? null,
-          reverifyPromptAt: promptAt,
-          reverifyNotifyLeadMs: REVERIFY_SLOT_NOTIFY_LEAD_MS,
-          reverifyBatchNumber,
-          reverifyTotalBatches,
-          reverifyAttemptCount: record.reverifyAttemptCount,
-          reverifyRetryCount: record.reverifyRetryCount,
-          reverifyMarkedAt: record.reverifyMarkedAt,
-          reverifyManualOverride: record.reverifyManualOverride,
+          markedAt: record.markedAt,
           flagged: record.flagged,
-          canRequestRetry,
+          confidence: record.confidence,
         }
       : null,
     qrPortStatus,
-  });
+  };
+
+  await cacheSet(cacheKey, payload, 2);
+  return NextResponse.json(payload);
 }

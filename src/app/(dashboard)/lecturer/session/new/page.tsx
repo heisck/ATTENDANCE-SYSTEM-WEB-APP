@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { GpsCheck } from "@/components/gps-check";
-import { CheckCircle2, Loader2, MapPin, Play, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Loader2, Play, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import ElasticSlider from "@/components/ui/elastic-slider";
 import { PageHeader } from "@/components/dashboard/page-header";
 
 interface Course {
@@ -14,12 +12,18 @@ interface Course {
   name: string;
 }
 
+type AttendancePhase = "INITIAL" | "REVERIFY";
+
+const phaseLabels: Record<AttendancePhase, string> = {
+  INITIAL: "Phase 1 (Opening)",
+  REVERIFY: "Phase 2 (Closing)",
+};
+
 export default function NewSessionPage() {
   const router = useRouter();
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseCode, setCourseCode] = useState("");
-  const [gps, setGps] = useState<{ lat: number; lng: number } | null>(null);
-  const [radius, setRadius] = useState(500);
+  const [phase, setPhase] = useState<AttendancePhase>("INITIAL");
   const [loading, setLoading] = useState(false);
   const normalizedCourseCode = courseCode.trim().toUpperCase();
   const selectedCourse = courses.find((course) => course.code === normalizedCourseCode) ?? null;
@@ -34,24 +38,20 @@ export default function NewSessionPage() {
   }, []);
 
   async function handleStart() {
-    if (!courseCode.trim() || !gps) return;
+    if (!courseCode.trim()) return;
 
     setLoading(true);
-
     try {
       const res = await fetch("/api/attendance/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           courseCode: courseCode.trim().toUpperCase(),
-          gpsLat: gps.lat,
-          gpsLng: gps.lng,
-          radiusMeters: radius,
+          phase,
         }),
       });
 
       const data = await res.json();
-
       if (!res.ok) {
         if (res.status === 409 && data.sessionId) {
           router.push(`/lecturer/session/${data.sessionId}`);
@@ -73,7 +73,7 @@ export default function NewSessionPage() {
       <PageHeader
         eyebrow="Lecturer"
         title="Start Attendance Session"
-        description="Create a new session and display the QR code for students."
+        description="Select course and phase, then launch the 4-minute rotating QR session."
       />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
@@ -100,31 +100,30 @@ export default function NewSessionPage() {
             </p>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Radius and GPS accuracy: {radius}m</label>
-            <ElasticSlider
-              className="pb-4"
-              startingValue={50}
-              defaultValue={radius}
-              value={radius}
-              maxValue={2000}
-              valueFormatter={(value) => `${Math.round(value)}m`}
-              onValueChange={(value) => setRadius(Math.round(value))}
-            />
-            <p className="text-xs text-muted-foreground">
-              Students must be within this distance, and both you and students must calibrate GPS
-              until accuracy is &lt;= {radius}m.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Capture session location</p>
-            <GpsCheck onLocationReady={(lat, lng) => setGps({ lat, lng })} maxAccuracyMeters={radius} />
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Attendance Phase</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {(["INITIAL", "REVERIFY"] as AttendancePhase[]).map((phaseKey) => (
+                <button
+                  key={phaseKey}
+                  type="button"
+                  onClick={() => setPhase(phaseKey)}
+                  className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+                    phase === phaseKey
+                      ? "border-primary bg-primary/10"
+                      : "border-border/70 bg-background/40 hover:bg-accent"
+                  }`}
+                >
+                  <p className="text-sm font-semibold">{phaseLabels[phaseKey]}</p>
+                  <p className="text-xs text-muted-foreground">Duration: 4 minutes</p>
+                </button>
+              ))}
+            </div>
           </div>
 
           <button
             onClick={handleStart}
-            disabled={!courseCode.trim() || !gps || loading}
+            disabled={!courseCode.trim() || loading}
             className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {loading ? (
@@ -151,24 +150,15 @@ export default function NewSessionPage() {
                 </p>
               </div>
               <div className="rounded-xl border border-border/70 bg-muted/25 p-3">
-                <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Radius</p>
-                <p className="mt-1 text-sm font-medium">{radius} meters</p>
+                <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Phase</p>
+                <p className="mt-1 inline-flex items-center gap-2 text-sm font-medium">
+                  <CheckCircle2 className="h-4 w-4 text-foreground" />
+                  {phaseLabels[phase]}
+                </p>
               </div>
               <div className="rounded-xl border border-border/70 bg-muted/25 p-3">
-                <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Lecturer GPS</p>
-                <p className="mt-1 inline-flex items-center gap-2 text-sm font-medium">
-                  {gps ? (
-                    <>
-                      <CheckCircle2 className="h-4 w-4 text-foreground" />
-                      Ready
-                    </>
-                  ) : (
-                    <>
-                      <MapPin className="h-4 w-4 text-muted-foreground" />
-                      Waiting for location
-                    </>
-                  )}
-                </p>
+                <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Timer</p>
+                <p className="mt-1 text-sm font-medium">QR rotates every 5 seconds for 4 minutes</p>
               </div>
             </div>
           </section>
@@ -180,8 +170,8 @@ export default function NewSessionPage() {
             </h3>
             <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
               <li>Keep this tab open so students can scan the rotating QR code.</li>
-              <li>Use an accurate GPS fix at your lecture location.</li>
-              <li>Verify course code carefully before launching the session.</li>
+              <li>Select the correct phase before you launch.</li>
+              <li>Use Phase 1 at class start and Phase 2 near class end.</li>
             </ul>
           </section>
         </aside>

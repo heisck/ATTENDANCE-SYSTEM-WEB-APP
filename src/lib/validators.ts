@@ -31,17 +31,15 @@ export const registerSchema = z.object({
 
 export const createSessionSchema = z.object({
   courseCode: z.string().min(1, "Course code is required"),
-  gpsLat: z.number().min(-90).max(90),
-  gpsLng: z.number().min(-180).max(180),
-  radiusMeters: z.number().min(50).max(5000).default(500),
+  phase: z.enum(["INITIAL", "REVERIFY"]).default("INITIAL"),
 });
 
 export const markAttendanceSchema = z.object({
   sessionId: z.string().min(1),
   qrToken: z.string().min(1),
   qrTimestamp: z.number(),
-  gpsLat: z.number().min(-90).max(90),
-  gpsLng: z.number().min(-180).max(180),
+  gpsLat: z.number().min(-90).max(90).optional(),
+  gpsLng: z.number().min(-180).max(180).optional(),
   gpsAccuracy: z.number().optional(),
 });
 

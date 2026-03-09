@@ -5,12 +5,12 @@ import { db } from "@/lib/db";
 import { syncAttendanceSessionState } from "@/lib/attendance";
 import { markAttendanceSchema } from "@/lib/validators";
 import { verifyQrTokenStrict } from "@/lib/qr";
-import { isWithinRadius, checkGpsVelocityAnomaly, checkLocationJumpPattern } from "@/lib/gps";
 import { calculateConfidence, isFlagged } from "@/lib/confidence";
 import { logError, ApiErrorMessages } from "@/lib/api-error";
 import {
   checkRateLimit,
   cacheGet,
+  cacheGetOrCompute,
   cacheSet,
   cacheDel,
   CACHE_KEYS,
@@ -36,7 +36,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const parsed = markAttendanceSchema.parse(body);
-    const now = new Date();
 
     // Continuous scan UX may submit multiple rotating tokens while waiting for a valid frame.
     // Keep a guardrail but allow short bursts from mobile cameras.
@@ -78,9 +77,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const credentialCount = await db.webAuthnCredential.count({
-      where: { userId: session.user.id },
-    });
+    const credentialCacheKey = `attendance:credential-count:${session.user.id}`;
+    let credentialCount = await cacheGet<number>(credentialCacheKey);
+    if (credentialCount === null) {
+      credentialCount = await db.webAuthnCredential.count({
+        where: { userId: session.user.id },
+      });
+      await cacheSet(credentialCacheKey, credentialCount, 600);
+    }
 
     if (credentialCount === 0) {
       return NextResponse.json(
@@ -104,13 +108,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Session is no longer active" }, { status: 410 });
     }
 
-    if (syncedSession.phase !== "INITIAL") {
-      return NextResponse.json(
-        { error: "Initial attendance window is closed. Wait for reverification prompts." },
-        { status: 410 }
-      );
-    }
-
     const serverNowTs = Date.now();
     const maxScanAgeMs = syncedSession.qrRotationMs + syncedSession.qrGraceMs;
     const scanAgeMs = serverNowTs - scanTimestamp;
@@ -121,23 +118,50 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const attendanceSession = await db.attendanceSession.findUnique({
-      where: { id: parsed.sessionId },
-      include: {
-        course: {
-          include: {
-            organization: true,
-            enrollments: { where: { studentId: session.user.id } },
+    const attendanceSession = await cacheGetOrCompute(
+      `attendance:mark-session:${parsed.sessionId}`,
+      60,
+      async () =>
+        db.attendanceSession.findUnique({
+          where: { id: parsed.sessionId },
+          select: {
+            id: true,
+            courseId: true,
+            qrSecret: true,
+            gpsLat: true,
+            gpsLng: true,
+            radiusMeters: true,
+            course: {
+              select: {
+                organization: {
+                  select: {
+                    settings: true,
+                  },
+                },
+              },
+            },
           },
-        },
-      },
-    });
+        })
+    );
 
     if (!attendanceSession) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
-    if (attendanceSession.course.enrollments.length === 0) {
+    const enrollmentCacheKey = `attendance:enrollment:${parsed.sessionId}:${session.user.id}`;
+    let isEnrolled = await cacheGet<boolean>(enrollmentCacheKey);
+    if (isEnrolled === null) {
+      const enrollmentCount = await db.enrollment.count({
+        where: {
+          courseId: attendanceSession.courseId,
+          studentId: session.user.id,
+        },
+      });
+      isEnrolled = enrollmentCount > 0;
+      await cacheSet(enrollmentCacheKey, isEnrolled, 60);
+    }
+
+    if (!isEnrolled) {
       return NextResponse.json({ error: "You are not enrolled in this course" }, { status: 403 });
     }
 
@@ -159,7 +183,7 @@ export async function POST(request: NextRequest) {
     const qrValid = verifyQrTokenStrict(
       attendanceSession.qrSecret,
       parsed.qrToken,
-      "INITIAL",
+      syncedSession.phase,
       serverNowTs,
       syncedSession.qrRotationMs,
       syncedSession.qrGraceMs
@@ -171,13 +195,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const gpsResult = isWithinRadius(
-      parsed.gpsLat,
-      parsed.gpsLng,
-      attendanceSession.gpsLat,
-      attendanceSession.gpsLng,
-      attendanceSession.radiusMeters
-    );
+    const gpsLat = typeof parsed.gpsLat === "number" ? parsed.gpsLat : 0;
+    const gpsLng = typeof parsed.gpsLng === "number" ? parsed.gpsLng : 0;
 
     const webauthnUsed = body.webauthnVerified === true;
     const userAgent = request.headers.get("user-agent") ?? "";
@@ -219,21 +238,6 @@ export async function POST(request: NextRequest) {
     const deviceConsistency = await getDeviceConsistencyScore(session.user.id, deviceToken);
     const deviceMismatch = deviceConsistency < 50 && !deviceLinkResult.trustedAt;
 
-    // GPS velocity anomaly detection
-    const velocityCheck = await checkGpsVelocityAnomaly(
-      session.user.id,
-      parsed.gpsLat,
-      parsed.gpsLng,
-      now
-    );
-
-    // Location jump detection
-    const jumpCheck = await checkLocationJumpPattern(
-      session.user.id,
-      parsed.gpsLat,
-      parsed.gpsLng
-    );
-
     // Get BLE stats if available
     const bleStats = rawDeviceToken
       ? await getDeviceBleStats(deviceLinkResult.id)
@@ -242,29 +246,28 @@ export async function POST(request: NextRequest) {
     // Enhanced confidence calculation with all security layers
     const confidence = calculateConfidence({
       webauthnVerified: webauthnUsed,
-      gpsWithinRadius: gpsResult.within,
+      gpsWithinRadius: true,
       qrTokenValid: qrValid,
       bleProximityVerified: bleStats.verificationCount > 0,
       bleSignalStrength: body.bleSignalStrength,
-      gpsVelocityAnomaly: velocityCheck.anomalyDetected,
+      gpsVelocityAnomaly: false,
       deviceConsistency,
       deviceMismatch,
-      locationJump: jumpCheck.jump,
+      locationJump: false,
     });
 
     const settings = attendanceSession.course.organization.settings as any;
     const threshold = settings?.confidenceThreshold || 70;
-    const hasAnomalies =
-      velocityCheck.anomalyDetected || jumpCheck.jump || deviceMismatch;
+    const hasAnomalies = deviceMismatch;
     const flagged = isFlagged(confidence, threshold, hasAnomalies);
 
     const record = await db.attendanceRecord.create({
       data: {
         sessionId: parsed.sessionId,
         studentId: session.user.id,
-        gpsLat: parsed.gpsLat,
-        gpsLng: parsed.gpsLng,
-        gpsDistance: gpsResult.distance,
+        gpsLat,
+        gpsLng,
+        gpsDistance: 0,
         qrToken: parsed.qrToken,
         webauthnUsed,
         reverifyRequired: false,
@@ -275,7 +278,7 @@ export async function POST(request: NextRequest) {
         deviceToken,
         bleSignalStrength: body.bleSignalStrength,
         deviceConsistency,
-        gpsVelocity: velocityCheck.velocity,
+        gpsVelocity: null,
         anomalyScore: hasAnomalies ? Math.max(0, 100 - confidence) : 0,
       },
     });
@@ -283,32 +286,6 @@ export async function POST(request: NextRequest) {
     // Create anomaly records if detected
     if (hasAnomalies && flagged) {
       const anomalies = [];
-      if (velocityCheck.anomalyDetected) {
-        anomalies.push({
-          studentId: session.user.id,
-          sessionId: parsed.sessionId,
-          anomalyType: "VELOCITY_ANOMALY",
-          severity: velocityCheck.severity === "high" ? 80 : 50,
-          confidence: 0.85,
-          details: {
-            velocity: velocityCheck.velocity,
-            reason: velocityCheck.reason,
-          },
-        });
-      }
-      if (jumpCheck.jump) {
-        anomalies.push({
-          studentId: session.user.id,
-          sessionId: parsed.sessionId,
-          anomalyType: "LOCATION_JUMP",
-          severity: 75,
-          confidence: 0.9,
-          details: {
-            maxDistance: jumpCheck.maxDistanceMeters,
-            message: "Unusual location jump from historical average",
-          },
-        });
-      }
       if (deviceMismatch) {
         anomalies.push({
           studentId: session.user.id,
@@ -332,6 +309,10 @@ export async function POST(request: NextRequest) {
 
     // Invalidate session cache to update monitoring
     await cacheDel(CACHE_KEYS.SESSION_STATE(parsed.sessionId));
+    await cacheDel(`attendance:session-me:${parsed.sessionId}:${session.user.id}`);
+    await cacheDel(`attendance:sessions:list:STUDENT:${session.user.id}:ACTIVE`);
+    await cacheDel(`student:live-sessions:${session.user.id}`);
+    await cacheDel(`attendance:enrollment:${parsed.sessionId}:${session.user.id}`);
 
     return NextResponse.json({
       success: true,
@@ -342,14 +323,14 @@ export async function POST(request: NextRequest) {
         gpsDistance: record.gpsDistance,
         layers: {
           webauthn: webauthnUsed,
-          gps: gpsResult.within,
+          gps: true,
           qr: qrValid,
           ble: bleStats.verificationCount > 0,
           deviceConsistent: !deviceMismatch,
         },
         anomalies: {
-          velocityAnomaly: velocityCheck.anomalyDetected,
-          locationJump: jumpCheck.jump,
+          velocityAnomaly: false,
+          locationJump: false,
           deviceMismatch,
         },
       },

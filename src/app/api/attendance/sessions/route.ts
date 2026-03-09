@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   INITIAL_PHASE_MS,
-  TOTAL_SESSION_MS,
+  REVERIFY_PHASE_MS,
   getDefaultInitialEndsAt,
   getDefaultReverifyEndsAt,
   QR_GRACE_MS,
@@ -11,6 +11,7 @@ import {
 } from "@/lib/attendance";
 import { generateQrSecret } from "@/lib/qr";
 import { createSessionSchema } from "@/lib/validators";
+import { cacheDel, cacheGet, cacheSet } from "@/lib/cache";
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -57,19 +58,40 @@ export async function POST(request: NextRequest) {
       data: {
         courseId: course.id,
         lecturerId: user.id,
-        phase: "INITIAL",
+        phase: parsed.phase,
         startedAt,
-        initialEndsAt: getDefaultInitialEndsAt(startedAt),
-        reverifyEndsAt: getDefaultReverifyEndsAt(startedAt),
+        initialEndsAt:
+          parsed.phase === "INITIAL" ? getDefaultInitialEndsAt(startedAt) : null,
+        reverifyEndsAt:
+          parsed.phase === "REVERIFY" ? getDefaultReverifyEndsAt(startedAt) : null,
         qrRotationMs: QR_ROTATION_MS,
         qrGraceMs: QR_GRACE_MS,
-        gpsLat: parsed.gpsLat,
-        gpsLng: parsed.gpsLng,
-        radiusMeters: parsed.radiusMeters,
+        gpsLat: 0,
+        gpsLng: 0,
+        radiusMeters: 0,
+        reverifySelectionDone: true,
         qrSecret: generateQrSecret(),
       },
       include: { course: true },
     });
+    await cacheDel(`attendance:sessions:list:LECTURER:${user.id}:ACTIVE`);
+    await cacheDel(`attendance:sessions:list:LECTURER:${user.id}:ALL`);
+    await cacheDel(`attendance:sessions:list:LECTURER:${user.id}:CLOSED`);
+
+    const enrollmentRows = await db.enrollment.findMany({
+      where: { courseId: course.id },
+      select: { studentId: true },
+    });
+    await Promise.all(
+      enrollmentRows.map((row) =>
+        Promise.all([
+          cacheDel(`attendance:sessions:list:STUDENT:${row.studentId}:ACTIVE`),
+          cacheDel(`attendance:sessions:list:STUDENT:${row.studentId}:ALL`),
+          cacheDel(`attendance:sessions:list:STUDENT:${row.studentId}:CLOSED`),
+          cacheDel(`student:live-sessions:${row.studentId}`),
+        ])
+      )
+    );
 
     return NextResponse.json(attendanceSession, { status: 201 });
   } catch (error: any) {
@@ -88,31 +110,38 @@ export async function GET(request: NextRequest) {
   }
 
   const user = session.user as any;
-  const now = new Date();
+  const statusFilter = new URL(request.url).searchParams.get("status")?.toUpperCase() || null;
+  const cacheKey = `attendance:sessions:list:${user.role}:${user.id}:${statusFilter ?? "ALL"}`;
+  const cached = await cacheGet<any[]>(cacheKey);
+  if (cached) {
+    return NextResponse.json(cached);
+  }
 
+  const now = new Date();
   await db.attendanceSession.updateMany({
     where: {
       status: "ACTIVE",
-      startedAt: { lt: new Date(now.getTime() - TOTAL_SESSION_MS) },
+      OR: [
+        {
+          phase: "INITIAL",
+          OR: [
+            { initialEndsAt: { lte: now } },
+            { initialEndsAt: null, startedAt: { lte: new Date(now.getTime() - INITIAL_PHASE_MS) } },
+          ],
+        },
+        {
+          phase: "REVERIFY",
+          OR: [
+            { reverifyEndsAt: { lte: now } },
+            { reverifyEndsAt: null, startedAt: { lte: new Date(now.getTime() - REVERIFY_PHASE_MS) } },
+          ],
+        },
+      ],
     },
     data: {
       status: "CLOSED",
       phase: "CLOSED",
       closedAt: now,
-    },
-  });
-
-  await db.attendanceSession.updateMany({
-    where: {
-      status: "ACTIVE",
-      phase: "INITIAL",
-      startedAt: {
-        lte: new Date(now.getTime() - INITIAL_PHASE_MS),
-        gt: new Date(now.getTime() - TOTAL_SESSION_MS),
-      },
-    },
-    data: {
-      phase: "REVERIFY",
     },
   });
 
@@ -123,7 +152,6 @@ export async function GET(request: NextRequest) {
         ? { course: { enrollments: { some: { studentId: user.id } } }, status: "ACTIVE" as const }
         : {};
 
-  const statusFilter = new URL(request.url).searchParams.get("status")?.toUpperCase() || null;
   const whereWithStatus: any = { ...where };
   if (statusFilter === "ACTIVE" || statusFilter === "CLOSED") {
     whereWithStatus.status = statusFilter;
@@ -143,13 +171,14 @@ export async function GET(request: NextRequest) {
   });
 
   if (user.role === "STUDENT") {
-    return NextResponse.json(
-      sessions.map((s) => {
-        const { records, ...rest } = s as any;
-        return { ...rest, hasMarked: Array.isArray(records) && records.length > 0 };
-      })
-    );
+    const payload = sessions.map((s) => {
+      const { records, ...rest } = s as any;
+      return { ...rest, hasMarked: Array.isArray(records) && records.length > 0 };
+    });
+    await cacheSet(cacheKey, payload, 2);
+    return NextResponse.json(payload);
   }
 
+  await cacheSet(cacheKey, sessions as any, 2);
   return NextResponse.json(sessions);
 }
