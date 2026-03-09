@@ -60,6 +60,27 @@ export async function GET(
     );
   }
 
+  if (syncedSession.status !== "ACTIVE") {
+    const currentSequence = getQrSequence(Date.now(), syncedSession.qrRotationMs);
+    return NextResponse.json(
+      {
+        error: "Session is no longer active",
+        serverNow: new Date().toISOString(),
+        session: {
+          id: syncedSession.id,
+          status: syncedSession.status,
+          phase: syncedSession.phase,
+          phaseEndsAt: getPhaseEndsAt(syncedSession),
+          currentSequenceId: `E${String(currentSequence).padStart(3, "0")}`,
+          nextSequenceId: `E${String(currentSequence + 1).padStart(3, "0")}`,
+        },
+        attendance: null,
+        qrPortStatus: null,
+      },
+      { status: 410 }
+    );
+  }
+
   const record = await db.attendanceRecord.findUnique({
     where: {
       sessionId_studentId: {

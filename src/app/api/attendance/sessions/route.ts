@@ -11,7 +11,12 @@ import {
 } from "@/lib/attendance";
 import { generateQrSecret } from "@/lib/qr";
 import { createSessionSchema } from "@/lib/validators";
-import { cacheDel, cacheGet, cacheSet } from "@/lib/cache";
+import { cacheDel, cacheGet, cacheInvalidatePattern, cacheSet } from "@/lib/cache";
+import {
+  buildDefaultBeaconName,
+  clearSessionBleBroadcast,
+  setSessionBleBroadcast,
+} from "@/lib/lecturer-ble";
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -70,10 +75,32 @@ export async function POST(request: NextRequest) {
         gpsLng: 0,
         radiusMeters: 0,
         reverifySelectionDone: true,
+        relayEnabled: parsed.enableBle,
+        relayOpenTime: parsed.enableBle ? startedAt : null,
         qrSecret: generateQrSecret(),
       },
       include: { course: true },
     });
+
+    if (parsed.enableBle) {
+      const phaseEndsAt =
+        parsed.phase === "REVERIFY"
+          ? attendanceSession.reverifyEndsAt ?? getDefaultReverifyEndsAt(startedAt)
+          : attendanceSession.initialEndsAt ?? getDefaultInitialEndsAt(startedAt);
+
+      const beaconName = buildDefaultBeaconName({
+        courseCode: course.code,
+        sessionId: attendanceSession.id,
+        phase: parsed.phase,
+      });
+
+      await setSessionBleBroadcast(attendanceSession.id, {
+        lecturerId: user.id,
+        beaconName,
+        startedAt,
+        expiresAt: phaseEndsAt,
+      });
+    }
     await cacheDel(`attendance:sessions:list:LECTURER:${user.id}:ACTIVE`);
     await cacheDel(`attendance:sessions:list:LECTURER:${user.id}:ALL`);
     await cacheDel(`attendance:sessions:list:LECTURER:${user.id}:CLOSED`);
@@ -118,6 +145,29 @@ export async function GET(request: NextRequest) {
   }
 
   const now = new Date();
+  const autoClosableSessions = await db.attendanceSession.findMany({
+    where: {
+      status: "ACTIVE",
+      OR: [
+        {
+          phase: "INITIAL",
+          OR: [
+            { initialEndsAt: { lte: now } },
+            { initialEndsAt: null, startedAt: { lte: new Date(now.getTime() - INITIAL_PHASE_MS) } },
+          ],
+        },
+        {
+          phase: "REVERIFY",
+          OR: [
+            { reverifyEndsAt: { lte: now } },
+            { reverifyEndsAt: null, startedAt: { lte: new Date(now.getTime() - REVERIFY_PHASE_MS) } },
+          ],
+        },
+      ],
+    },
+    select: { id: true },
+  });
+
   await db.attendanceSession.updateMany({
     where: {
       status: "ACTIVE",
@@ -142,8 +192,18 @@ export async function GET(request: NextRequest) {
       status: "CLOSED",
       phase: "CLOSED",
       closedAt: now,
+      relayEnabled: false,
     },
   });
+  await Promise.all(
+    autoClosableSessions.map((item) =>
+      Promise.all([
+        clearSessionBleBroadcast(item.id),
+        cacheInvalidatePattern(`attendance:session-me:${item.id}:*`),
+        cacheInvalidatePattern(`attendance:enrollment:${item.id}:*`),
+      ])
+    )
+  );
 
   const where =
     user.role === "LECTURER"

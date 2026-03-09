@@ -32,6 +32,7 @@ export const registerSchema = z.object({
 export const createSessionSchema = z.object({
   courseCode: z.string().min(1, "Course code is required"),
   phase: z.enum(["INITIAL", "REVERIFY"]).default("INITIAL"),
+  enableBle: z.boolean().optional().default(false),
 });
 
 export const markAttendanceSchema = z.object({

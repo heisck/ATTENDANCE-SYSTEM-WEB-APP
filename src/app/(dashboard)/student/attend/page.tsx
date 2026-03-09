@@ -7,10 +7,22 @@ import { toast } from "sonner";
 import { QrScanner, type QrScanPayload, type QrScanResult } from "@/components/qr-scanner";
 import { QrDisplay } from "@/components/qr-display";
 import { WebAuthnPrompt } from "@/components/webauthn-prompt";
-import { CheckCircle2, Fingerprint, Loader2, QrCode, Share2, XCircle } from "lucide-react";
+import { ATTENDANCE_BLE } from "@/lib/ble-spec";
+import {
+  Bluetooth,
+  CheckCircle2,
+  Fingerprint,
+  Loader2,
+  QrCode,
+  Radio,
+  RefreshCw,
+  Share2,
+  XCircle,
+} from "lucide-react";
 
 type Step = "webauthn" | "session" | "qr" | "result";
 type QrPortStatus = "PENDING" | "APPROVED" | "REJECTED" | null;
+type ScanMode = "QR" | "BLE";
 
 interface ActiveSession {
   id: string;
@@ -24,6 +36,7 @@ interface LayerResult {
   webauthn: boolean;
   gps: boolean;
   qr: boolean;
+  ble?: boolean;
   ip?: boolean;
 }
 
@@ -54,6 +67,30 @@ interface SessionSyncResponse {
     confidence: number;
   } | null;
   qrPortStatus?: QrPortStatus;
+}
+
+interface SessionBleState {
+  enabled: boolean;
+  active: boolean;
+  beaconName: string | null;
+  startedAt: string | null;
+  expiresAt: string | null;
+  serviceUuid: string;
+  currentTokenCharacteristicUuid: string;
+  sessionMetaCharacteristicUuid: string;
+  manufacturerCompanyId: number;
+  manufacturerDataHex: string | null;
+  phase: "INITIAL" | "REVERIFY" | "CLOSED";
+  phaseEndsAt: string;
+}
+
+interface BleScanTokenResult {
+  token: string;
+  sequence: number;
+  phase: "INITIAL" | "REVERIFY";
+  tokenTimestamp: number;
+  beaconName?: string;
+  signalStrength?: number;
 }
 
 const DEVICE_TOKEN_STORAGE_KEY = "attendanceiq:web-device-token:v1";
@@ -100,6 +137,8 @@ export default function AttendPage() {
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [syncState, setSyncState] = useState<SessionSyncResponse | null>(null);
+  const [sessionBle, setSessionBle] = useState<SessionBleState | null>(null);
+  const [scanMode, setScanMode] = useState<ScanMode>("QR");
   const [syncError, setSyncError] = useState<string | null>(null);
 
   const [requestingQrPort, setRequestingQrPort] = useState(false);
@@ -123,11 +162,43 @@ export default function AttendPage() {
       cache: "no-store",
     });
     const body = await res.json();
+    if (res.status === 410) {
+      setSyncState(body);
+      setQrPortStatusLocal(body.qrPortStatus ?? null);
+      setSessionBle({
+        enabled: false,
+        active: false,
+        beaconName: null,
+        startedAt: null,
+        expiresAt: null,
+        serviceUuid: ATTENDANCE_BLE.SERVICE_UUID,
+        currentTokenCharacteristicUuid: ATTENDANCE_BLE.CURRENT_TOKEN_CHAR_UUID,
+        sessionMetaCharacteristicUuid: ATTENDANCE_BLE.SESSION_META_CHAR_UUID,
+        manufacturerCompanyId: 0xffff,
+        manufacturerDataHex: null,
+        phase: "CLOSED",
+        phaseEndsAt: body?.session?.phaseEndsAt ?? new Date().toISOString(),
+      });
+      return body as SessionSyncResponse;
+    }
     if (!res.ok) throw new Error(body.error || "Failed to sync session");
     setSyncState(body);
     setQrPortStatusLocal(body.qrPortStatus ?? null);
     setSyncError(null);
     return body as SessionSyncResponse;
+  }, []);
+
+  const fetchSessionBle = useCallback(async (sessionId: string) => {
+    const res = await fetch(`/api/attendance/sessions/${sessionId}/ble`, {
+      cache: "no-store",
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      throw new Error(body.error || "Failed to sync BLE beacon state");
+    }
+    const payload = body as SessionBleState;
+    setSessionBle(payload);
+    return payload;
   }, []);
 
   const loadSessions = useCallback(async () => {
@@ -191,6 +262,24 @@ export default function AttendPage() {
       try {
         const body = await fetchSessionSync(activeSessionId);
         if (cancelled) return;
+
+        if (body.session.status !== "ACTIVE") {
+          setActiveSessionId(null);
+          if (step === "qr") {
+            setStep("session");
+            setSelectedSession(null);
+            void loadSessions();
+            toast.info("This session has ended. Select an active session to continue.");
+          }
+          return;
+        }
+
+        try {
+          await fetchSessionBle(activeSessionId);
+        } catch {
+          // Ignore transient BLE sync errors; fallback to QR remains available.
+        }
+        if (cancelled) return;
         if (body.attendance && result?.alreadyMarked) {
           setResult((current) =>
             current
@@ -215,7 +304,14 @@ export default function AttendPage() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [activeSessionId, fetchSessionSync, result?.alreadyMarked]);
+  }, [
+    activeSessionId,
+    fetchSessionBle,
+    fetchSessionSync,
+    loadSessions,
+    result?.alreadyMarked,
+    step,
+  ]);
 
   useEffect(() => {
     if (!syncError) return;
@@ -233,8 +329,10 @@ export default function AttendPage() {
         toast.info("Passkey is already verified.");
       }
     } else if (mode === "scan") {
-      if (step === "qr") {
+      if (step === "qr" && scanMode === "QR") {
         setInitialScanTrigger((value) => value + 1);
+      } else if (step === "qr" && scanMode === "BLE") {
+        toast.info("Use Search Beacon to scan lecturer Bluetooth.");
       } else {
         toast.info("Verify passkey and choose a session before scanning.");
       }
@@ -244,13 +342,13 @@ export default function AttendPage() {
     params.delete("mode");
     const query = params.toString();
     router.replace(query ? `/student/attend?${query}` : "/student/attend");
-  }, [router, searchParams, step, webauthnVerified]);
+  }, [router, scanMode, searchParams, step, webauthnVerified]);
 
   useEffect(() => {
-    if (step === "qr") {
+    if (step === "qr" && scanMode === "QR") {
       setInitialScanTrigger((value) => value + 1);
     }
-  }, [step]);
+  }, [scanMode, step]);
 
   const handleWebAuthnVerified = useCallback(() => {
     setWebauthnVerified(true);
@@ -261,6 +359,18 @@ export default function AttendPage() {
     async (session: ActiveSession) => {
       setSelectedSession(session);
       setActiveSessionId(session.id);
+      setScanMode("QR");
+
+      try {
+        const bleState = await fetchSessionBle(session.id);
+        if (bleState.enabled && bleState.active) {
+          const isAndroidDevice =
+            typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
+          setScanMode(isAndroidDevice ? "BLE" : "QR");
+        }
+      } catch {
+        setSessionBle(null);
+      }
 
       if (session.hasMarked) {
         try {
@@ -283,7 +393,7 @@ export default function AttendPage() {
       setResult(null);
       setStep("qr");
     },
-    [fetchSessionSync]
+    [fetchSessionBle, fetchSessionSync]
   );
 
   const handleInitialQrScan = useCallback(
@@ -365,6 +475,85 @@ export default function AttendPage() {
     [loadSessions, selectedSession, webauthnVerified]
   );
 
+  const submitBleAttendance = useCallback(
+    async (payload: {
+      sessionId: string;
+      token: string;
+      sequence: number;
+      phase: "INITIAL" | "REVERIFY";
+      tokenTimestamp: number;
+      beaconName?: string;
+      bleSignalStrength?: number;
+    }) => {
+      const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
+      const platform =
+        typeof navigator !== "undefined" && typeof navigator.platform === "string"
+          ? navigator.platform
+          : "Web";
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+      const language =
+        typeof navigator !== "undefined" ? navigator.language || "en-US" : "en-US";
+      const deviceToken = getOrCreateBrowserDeviceToken();
+
+      const res = await fetch("/api/attendance/ble-mark", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...payload,
+          webauthnVerified,
+          deviceToken,
+          deviceName: `${platform} Browser`,
+          deviceType: detectDeviceTypeFromUserAgent(userAgent),
+          osVersion: userAgent,
+          appVersion: "web",
+          deviceFingerprint: `${platform}|${language}|${timezone}`,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error(body?.error || "BLE attendance failed.");
+      }
+      return body;
+    },
+    [webauthnVerified]
+  );
+
+  const handleBleAttendance = useCallback(
+    async (params: BleScanTokenResult) => {
+      if (!selectedSession) {
+        toast.error("Select a session first.");
+        return;
+      }
+
+      try {
+        const body = await submitBleAttendance({
+          sessionId: selectedSession.id,
+          token: params.token,
+          sequence: params.sequence,
+          phase: params.phase,
+          tokenTimestamp: params.tokenTimestamp,
+          beaconName: params.beaconName,
+          bleSignalStrength: params.signalStrength,
+        });
+
+        setResult({
+          success: true,
+          confidence: body.record.confidence,
+          flagged: body.record.flagged,
+          gpsDistance: body.record.gpsDistance,
+          layers: body.record.layers,
+        });
+        setActiveSessionId(selectedSession.id);
+        setStep("result");
+        toast.success("Attendance marked successfully via Bluetooth beacon.");
+        void loadSessions();
+      } catch (error: any) {
+        toast.error(error.message || "Failed to mark attendance via Bluetooth");
+      }
+    },
+    [loadSessions, selectedSession, submitBleAttendance]
+  );
+
   const handleRequestQrPort = useCallback(async () => {
     if (!activeSessionId) return;
     setRequestingQrPort(true);
@@ -436,7 +625,7 @@ export default function AttendPage() {
       {hasDevice && !result && (
         <>
           <div className="flex flex-wrap items-center gap-3 text-sm">
-            <span className="status-chip-soft">Verify Passkey → Select Session → Scan QR</span>
+            <span className="status-chip-soft">Verify Passkey → Select Session → Scan QR or BLE Beacon</span>
           </div>
 
           {step === "webauthn" && (
@@ -487,18 +676,61 @@ export default function AttendPage() {
           )}
 
           {step === "qr" && (
-            <div
-              className="flex min-h-[60dvh] flex-col justify-center py-4 md:min-h-0 md:py-0"
-              ref={(el) => {
-                if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-              }}
-            >
-              <QrScanner
-                onScan={handleInitialQrScan}
-                openSignal={initialScanTrigger}
-                hideTriggerButton
-                description="Continuous scan is active. Invalid or expired codes will prompt you and keep scanning."
-              />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between rounded-md border border-border/70 bg-background/40 px-3 py-2">
+                <div className="text-sm font-medium">
+                  Mode:{" "}
+                  <span className="inline-flex items-center gap-1">
+                    {scanMode === "BLE" ? (
+                      <>
+                        <Bluetooth className="h-4 w-4" />
+                        Bluetooth
+                      </>
+                    ) : (
+                      <>
+                        <QrCode className="h-4 w-4" />
+                        QR Code
+                      </>
+                    )}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScanMode((current) => {
+                      if (!sessionBle?.enabled) return "QR";
+                      return current === "QR" ? "BLE" : "QR";
+                    });
+                  }}
+                  disabled={!sessionBle?.enabled}
+                  className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Switch
+                </button>
+              </div>
+
+              {scanMode === "BLE" ? (
+                <BleLecturerScanner
+                  sessionId={selectedSession?.id ?? ""}
+                  sessionBle={sessionBle}
+                  onMarked={handleBleAttendance}
+                />
+              ) : (
+                <div
+                  className="flex min-h-[60dvh] flex-col justify-center py-4 md:min-h-0 md:py-0"
+                  ref={(el) => {
+                    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }}
+                >
+                  <QrScanner
+                    onScan={handleInitialQrScan}
+                    openSignal={initialScanTrigger}
+                    hideTriggerButton
+                    description="Continuous scan is active. Invalid or expired codes will prompt you and keep scanning."
+                  />
+                </div>
+              )}
             </div>
           )}
         </>
@@ -544,9 +776,15 @@ export default function AttendPage() {
                     points={50}
                   />
                   <LayerRow
-                    icon={<QrCode className="h-4 w-4" />}
-                    label="Live QR Token"
-                    passed={result.layers.qr}
+                    icon={
+                      result.layers.ble ? (
+                        <Bluetooth className="h-4 w-4" />
+                      ) : (
+                        <QrCode className="h-4 w-4" />
+                      )
+                    }
+                    label={result.layers.ble ? "Lecturer BLE Beacon" : "Live QR Token"}
+                    passed={result.layers.ble || result.layers.qr}
                     points={50}
                   />
                 </div>
@@ -655,6 +893,217 @@ function LayerRow({
           <XCircle className="h-4 w-4 text-muted-foreground" />
         )}
       </div>
+    </div>
+  );
+}
+
+function BleLecturerScanner({
+  sessionId,
+  sessionBle,
+  onMarked,
+}: {
+  sessionId: string;
+  sessionBle: SessionBleState | null;
+  onMarked: (params: BleScanTokenResult) => void;
+}) {
+  const [supported, setSupported] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [tokenResult, setTokenResult] = useState<BleScanTokenResult | null>(null);
+
+  useEffect(() => {
+    const isSupported =
+      typeof window !== "undefined" &&
+      window.isSecureContext &&
+      typeof navigator !== "undefined" &&
+      Boolean((navigator as any).bluetooth);
+    setSupported(isSupported);
+  }, []);
+
+  const parseTokenCharacteristicValue = useCallback(
+    (value: DataView): BleScanTokenResult => {
+      const decoded = new TextDecoder().decode(
+        new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+      );
+      const parsed = JSON.parse(decoded) as Partial<BleScanTokenResult> & {
+        sessionId?: string;
+      };
+
+      if (!parsed || typeof parsed !== "object") {
+        throw new Error("Invalid token payload format from BLE characteristic.");
+      }
+
+      if (parsed.sessionId !== sessionId) {
+        throw new Error("Scanned BLE token belongs to a different session.");
+      }
+
+      if (
+        parsed.phase !== "INITIAL" &&
+        parsed.phase !== "REVERIFY"
+      ) {
+        throw new Error("BLE token payload has invalid phase.");
+      }
+      const tokenTimestamp =
+        typeof (parsed as any).tokenTimestamp === "number"
+          ? (parsed as any).tokenTimestamp
+          : typeof (parsed as any).ts === "number"
+            ? (parsed as any).ts
+            : Number.NaN;
+
+      if (
+        typeof parsed.token !== "string" ||
+        parsed.token.trim().length === 0 ||
+        typeof parsed.sequence !== "number" ||
+        !Number.isFinite(parsed.sequence) ||
+        !Number.isFinite(tokenTimestamp)
+      ) {
+        throw new Error("BLE token payload is incomplete.");
+      }
+
+      return {
+        token: parsed.token,
+        sequence: parsed.sequence,
+        phase: parsed.phase,
+        tokenTimestamp,
+      };
+    },
+    [sessionId]
+  );
+
+  useEffect(() => {
+    if (!sessionBle?.enabled) {
+      setSelectedName(null);
+      setTokenResult(null);
+    }
+  }, [sessionBle?.enabled]);
+
+  const handleSearch = useCallback(async () => {
+    if (!supported) {
+      toast.error("Web Bluetooth is not available on this device/browser.");
+      return;
+    }
+    if (!sessionBle?.beaconName || !sessionBle.serviceUuid) {
+      toast.error("BLE manifest is missing for this session. Use QR mode.");
+      return;
+    }
+
+    setSearching(true);
+    let gattServer: any = null;
+    try {
+      const bluetooth = (navigator as any).bluetooth;
+      // requestDevice only returns a selected device; it does not provide RSSI.
+      const device = await bluetooth.requestDevice({
+        filters: [
+          {
+            namePrefix: ATTENDANCE_BLE.NAME_PREFIX,
+            services: [sessionBle.serviceUuid],
+          },
+        ],
+        optionalServices: [sessionBle.serviceUuid],
+      });
+
+      const discoveredName =
+        typeof device?.name === "string" && device.name.trim().length > 0
+          ? device.name.trim()
+          : sessionBle.beaconName;
+
+      gattServer = await device.gatt?.connect();
+      if (!gattServer) {
+        throw new Error("Selected device does not expose a GATT server.");
+      }
+      const service = await gattServer.getPrimaryService(sessionBle.serviceUuid);
+      const tokenCharacteristic = await service.getCharacteristic(
+        sessionBle.currentTokenCharacteristicUuid
+      );
+      const tokenValue = await tokenCharacteristic.readValue();
+      const parsedToken = parseTokenCharacteristicValue(tokenValue);
+
+      setSelectedName(discoveredName);
+      setTokenResult({
+        ...parsedToken,
+        beaconName: discoveredName,
+      });
+      toast.success(`BLE token read from ${discoveredName}`);
+    } catch (error: any) {
+      if (error?.name !== "NotFoundError") {
+        toast.error(error?.message || "BLE scan/read failed.");
+      }
+    } finally {
+      if (gattServer?.connected && typeof gattServer.disconnect === "function") {
+        try {
+          gattServer.disconnect();
+        } catch {
+          // Best-effort disconnect.
+        }
+      }
+      setSearching(false);
+    }
+  }, [parseTokenCharacteristicValue, sessionBle, supported]);
+
+  if (!sessionBle?.enabled) {
+    return (
+      <div className="status-panel-subtle p-4 text-sm">
+        Lecturer BLE broadcast is not active for this session. Use QR scan.
+      </div>
+    );
+  }
+
+  if (!supported) {
+    return (
+      <div className="status-panel-subtle p-4 text-sm">
+        Web Bluetooth is unavailable on this device/browser. Use QR scan.
+      </div>
+    );
+  }
+
+  return (
+    <div className="surface space-y-3 p-4">
+      <p className="text-sm font-semibold">Scan Lecturer Bluetooth Beacon</p>
+      <p className="text-xs text-muted-foreground">
+        Discover a beacon with the attendance service UUID, then read the rotating token.
+      </p>
+      <div className="rounded-md border border-border/70 bg-background/40 p-3 text-xs">
+        Expected beacon name:{" "}
+        <span className="font-semibold">
+          {sessionBle.beaconName ?? "Not provided"}
+        </span>
+        <p className="mt-1 text-muted-foreground">
+          Service UUID: {sessionBle.serviceUuid}
+        </p>
+        <p className="text-muted-foreground">
+          Manufacturer: 0x{sessionBle.manufacturerCompanyId.toString(16).toUpperCase()} · Data: {sessionBle.manufacturerDataHex ?? "N/A"}
+        </p>
+      </div>
+      {!sessionBle.active ? (
+        <div className="status-panel-subtle p-3 text-xs">
+          Broadcaster heartbeat not seen yet. If lecturer uses external broadcaster, continue scanning anyway.
+        </div>
+      ) : null}
+      <button
+        type="button"
+        onClick={handleSearch}
+        disabled={searching}
+        className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+      >
+        {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radio className="h-4 w-4" />}
+        Scan Beacon
+      </button>
+
+      {selectedName && tokenResult ? (
+        <div className="space-y-3 rounded-md border border-border/70 bg-background/40 p-3">
+          <p className="text-sm font-medium">Selected: {selectedName}</p>
+          <p className="text-xs text-muted-foreground">
+            Token sequence: E{String(tokenResult.sequence).padStart(3, "0")} · {tokenResult.phase === "INITIAL" ? "Phase 1" : "Phase 2"}
+          </p>
+          <button
+            type="button"
+            onClick={() => onMarked(tokenResult)}
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            Mark Attendance via Bluetooth
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

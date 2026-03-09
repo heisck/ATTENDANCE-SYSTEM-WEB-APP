@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getPhaseEndsAt, syncAttendanceSessionState } from "@/lib/attendance";
 import { generateQrPayload } from "@/lib/qr";
-import { CACHE_KEYS, cacheDel } from "@/lib/cache";
+import { CACHE_KEYS, cacheDel, cacheInvalidatePattern } from "@/lib/cache";
+import { clearSessionBleBroadcast } from "@/lib/lecturer-ble";
 
 export async function GET(
   _request: NextRequest,
@@ -86,11 +87,23 @@ export async function PATCH(
 
   const updated = await db.attendanceSession.update({
     where: { id },
-    data: { status: "CLOSED", phase: "CLOSED", closedAt: new Date() },
+    data: {
+      status: "CLOSED",
+      phase: "CLOSED",
+      closedAt: new Date(),
+      relayEnabled: false,
+    },
   });
+  try {
+    await clearSessionBleBroadcast(id);
+  } catch (error) {
+    console.error("Failed to clear BLE broadcast during session close:", error);
+  }
   await cacheDel(`attendance:session-meta:${id}`);
   await cacheDel(`attendance:session-secret:${id}`);
   await cacheDel(CACHE_KEYS.SESSION_STATE(id));
+  await cacheInvalidatePattern(`attendance:session-me:${id}:*`);
+  await cacheInvalidatePattern(`attendance:enrollment:${id}:*`);
   await cacheDel(`attendance:sessions:list:LECTURER:${user.id}:ACTIVE`);
   await cacheDel(`attendance:sessions:list:LECTURER:${user.id}:ALL`);
   await cacheDel(`attendance:sessions:list:LECTURER:${user.id}:CLOSED`);

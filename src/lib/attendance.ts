@@ -1,6 +1,7 @@
 import { AttendancePhase, ReverifyStatus, SessionStatus } from "@prisma/client";
 import { db } from "./db";
 import { CACHE_KEYS, cacheGet, cacheSet } from "./cache";
+import { clearSessionBleBroadcast } from "./lecturer-ble";
 import {
   formatQrSequenceId,
   getQrSequence,
@@ -567,6 +568,9 @@ export async function syncAttendanceSessionState(
   }
 
   if (session) {
+    if (session.status === "CLOSED" || session.phase === "CLOSED") {
+      await clearSessionBleBroadcast(session.id);
+    }
     await cacheSet(cacheKey, serializeSessionStateRow(session), 2);
   }
 

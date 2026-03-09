@@ -2,7 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, Play, ShieldCheck } from "lucide-react";
+import {
+  Bluetooth,
+  CheckCircle2,
+  Loader2,
+  Play,
+  ShieldCheck,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/dashboard/page-header";
 
@@ -24,6 +30,7 @@ export default function NewSessionPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseCode, setCourseCode] = useState("");
   const [phase, setPhase] = useState<AttendancePhase>("INITIAL");
+  const [bleEnabled, setBleEnabled] = useState(true);
   const [loading, setLoading] = useState(false);
   const normalizedCourseCode = courseCode.trim().toUpperCase();
   const selectedCourse = courses.find((course) => course.code === normalizedCourseCode) ?? null;
@@ -42,13 +49,16 @@ export default function NewSessionPage() {
 
     setLoading(true);
     try {
+      const payload: Record<string, unknown> = {
+        courseCode: courseCode.trim().toUpperCase(),
+        phase,
+        enableBle: bleEnabled,
+      };
+
       const res = await fetch("/api/attendance/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          courseCode: courseCode.trim().toUpperCase(),
-          phase,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -121,6 +131,26 @@ export default function NewSessionPage() {
             </div>
           </div>
 
+          <div className="space-y-3 rounded-xl border border-border/70 bg-background/40 p-4">
+            <div className="flex items-center gap-2">
+              <Bluetooth className="h-4 w-4 text-muted-foreground" />
+              <p className="text-sm font-medium">Bluetooth Mode</p>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={bleEnabled}
+                onChange={(event) => setBleEnabled(event.target.checked)}
+                className="h-4 w-4 rounded border-border"
+              />
+              Enable BLE (requires Android broadcaster app heartbeat)
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Beacon identity is deterministic and generated as:
+              <span className="font-mono"> ATD-&lt;COURSE&gt;-P&lt;PH&gt;-&lt;ID&gt;</span>
+            </p>
+          </div>
+
           <button
             onClick={handleStart}
             disabled={!courseCode.trim() || loading}
@@ -159,6 +189,14 @@ export default function NewSessionPage() {
               <div className="rounded-xl border border-border/70 bg-muted/25 p-3">
                 <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Timer</p>
                 <p className="mt-1 text-sm font-medium">QR rotates every 5 seconds for 4 minutes</p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-muted/25 p-3">
+                <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">BLE</p>
+                <p className="mt-1 text-sm font-medium">
+                  {bleEnabled
+                    ? "Enabled (Android broadcaster required)"
+                    : "Disabled (QR mode available)"}
+                </p>
               </div>
             </div>
           </section>

@@ -1,7 +1,7 @@
 interface ConfidenceInput {
   webauthnVerified: boolean;
-  gpsWithinRadius: boolean;
-  qrTokenValid: boolean;
+  gpsWithinRadius: boolean | null | undefined;
+  qrTokenValid: boolean | null | undefined;
   // New security factors
   gpsVelocityAnomaly?: boolean;
   deviceConsistency?: number; // 0-100
@@ -31,16 +31,29 @@ const PENALTIES = {
  * Now includes dynamic weighting based on behavioral anomalies
  */
 export function calculateConfidence(input: ConfidenceInput): number {
-  let score = 0;
+  const layers = [
+    { weight: WEIGHTS.webauthn, value: input.webauthnVerified },
+    { weight: WEIGHTS.gps, value: input.gpsWithinRadius },
+    { weight: WEIGHTS.qr, value: input.qrTokenValid },
+    { weight: WEIGHTS.bleProximity, value: input.bleProximityVerified },
+  ] as const;
 
-  // Base layer scoring
-  if (input.webauthnVerified) score += WEIGHTS.webauthn;
-  if (input.gpsWithinRadius) score += WEIGHTS.gps;
-  if (input.qrTokenValid) score += WEIGHTS.qr;
-  if (input.bleProximityVerified) score += WEIGHTS.bleProximity;
+  let earnedBaseScore = 0;
+  let maxBaseScore = 0;
+  for (const layer of layers) {
+    if (layer.value === null || layer.value === undefined) {
+      continue;
+    }
+    maxBaseScore += layer.weight;
+    if (layer.value) {
+      earnedBaseScore += layer.weight;
+    }
+  }
+
+  let score = maxBaseScore > 0 ? (earnedBaseScore / maxBaseScore) * 100 : 0;
 
   // Device consistency factor (additional bonus)
-  if (input.deviceConsistency && input.deviceConsistency > 80) {
+  if (input.deviceConsistency !== undefined && input.deviceConsistency > 80) {
     score += 5; // Bonus for high device consistency
   }
 
@@ -60,6 +73,7 @@ export function calculateConfidence(input: ConfidenceInput): number {
   // BLE signal strength penalty
   if (
     input.bleSignalStrength !== undefined &&
+    input.bleSignalStrength !== null &&
     input.bleSignalStrength < -80 &&
     input.bleProximityVerified
   ) {
@@ -67,7 +81,7 @@ export function calculateConfidence(input: ConfidenceInput): number {
   }
 
   // Device consistency penalty
-  if (input.deviceConsistency && input.deviceConsistency < 50) {
+  if (input.deviceConsistency !== undefined && input.deviceConsistency < 50) {
     score += PENALTIES.lowDeviceConsistency;
   }
 
@@ -104,7 +118,13 @@ export function getConfidenceBreakdown(input: ConfidenceInput) {
       gpsVelocity: input.gpsVelocityAnomaly ? PENALTIES.gpsVelocityAnomaly : 0,
       deviceMismatch: input.deviceMismatch ? PENALTIES.deviceMismatch : 0,
       locationJump: input.locationJump ? PENALTIES.locationJump : 0,
-      bleSignalWeak: input.bleSignalStrength && input.bleSignalStrength < -80 ? PENALTIES.bleSignalWeak : 0,
+      bleSignalWeak:
+        input.bleProximityVerified &&
+        input.bleSignalStrength !== undefined &&
+        input.bleSignalStrength !== null &&
+        input.bleSignalStrength < -80
+          ? PENALTIES.bleSignalWeak
+          : 0,
     },
     deviceConsistency: input.deviceConsistency ?? 0,
   };

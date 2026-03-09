@@ -17,9 +17,15 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
   const pendingDataUrlRef = useRef<string | null>(null);
   const pendingSequenceIdRef = useRef<string | null>(null);
   const isFetchingRef = useRef(false);
+  const haltedRef = useRef(false);
+  const failureCountRef = useRef(0);
+  const retryTimerRef = useRef<number | null>(null);
+  const recoveryTimerRef = useRef<number | null>(null);
+  const latestFetchRef = useRef<(() => Promise<void>) | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [halted, setHalted] = useState(false);
   const [phase, setPhase] = useState<"INITIAL" | "REVERIFY" | "CLOSED">("INITIAL");
   const [phaseEndsAt, setPhaseEndsAt] = useState<string | null>(null);
   const [sequenceId, setSequenceId] = useState<string>("E000");
@@ -46,15 +52,102 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
     return `E${String(parsed + 1).padStart(3, "0")}`;
   }, []);
 
+  const clearRetryTimer = useCallback(() => {
+    if (retryTimerRef.current !== null) {
+      window.clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+  }, []);
+
+  const clearRecoveryTimer = useCallback(() => {
+    if (recoveryTimerRef.current !== null) {
+      window.clearTimeout(recoveryTimerRef.current);
+      recoveryTimerRef.current = null;
+    }
+  }, []);
+
   const fetchAndRender = useCallback(async () => {
     if (isFetchingRef.current) return;
+    if (haltedRef.current) return;
     isFetchingRef.current = true;
     try {
       const endpoint = mode === "port" ? "qr-port" : "qr";
       const res = await fetch(`/api/attendance/sessions/${sessionId}/${endpoint}`);
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to fetch QR");
+        let data: any = null;
+        try {
+          data = await res.json();
+        } catch {
+          data = null;
+        }
+        const message =
+          typeof data?.error === "string" ? data.error.toLowerCase() : "";
+        const isTerminalClientError = res.status >= 400 && res.status < 500;
+        const shouldHalt =
+          res.status === 410 ||
+          message.includes("closed") ||
+          message.includes("no longer active") ||
+          (mode === "port" && res.status === 403) ||
+          isTerminalClientError;
+
+        if (shouldHalt) {
+          haltedRef.current = true;
+          setHalted(true);
+          setCountdownMs(0);
+          failureCountRef.current = 0;
+          clearRetryTimer();
+          clearRecoveryTimer();
+        } else {
+          failureCountRef.current += 1;
+          if (failureCountRef.current >= 5) {
+            haltedRef.current = true;
+            setHalted(true);
+            setCountdownMs(0);
+            clearRetryTimer();
+            if (recoveryTimerRef.current === null) {
+              recoveryTimerRef.current = window.setTimeout(() => {
+                recoveryTimerRef.current = null;
+                haltedRef.current = false;
+                setHalted(false);
+                failureCountRef.current = 0;
+                const restartMs = rotationWindowRef.current;
+                nextRotateAtServerRef.current =
+                  Date.now() + clockOffsetRef.current + restartMs;
+                setCountdownMs(restartMs);
+                const latestFetch = latestFetchRef.current;
+                if (latestFetch) {
+                  void latestFetch();
+                }
+              }, 30_000);
+            }
+          } else {
+            const backoffMs = Math.min(
+              30_000,
+              1000 * 2 ** Math.max(0, failureCountRef.current - 1)
+            );
+            nextRotateAtServerRef.current =
+              Date.now() + clockOffsetRef.current + backoffMs;
+            setCountdownMs(backoffMs);
+            clearRetryTimer();
+            retryTimerRef.current = window.setTimeout(() => {
+              retryTimerRef.current = null;
+              if (haltedRef.current) return;
+              if (document.visibilityState === "visible") {
+                const latestFetch = latestFetchRef.current;
+                if (latestFetch) {
+                  void latestFetch();
+                }
+              }
+            }, backoffMs);
+          }
+        }
+        const fallbackMessage =
+          res.status >= 500
+            ? "Failed to fetch QR from server"
+            : "Failed to fetch QR";
+        throw new Error(
+          (typeof data?.error === "string" && data.error) || fallbackMessage
+        );
       }
 
       const {
@@ -109,6 +202,11 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
         )
       );
       setError("");
+      haltedRef.current = false;
+      setHalted(false);
+      failureCountRef.current = 0;
+      clearRetryTimer();
+      clearRecoveryTimer();
       setLoading(false);
     } catch (err: any) {
       setError(err.message);
@@ -116,20 +214,54 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
     } finally {
       isFetchingRef.current = false;
     }
-  }, [bumpSequenceId, buildDataUrl, mode, sessionId]);
+  }, [
+    bumpSequenceId,
+    buildDataUrl,
+    clearRecoveryTimer,
+    clearRetryTimer,
+    mode,
+    sessionId,
+  ]);
+
+  const handleRetry = useCallback(() => {
+    clearRetryTimer();
+    clearRecoveryTimer();
+    haltedRef.current = false;
+    setHalted(false);
+    failureCountRef.current = 0;
+    const restartMs = rotationWindowRef.current;
+    nextRotateAtServerRef.current = Date.now() + clockOffsetRef.current + restartMs;
+    setCountdownMs(restartMs);
+    setError("");
+    setLoading(true);
+    const latestFetch = latestFetchRef.current;
+    if (latestFetch) {
+      void latestFetch();
+    }
+  }, [clearRecoveryTimer, clearRetryTimer]);
+
+  useEffect(() => {
+    latestFetchRef.current = fetchAndRender;
+  }, [fetchAndRender]);
 
   useEffect(() => {
     void fetchAndRender();
     const heartbeat = window.setInterval(() => {
+      if (haltedRef.current) return;
       if (document.visibilityState === "visible") {
         void fetchAndRender();
       }
     }, 15_000);
-    return () => window.clearInterval(heartbeat);
-  }, [fetchAndRender]);
+    return () => {
+      window.clearInterval(heartbeat);
+      clearRetryTimer();
+      clearRecoveryTimer();
+    };
+  }, [clearRecoveryTimer, clearRetryTimer, fetchAndRender]);
 
   useEffect(() => {
     const ticker = window.setInterval(() => {
+      if (haltedRef.current) return;
       const nowServer = Date.now() + clockOffsetRef.current;
       const remainingMs = nextRotateAtServerRef.current - nowServer;
 
@@ -200,7 +332,18 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
   if (error) {
     return (
       <div className="mx-auto flex aspect-square w-full max-w-[560px] items-center justify-center rounded-2xl border border-destructive bg-destructive/5 p-4 text-center">
-        <p className="text-sm text-destructive">{error}</p>
+        <div className="space-y-2">
+          <p className="text-sm text-destructive">{error}</p>
+          {halted ? (
+            <button
+              type="button"
+              onClick={handleRetry}
+              className="inline-flex items-center justify-center rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent"
+            >
+              Retry
+            </button>
+          ) : null}
+        </div>
       </div>
     );
   }

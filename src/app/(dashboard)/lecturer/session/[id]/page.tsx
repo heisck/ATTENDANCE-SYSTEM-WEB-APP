@@ -4,7 +4,17 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { QrDisplay } from "@/components/qr-display";
 import { QrPortApprovalPanel } from "@/components/qr-port-approval-panel";
-import { Users, Clock, StopCircle, Loader2, AlertTriangle } from "lucide-react";
+import {
+  Users,
+  Clock,
+  StopCircle,
+  Loader2,
+  AlertTriangle,
+  Bluetooth,
+  RefreshCw,
+  Radio,
+} from "lucide-react";
+import { toast } from "sonner";
 
 interface SessionData {
   id: string;
@@ -23,6 +33,23 @@ interface SessionData {
   _count: { records: number };
 }
 
+interface BleStatus {
+  enabled: boolean;
+  active: boolean;
+  beaconName: string | null;
+  startedAt: string | null;
+  expiresAt: string | null;
+  lastHeartbeatAt: string | null;
+  broadcasterDeviceName?: string | null;
+  serviceUuid: string;
+  currentTokenCharacteristicUuid: string;
+  sessionMetaCharacteristicUuid: string;
+  manufacturerCompanyId: number;
+  manufacturerDataHex: string | null;
+  phase: "INITIAL" | "REVERIFY" | "CLOSED";
+  phaseEndsAt: string;
+}
+
 function getPhaseLabel(phase: SessionData["phase"]) {
   if (phase === "INITIAL") return "Phase 1";
   if (phase === "REVERIFY") return "Phase 2";
@@ -35,6 +62,8 @@ export default function SessionMonitorPage() {
   const sessionId = params.id as string;
 
   const [data, setData] = useState<SessionData | null>(null);
+  const [bleStatus, setBleStatus] = useState<BleStatus | null>(null);
+  const [bleBusy, setBleBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);
 
@@ -44,26 +73,132 @@ export default function SessionMonitorPage() {
       if (res.ok) {
         const body = await res.json();
         setData(body);
+        if (body.status !== "ACTIVE") {
+          setBleStatus({
+            enabled: false,
+            active: false,
+            beaconName: null,
+            startedAt: null,
+            expiresAt: null,
+            lastHeartbeatAt: null,
+            serviceUuid: "",
+            currentTokenCharacteristicUuid: "",
+            sessionMetaCharacteristicUuid: "",
+            phase: "CLOSED",
+            phaseEndsAt: new Date().toISOString(),
+            manufacturerCompanyId: 0xffff,
+            manufacturerDataHex: null,
+          });
+        }
       }
     } finally {
       setLoading(false);
     }
   }, [sessionId]);
 
+  const fetchBleStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/attendance/sessions/${sessionId}/ble`, {
+        cache: "no-store",
+      });
+      const body = await res.json();
+      if (!res.ok) return;
+      setBleStatus(body);
+    } catch {
+      // no-op
+    }
+  }, [sessionId]);
+
   useEffect(() => {
     void fetchSession();
-    const interval = setInterval(() => void fetchSession(), 5000);
-    return () => clearInterval(interval);
   }, [fetchSession]);
+
+  useEffect(() => {
+    if (data?.status !== "ACTIVE") return;
+
+    void fetchBleStatus();
+    const interval = window.setInterval(() => {
+      void fetchSession();
+      void fetchBleStatus();
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [data?.status, fetchBleStatus, fetchSession]);
+
+  async function handleStartBle() {
+    if (!data) return;
+    setBleBusy(true);
+    try {
+      const res = await fetch(`/api/attendance/sessions/${sessionId}/ble`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "start" }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error(body.error || "Failed to start BLE broadcast");
+      }
+      setBleStatus(body);
+      toast.success("Lecturer BLE beacon enabled.");
+    } catch (error: any) {
+      toast.error(error.message || "Unable to start BLE beacon");
+    } finally {
+      setBleBusy(false);
+    }
+  }
+
+  async function handleStopBle() {
+    setBleBusy(true);
+    try {
+      const res = await fetch(`/api/attendance/sessions/${sessionId}/ble`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "stop" }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error(body.error || "Failed to stop BLE broadcast");
+      }
+      setBleStatus(body);
+      toast.success("Lecturer BLE beacon stopped.");
+    } catch (error: any) {
+      toast.error(error.message || "Unable to stop BLE beacon");
+    } finally {
+      setBleBusy(false);
+    }
+  }
 
   async function handleClose() {
     if (!confirm("Are you sure you want to close this session?")) return;
 
     setClosing(true);
     try {
-      await fetch(`/api/attendance/sessions/${sessionId}`, { method: "PATCH" });
+      const res = await fetch(`/api/attendance/sessions/${sessionId}`, {
+        method: "PATCH",
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body?.error || "Failed to close session");
+      }
+      await fetchSession();
+      setBleStatus({
+        enabled: false,
+        active: false,
+        beaconName: null,
+        startedAt: null,
+        expiresAt: null,
+        lastHeartbeatAt: null,
+        serviceUuid: "",
+        currentTokenCharacteristicUuid: "",
+        sessionMetaCharacteristicUuid: "",
+        phase: "CLOSED",
+        phaseEndsAt: new Date().toISOString(),
+        manufacturerCompanyId: 0xffff,
+        manufacturerDataHex: null,
+      });
+      toast.success("Session closed.");
       router.push("/lecturer");
-    } catch {
+    } catch (error: any) {
+      toast.error(error?.message || "Unable to close session");
       setClosing(false);
     }
   }
@@ -132,6 +267,100 @@ export default function SessionMonitorPage() {
           <div className="surface space-y-4 p-4 sm:p-5">
             <h2 className="text-lg font-semibold">Live QR Code</h2>
             <QrDisplay sessionId={sessionId} />
+
+            <div className="rounded-xl border border-border/70 bg-background/40 p-3">
+              <div className="mb-2 flex items-center gap-2">
+                <Bluetooth className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-semibold">Lecturer BLE Broadcast</p>
+              </div>
+              {!bleStatus ? (
+                <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Loading BLE status...
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="status-panel-subtle text-xs">
+                    <p className="font-semibold">
+                      Expected Beacon Name: {bleStatus.beaconName ?? "Not available"}
+                    </p>
+                    <p className="text-muted-foreground">Service UUID: {bleStatus.serviceUuid}</p>
+                    <p className="text-muted-foreground">
+                      Token Char: {bleStatus.currentTokenCharacteristicUuid}
+                    </p>
+                    <p className="text-muted-foreground">
+                      Meta Char: {bleStatus.sessionMetaCharacteristicUuid}
+                    </p>
+                    <p className="text-muted-foreground">
+                      Manufacturer: 0x{bleStatus.manufacturerCompanyId.toString(16).toUpperCase()} · Data: {bleStatus.manufacturerDataHex ?? "N/A"}
+                    </p>
+                  </div>
+                  {bleStatus.enabled ? (
+                    <div className="status-panel-subtle text-xs">
+                      <p className="font-semibold">
+                        Android Broadcaster: {bleStatus.active ? "Active" : "No heartbeat yet"}
+                      </p>
+                      {!bleStatus.active ? (
+                        <p className="text-muted-foreground">
+                          If broadcaster is external and not sending heartbeat, students can still try BLE scan.
+                        </p>
+                      ) : null}
+                      {bleStatus.broadcasterDeviceName ? (
+                        <p className="text-muted-foreground">
+                          Device: {bleStatus.broadcasterDeviceName}
+                        </p>
+                      ) : null}
+                      {bleStatus.lastHeartbeatAt ? (
+                        <p className="text-muted-foreground">
+                          Last heartbeat {new Date(bleStatus.lastHeartbeatAt).toLocaleTimeString()}
+                        </p>
+                      ) : null}
+                      {bleStatus.expiresAt ? (
+                        <p className="text-muted-foreground">
+                          BLE mode until {new Date(bleStatus.expiresAt).toLocaleTimeString()}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Beacon is currently off.
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleStartBle}
+                      disabled={bleBusy}
+                      className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+                    >
+                      {bleBusy ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Radio className="h-4 w-4" />
+                      )}
+                      Enable BLE Mode
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStopBle}
+                      disabled={bleBusy || !bleStatus?.enabled}
+                      className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+                    >
+                      Disable BLE Mode
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void fetchBleStatus()}
+                      disabled={bleBusy}
+                      className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
