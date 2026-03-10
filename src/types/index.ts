@@ -47,9 +47,6 @@ declare module "next-auth" {
 }
 
 export interface OrganizationSettings {
-  campusLat: number;
-  campusLng: number;
-  defaultRadiusMeters: number;
   confidenceThreshold: number;
 }
 
@@ -61,17 +58,10 @@ export interface QRPayload {
   phase: AttendancePhase;
 }
 
-export interface GPSCoordinates {
-  latitude: number;
-  longitude: number;
-  accuracy?: number;
-}
-
 export interface AttendanceVerification {
   webauthnVerified: boolean;
-  gpsWithinRadius: boolean;
-  gpsDistance: number;
   qrTokenValid: boolean;
+  bleProximityVerified?: boolean;
   confidence: number;
   flagged: boolean;
 }

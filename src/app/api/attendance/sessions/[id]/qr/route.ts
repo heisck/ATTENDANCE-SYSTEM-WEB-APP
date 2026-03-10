@@ -76,7 +76,7 @@ export async function GET(
   );
   const sequenceId = formatQrSequenceId(currentSequence);
   const nextSequenceId = formatQrSequenceId(nextSequence);
-  const cueColor = syncedSession.phase === "REVERIFY" ? "blue" : "green";
+  const cueColor = syncedSession.phase === "PHASE_TWO" ? "blue" : "green";
 
   const payload = {
     qr,

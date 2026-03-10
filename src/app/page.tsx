@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { QrCode, MapPin, Fingerprint } from "lucide-react";
+import { QrCode, Bluetooth, Fingerprint } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 export default function HomePage() {
@@ -40,9 +40,9 @@ export default function HomePage() {
               <span className="text-primary">Verified & Secure</span>
             </h1>
             <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
-              4-layer verification ensures every student is physically present.
-              WebAuthn biometrics, GPS proximity, rotating QR codes, and network
-              validation -- all working together.
+              Multi-layer verification ensures every student is physically present.
+              WebAuthn passkeys, rotating QR tokens, and live BLE beacon validation
+              work together in real time.
             </p>
             <div className="mt-10 flex items-center justify-center gap-4">
               <Link
@@ -78,9 +78,9 @@ export default function HomePage() {
                 score="+40 pts"
               />
               <FeatureCard
-                icon={<MapPin className="h-8 w-8" />}
-                title="GPS Proximity"
-                description="Haversine distance check ensures students are within campus radius of the session."
+                icon={<Bluetooth className="h-8 w-8" />}
+                title="BLE Proximity"
+                description="Connectable attendance beacon advertises live session tokens for fast nearby verification."
                 score="+30 pts"
               />
               <FeatureCard
@@ -91,8 +91,8 @@ export default function HomePage() {
               />
               <FeatureCard
                 icon={<Image src="/icon1.png" alt="" width={32} height={32} className="rounded logo-mark" />}
-                title="Network Validation"
-                description="Campus WiFi IP range verification adds contextual trust evidence."
+                title="Device Consistency"
+                description="Per-device trust signals reduce spoofing by tracking stable attendance device behavior."
                 score="+10 pts"
               />
             </div>

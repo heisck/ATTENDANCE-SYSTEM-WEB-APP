@@ -46,8 +46,7 @@ export async function GET() {
       status: true,
       phase: true,
       startedAt: true,
-      initialEndsAt: true,
-      reverifyEndsAt: true,
+      endsAt: true,
       course: { select: { code: true, name: true } },
     },
     orderBy: { startedAt: "desc" },
@@ -60,9 +59,7 @@ export async function GET() {
         {
           status: sessionRow.status,
           phase: sessionRow.phase,
-          startedAt: sessionRow.startedAt,
-          initialEndsAt: sessionRow.initialEndsAt,
-          reverifyEndsAt: sessionRow.reverifyEndsAt,
+          endsAt: sessionRow.endsAt,
         },
         now
       );

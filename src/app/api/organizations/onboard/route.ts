@@ -7,8 +7,6 @@ const onboardSchema = createOrganizationSchema.extend({
   adminName: z.string().min(2),
   adminEmail: z.string().email(),
   adminPassword: z.string().min(8),
-  campusLat: z.number().optional(),
-  campusLng: z.number().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -23,8 +21,6 @@ export async function POST(request: NextRequest) {
       adminName: parsed.adminName,
       adminEmail: parsed.adminEmail,
       adminPassword: parsed.adminPassword,
-      campusLat: parsed.campusLat,
-      campusLng: parsed.campusLng,
     });
 
     return NextResponse.json(

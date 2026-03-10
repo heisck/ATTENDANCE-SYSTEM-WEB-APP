@@ -1,4 +1,4 @@
-export type BleAttendancePhase = "INITIAL" | "REVERIFY" | "CLOSED";
+export type BleAttendancePhase = "PHASE_ONE" | "PHASE_TWO" | "CLOSED";
 
 export const ATTENDANCE_BLE = {
   NAME_PREFIX: "ATD-",
@@ -33,14 +33,14 @@ function toHexByte(value: number): string {
 }
 
 export function phaseToShortCode(phase: BleAttendancePhase): "P1" | "P2" | "PC" {
-  if (phase === "INITIAL") return "P1";
-  if (phase === "REVERIFY") return "P2";
+  if (phase === "PHASE_ONE") return "P1";
+  if (phase === "PHASE_TWO") return "P2";
   return "PC";
 }
 
 export function phaseToNumericCode(phase: BleAttendancePhase): number {
-  if (phase === "INITIAL") return 0x01;
-  if (phase === "REVERIFY") return 0x02;
+  if (phase === "PHASE_ONE") return 0x01;
+  if (phase === "PHASE_TWO") return 0x02;
   return 0x03;
 }
 

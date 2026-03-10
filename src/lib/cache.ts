@@ -57,7 +57,7 @@ function memoryIncrement(key: string, ttlSeconds: number): number {
   return next;
 }
 
-function useMemoryFallback() {
+function shouldUseMemoryFallback() {
   return !redisUrl;
 }
 
@@ -93,7 +93,6 @@ export const CACHE_KEYS = {
   SESSION_STATE: (sessionId: string) => `session:${sessionId}`,
   STUDENT_ATTENDANCE: (sessionId: string, studentId: string) =>
     `attendance:${sessionId}:${studentId}`,
-  REVERIFY_SELECTIONS: (sessionId: string) => `reverify:selections:${sessionId}`,
   RATE_LIMIT: (studentId: string, sessionId: string) => `ratelimit:${studentId}:${sessionId}`,
   DEVICE_FINGERPRINT: (studentId: string, deviceToken: string) =>
     `device:${studentId}:${deviceToken}`,
@@ -106,7 +105,6 @@ export const CACHE_KEYS = {
 
 export const CACHE_TTL = {
   SESSION_STATE: 300,
-  REVERIFY_SELECTIONS: 600,
   RATE_LIMIT: 60,
   DEVICE_FINGERPRINT: 3600,
   COURSE_ENROLLMENTS: 3600,
@@ -118,7 +116,7 @@ export const CACHE_TTL = {
 
 export async function cacheGet<T>(key: string): Promise<T | null> {
   const client = getRedis();
-  if (!client || useMemoryFallback()) {
+  if (!client || shouldUseMemoryFallback()) {
     const data = memoryGetRaw(key);
     if (!data) return null;
     try {
@@ -154,7 +152,7 @@ export async function cacheSet<T>(
   const payload = JSON.stringify(value);
   const client = getRedis();
 
-  if (!client || useMemoryFallback()) {
+  if (!client || shouldUseMemoryFallback()) {
     memorySetRaw(key, payload, ttlSeconds);
     return true;
   }
@@ -173,7 +171,7 @@ export async function cacheDel(key: string): Promise<boolean> {
   const client = getRedis();
   const memoryDeleted = memoryDelKey(key);
 
-  if (!client || useMemoryFallback()) {
+  if (!client || shouldUseMemoryFallback()) {
     return memoryDeleted;
   }
 
@@ -194,7 +192,7 @@ export async function cacheInvalidatePattern(pattern: string): Promise<number> {
     if (memoryDelKey(key)) memoryDeleted += 1;
   }
 
-  if (!client || useMemoryFallback()) {
+  if (!client || shouldUseMemoryFallback()) {
     return memoryDeleted;
   }
 
@@ -211,7 +209,7 @@ export async function cacheInvalidatePattern(pattern: string): Promise<number> {
 
 export async function cacheIncrement(key: string, ttlSeconds: number): Promise<number> {
   const client = getRedis();
-  if (!client || useMemoryFallback()) {
+  if (!client || shouldUseMemoryFallback()) {
     return memoryIncrement(key, ttlSeconds);
   }
 
@@ -249,7 +247,7 @@ export async function checkRateLimit(
 
 export async function cacheGetBatch<T>(keys: string[]): Promise<(T | null)[]> {
   const client = getRedis();
-  if (!client || useMemoryFallback()) {
+  if (!client || shouldUseMemoryFallback()) {
     return keys.map((key) => {
       const raw = memoryGetRaw(key);
       if (!raw) return null;
@@ -292,7 +290,7 @@ export async function cacheSetBatch<T>(
   items: Array<{ key: string; value: T; ttl: number }>
 ): Promise<number> {
   const client = getRedis();
-  if (!client || useMemoryFallback()) {
+  if (!client || shouldUseMemoryFallback()) {
     items.forEach(({ key, value, ttl }) => {
       memorySetRaw(key, JSON.stringify(value), ttl);
     });
@@ -338,7 +336,7 @@ export async function cacheGetOrCompute<T>(
 
 export async function cacheHealthCheck(): Promise<boolean> {
   const client = getRedis();
-  if (!client || useMemoryFallback()) {
+  if (!client || shouldUseMemoryFallback()) {
     return true;
   }
 

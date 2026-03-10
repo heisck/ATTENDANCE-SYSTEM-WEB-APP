@@ -21,19 +21,9 @@ enum SessionStatus {
 }
 
 enum AttendancePhase {
-  INITIAL
-  REVERIFY
+  PHASE_ONE
+  PHASE_TWO
   CLOSED
-}
-
-enum ReverifyStatus {
-  NOT_REQUIRED
-  PENDING
-  RETRY_PENDING
-  MISSED
-  PASSED
-  FAILED
-  MANUAL_PRESENT
 }
 
 enum SubscriptionPlan {
@@ -506,7 +496,6 @@ model NotificationPreference {
   classRemindersEnabled        Boolean  @default(true)
   assignmentRemindersEnabled   Boolean  @default(true)
   examRemindersEnabled         Boolean  @default(true)
-  reverifyPushEnabled          Boolean  @default(true)
   classReminderOffsetsMin      Int[]    @default([120, 60, 15])
   assignmentReminderOffsetsMin Int[]    @default([1440, 360, 120, 60])
   examReminderOffsetsMin       Int[]    @default([1440, 360, 60])
@@ -673,24 +662,17 @@ model Enrollment {
 }
 
 model AttendanceSession {
-  id                    String          @id @default(cuid())
-  courseId              String
-  lecturerId            String
-  status                SessionStatus   @default(ACTIVE)
-  phase                 AttendancePhase @default(INITIAL)
-  initialEndsAt         DateTime?
-  reverifyEndsAt        DateTime?
-  qrRotationMs          Int             @default(5000)
-  qrGraceMs             Int             @default(1000)
-  reverifySelectionRate Float           @default(0.3)
-  reverifySelectionDone Boolean         @default(false)
-  reverifySelectedCount Int             @default(0)
-  gpsLat                Float
-  gpsLng                Float
-  radiusMeters          Int             @default(500)
-  qrSecret              String
-  startedAt             DateTime        @default(now())
-  closedAt              DateTime?
+  id           String          @id @default(cuid())
+  courseId     String
+  lecturerId   String
+  status       SessionStatus   @default(ACTIVE)
+  phase        AttendancePhase @default(PHASE_ONE)
+  endsAt       DateTime
+  qrRotationMs Int             @default(5000)
+  qrGraceMs    Int             @default(1000)
+  qrSecret     String
+  startedAt    DateTime        @default(now())
+  closedAt     DateTime?
 
   // BLE relay configuration
   relayEnabled     Boolean   @default(false) // Lecturer enables relay functionality
@@ -712,33 +694,19 @@ model AttendanceSession {
 }
 
 model AttendanceRecord {
-  id                         String         @id @default(cuid())
-  sessionId                  String
-  studentId                  String
-  gpsLat                     Float
-  gpsLng                     Float
-  gpsDistance                Float
-  qrToken                    String
-  webauthnUsed               Boolean        @default(true)
-  reverifyRequired           Boolean        @default(false)
-  reverifyStatus             ReverifyStatus @default(NOT_REQUIRED)
-  reverifyRequestedAt        DateTime?
-  reverifyDeadlineAt         DateTime?
-  reverifyMarkedAt           DateTime?
-  reverifyAttemptCount       Int            @default(0)
-  reverifyRetryCount         Int            @default(0)
-  reverifyPasskeyUsed        Boolean        @default(false)
-  reverifyManualOverride     Boolean        @default(false)
-  reverifyManualOverriddenAt DateTime?
-  confidence                 Int
-  flagged                    Boolean        @default(false)
+  id           String  @id @default(cuid())
+  sessionId    String
+  studentId    String
+  qrToken      String
+  webauthnUsed Boolean @default(true)
+  confidence   Int
+  flagged      Boolean @default(false)
   // New device and security fields
-  deviceToken                String? // Which device submitted this
-  bleSignalStrength          Int? // RSSI value (-100 to -20, higher is stronger)
-  deviceConsistency          Float? // 0-100 score
-  gpsVelocity                Float? // Movement speed in m/s
-  anomalyScore               Float? // 0-100, higher = more suspicious
-  markedAt                   DateTime       @default(now())
+  deviceToken       String? // Which device submitted this
+  bleSignalStrength Int? // RSSI value (-100 to -20, higher is stronger)
+  deviceConsistency Float? // 0-100 score
+  anomalyScore      Float? // 0-100, higher = more suspicious
+  markedAt          DateTime @default(now())
 
   session     AttendanceSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   student     User                   @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -748,7 +716,6 @@ model AttendanceRecord {
   @@index([sessionId])
   @@index([studentId])
   @@index([flagged])
-  @@index([reverifyStatus])
   @@index([anomalyScore])
   @@index([deviceToken])
 }
@@ -758,7 +725,6 @@ model AuditLog {
   userId    String
   action    String
   metadata  Json     @default("{}")
-  ipAddress String
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -896,35 +862,10 @@ model UserDevice {
   @@index([bleSignature])
 }
 
-// Enhanced attendance records with device and velocity info
-model AttendanceRecordExtended {
-  id                 String    @id @default(cuid())
-  attendanceRecordId String    @unique // References AttendanceRecord.id
-  deviceToken        String? // Which device was used
-  bleSignalStrength  Int? // RSSI value from source device (-100 to -20)
-  deviceConsistency  Float? // Historical device match score (0-100)
-  gpsVelocity        Float? // Calculated movement speed (m/s)
-  lastLocationLat    Float? // Last known location for velocity
-  lastLocationLng    Float?
-  lastLocationTime   DateTime?
-  anomalyScore       Float? // 0-100, higher = more suspicious
-  anomalyFlags       String[] // Array of detected anomalies
-  locationJump       Boolean   @default(false) // Teleportation detected
-  velocityAnomaly    Boolean   @default(false) // Movement too fast
-  deviceMismatch     Boolean   @default(false) // Different device than usual
-  createdAt          DateTime  @default(now())
-
-  @@index([attendanceRecordId])
-  @@index([anomalyScore])
-}
-
 // Anomaly detection and security monitoring
 enum AnomalyType {
-  LOCATION_JUMP // Distance/time impossible
-  VELOCITY_ANOMALY // Moving too fast
   DEVICE_MISMATCH // Different device than normal
   RAPID_SUBMISSIONS // Too many attempts in short time
-  GPS_SPOOFING // Invalid movement pattern
   QR_REUSE // Same QR used by multiple students
   TIMEZONE_ANOMALY // Timestamp doesn't match timezone
   BEHAVIORAL_CHANGE // Unusual attendance pattern

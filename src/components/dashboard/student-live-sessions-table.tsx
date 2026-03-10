@@ -7,7 +7,7 @@ import { AttendanceTable } from "@/components/dashboard/attendance-table";
 
 type LiveSession = {
   id: string;
-  phase: "INITIAL" | "REVERIFY" | "CLOSED";
+  phase: "PHASE_ONE" | "PHASE_TWO" | "CLOSED";
   startedAt: string;
   course: {
     code: string;
@@ -25,8 +25,8 @@ const DEFAULT_IDLE_POLL_MS = 45_000;
 const ERROR_POLL_MS = 60_000;
 
 function phaseLabel(phase: LiveSession["phase"]) {
-  if (phase === "INITIAL") return "Phase 1";
-  if (phase === "REVERIFY") return "Phase 2";
+  if (phase === "PHASE_ONE") return "Phase 1";
+  if (phase === "PHASE_TWO") return "Phase 2";
   return "Closed";
 }
 

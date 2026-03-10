@@ -46,7 +46,6 @@ export async function POST(
           targetUserId: userId,
           targetUserEmail: targetUser.email,
         },
-        ipAddress: "not-collected",
       },
     });
 

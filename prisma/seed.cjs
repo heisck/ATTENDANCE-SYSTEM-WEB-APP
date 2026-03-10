@@ -10,7 +10,6 @@ const {
   GroupLeaderMode,
   AttendancePhase,
   SessionStatus,
-  ReverifyStatus,
   JobType,
   JobStatus,
 } = require("@prisma/client");
@@ -1044,59 +1043,33 @@ async function seedOrganization() {
         status: isActiveSession ? SessionStatus.ACTIVE : SessionStatus.CLOSED,
         phase: isActiveSession
           ? i % 2 === 0
-            ? AttendancePhase.INITIAL
-            : AttendancePhase.REVERIFY
+            ? AttendancePhase.PHASE_ONE
+            : AttendancePhase.PHASE_TWO
           : AttendancePhase.CLOSED,
-        initialEndsAt: addMinutes(startedAt, 1),
-        reverifyEndsAt: addMinutes(startedAt, 2),
+        endsAt: addMinutes(startedAt, 4),
         qrRotationMs: 5000,
         qrGraceMs: 1000,
-        reverifySelectionRate: 0.35,
-        reverifySelectionDone: i % 3 === 0,
-        reverifySelectedCount: 6,
-        gpsLat: 6.6745,
-        gpsLng: -1.5716,
-        radiusMeters: 320,
         qrSecret: `seed-qr-secret-${course.code}-${i}-${randomUUID()}`,
         startedAt,
-        closedAt: isActiveSession ? null : addMinutes(startedAt, 3),
+        closedAt: isActiveSession ? null : addMinutes(startedAt, 4),
       },
     });
 
     const courseStudentIds = (enrollmentByCourse.get(course.id) || []).slice(0, 10);
     for (let j = 0; j < courseStudentIds.length; j += 1) {
       const studentId = courseStudentIds[j];
-      const reverifyRequired = j % 3 === 0;
-      const reverifyPassed = j % 6 !== 0;
       await prisma.attendanceRecord.create({
         data: {
           sessionId: session.id,
           studentId,
-          gpsLat: 6.6745 + j * 0.00001,
-          gpsLng: -1.5716 + j * 0.00001,
-          gpsDistance: 15 + j * 3,
           qrToken: `seed-token-${session.id}-${studentId}`,
           webauthnUsed: true,
-          reverifyRequired,
-          reverifyStatus: reverifyRequired
-            ? reverifyPassed
-              ? ReverifyStatus.PASSED
-              : ReverifyStatus.MISSED
-            : ReverifyStatus.NOT_REQUIRED,
-          reverifyRequestedAt: reverifyRequired ? addMinutes(startedAt, 1) : null,
-          reverifyDeadlineAt: reverifyRequired ? addMinutes(startedAt, 2) : null,
-          reverifyMarkedAt: reverifyRequired && reverifyPassed ? addMinutes(startedAt, 2) : null,
-          reverifyAttemptCount: reverifyRequired ? 1 : 0,
-          reverifyRetryCount: reverifyRequired && !reverifyPassed ? 1 : 0,
-          reverifyPasskeyUsed: reverifyRequired && reverifyPassed,
-          reverifyManualOverride: false,
           confidence: Math.max(55, 96 - j * 3),
-          flagged: reverifyRequired && !reverifyPassed,
+          flagged: j % 6 === 0,
           deviceToken: `seed-device-${studentId.slice(-6)}`,
           bleSignalStrength: -45 - j,
           deviceConsistency: 78 + (j % 5),
-          gpsVelocity: 0.4 + j * 0.03,
-          anomalyScore: reverifyRequired && !reverifyPassed ? 68 : 18,
+          anomalyScore: j % 6 === 0 ? 68 : 18,
           markedAt: addMinutes(startedAt, 1),
         },
       });
@@ -1126,7 +1099,6 @@ async function seedOrganization() {
         classRemindersEnabled: true,
         assignmentRemindersEnabled: true,
         examRemindersEnabled: true,
-        reverifyPushEnabled: true,
         classReminderOffsetsMin: [120, 60, 15],
         assignmentReminderOffsetsMin: [1440, 360, 120, 60],
         examReminderOffsetsMin: [1440, 360, 60],

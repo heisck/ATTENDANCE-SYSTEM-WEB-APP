@@ -55,11 +55,8 @@ export async function GET(
   return NextResponse.json({
     ...attendanceSession,
     phase: syncedSession.phase,
-    initialEndsAt: syncedSession.initialEndsAt,
-    reverifyEndsAt: syncedSession.reverifyEndsAt,
+    endsAt: syncedSession.endsAt,
     phaseEndsAt: getPhaseEndsAt(syncedSession),
-    reverifySelectionDone: syncedSession.reverifySelectionDone,
-    reverifySelectedCount: syncedSession.reverifySelectedCount,
     qrSecret: undefined,
     qr,
   });

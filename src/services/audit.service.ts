@@ -3,11 +3,10 @@ import { db } from "@/lib/db";
 export async function createAuditLog(
   userId: string,
   action: string,
-  metadata: Record<string, any>,
-  ipAddress: string
+  metadata: Record<string, any>
 ) {
   return db.auditLog.create({
-    data: { userId, action, metadata, ipAddress },
+    data: { userId, action, metadata },
   });
 }
 

@@ -82,7 +82,6 @@ export async function GET(request: NextRequest) {
           select: {
             sessionId: true,
             flagged: true,
-            reverifyStatus: true,
             markedAt: true,
           },
         });
@@ -104,20 +103,12 @@ export async function GET(request: NextRequest) {
     const courseSessions = sessionsByCourse.get(course.id) ?? [];
     let attended = 0;
     let flagged = 0;
-    let reverifyPassed = 0;
-    let reverifyMissedOrFailed = 0;
 
     for (const sessionItem of courseSessions) {
       const record = recordBySessionId.get(sessionItem.id);
       if (!record) continue;
       attended += 1;
       if (record.flagged) flagged += 1;
-      if (record.reverifyStatus === "PASSED" || record.reverifyStatus === "MANUAL_PRESENT") {
-        reverifyPassed += 1;
-      }
-      if (record.reverifyStatus === "MISSED" || record.reverifyStatus === "FAILED") {
-        reverifyMissedOrFailed += 1;
-      }
     }
 
     const totalSessions = courseSessions.length;
@@ -134,8 +125,6 @@ export async function GET(request: NextRequest) {
       missed,
       attendanceRate,
       flaggedRecords: flagged,
-      reverifyPassed,
-      reverifyMissedOrFailed,
       atRisk,
     };
   });

@@ -22,6 +22,7 @@ import {
   getDeviceConsistencyScore,
 } from "@/lib/device-linking";
 import { getDeviceBleStats } from "@/lib/ble-verification";
+import { getStudentPhaseCompletionForCourseDay } from "@/lib/phase-completion";
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
 
     const credentialCacheKey = `attendance:credential-count:${session.user.id}`;
     let credentialCount = await cacheGet<number>(credentialCacheKey);
-    if (credentialCount === null) {
+    if (credentialCount == null) {
       credentialCount = await db.webAuthnCredential.count({
         where: { userId: session.user.id },
       });
@@ -128,9 +129,6 @@ export async function POST(request: NextRequest) {
             id: true,
             courseId: true,
             qrSecret: true,
-            gpsLat: true,
-            gpsLng: true,
-            radiusMeters: true,
             course: {
               select: {
                 organization: {
@@ -150,7 +148,7 @@ export async function POST(request: NextRequest) {
 
     const enrollmentCacheKey = `attendance:enrollment:${parsed.sessionId}:${session.user.id}`;
     let isEnrolled = await cacheGet<boolean>(enrollmentCacheKey);
-    if (isEnrolled === null) {
+    if (isEnrolled == null) {
       const enrollmentCount = await db.enrollment.count({
         where: {
           courseId: attendanceSession.courseId,
@@ -195,9 +193,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const gpsLat = typeof parsed.gpsLat === "number" ? parsed.gpsLat : 0;
-    const gpsLng = typeof parsed.gpsLng === "number" ? parsed.gpsLng : 0;
-
     const webauthnUsed = body.webauthnVerified === true;
     const userAgent = request.headers.get("user-agent") ?? "";
     const rawDeviceToken = typeof body.deviceToken === "string" ? body.deviceToken.trim() : "";
@@ -241,19 +236,16 @@ export async function POST(request: NextRequest) {
     // Get BLE stats if available
     const bleStats = rawDeviceToken
       ? await getDeviceBleStats(deviceLinkResult.id)
-      : { averageRssi: 0, verificationCount: 0, lastVerified: null, distanceMeters: 0 };
+      : { averageRssi: null, verificationCount: 0, lastVerified: null, distanceMeters: 0 };
 
     // Enhanced confidence calculation with all security layers
     const confidence = calculateConfidence({
       webauthnVerified: webauthnUsed,
-      gpsWithinRadius: true,
       qrTokenValid: qrValid,
       bleProximityVerified: bleStats.verificationCount > 0,
       bleSignalStrength: body.bleSignalStrength,
-      gpsVelocityAnomaly: false,
       deviceConsistency,
       deviceMismatch,
-      locationJump: false,
     });
 
     const settings = attendanceSession.course.organization.settings as any;
@@ -265,23 +257,35 @@ export async function POST(request: NextRequest) {
       data: {
         sessionId: parsed.sessionId,
         studentId: session.user.id,
-        gpsLat,
-        gpsLng,
-        gpsDistance: 0,
         qrToken: parsed.qrToken,
         webauthnUsed,
-        reverifyRequired: false,
-        reverifyStatus: "NOT_REQUIRED",
         confidence,
         flagged,
         // New security fields
         deviceToken,
         bleSignalStrength: body.bleSignalStrength,
         deviceConsistency,
-        gpsVelocity: null,
         anomalyScore: hasAnomalies ? Math.max(0, 100 - confidence) : 0,
       },
     });
+
+    let phaseCompletion: Awaited<
+      ReturnType<typeof getStudentPhaseCompletionForCourseDay>
+    > | null = null;
+    try {
+      phaseCompletion = await getStudentPhaseCompletionForCourseDay({
+        studentId: session.user.id,
+        courseId: attendanceSession.courseId,
+        referenceTime: syncedSession.startedAt,
+      });
+    } catch (phaseError) {
+      console.warn("[attendance/mark] phase completion lookup failed", {
+        studentId: session.user.id,
+        sessionId: parsed.sessionId,
+        courseId: attendanceSession.courseId,
+        error: phaseError instanceof Error ? phaseError.message : String(phaseError),
+      });
+    }
 
     // Create anomaly records if detected
     if (hasAnomalies && flagged) {
@@ -320,20 +324,17 @@ export async function POST(request: NextRequest) {
         id: record.id,
         confidence: record.confidence,
         flagged: record.flagged,
-        gpsDistance: record.gpsDistance,
         layers: {
           webauthn: webauthnUsed,
-          gps: true,
           qr: qrValid,
           ble: bleStats.verificationCount > 0,
           deviceConsistent: !deviceMismatch,
         },
         anomalies: {
-          velocityAnomaly: false,
-          locationJump: false,
           deviceMismatch,
         },
       },
+      phaseCompletion,
     });
   } catch (error: unknown) {
     if (error instanceof Error && error.name === "ZodError") {

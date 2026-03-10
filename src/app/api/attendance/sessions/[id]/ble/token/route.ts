@@ -9,7 +9,7 @@ import { getSessionBleBroadcast } from "@/lib/lecturer-ble";
 
 type TokenResponse = {
   sessionId: string;
-  phase: "INITIAL" | "REVERIFY" | "CLOSED";
+  phase: "PHASE_ONE" | "PHASE_TWO" | "CLOSED";
   phaseEndsAt: string;
   rotationMs: number;
   current: BleTokenPayload;
@@ -20,7 +20,7 @@ type TokenResponse = {
 
 function buildTokenPayload(input: {
   sessionId: string;
-  phase: "INITIAL" | "REVERIFY" | "CLOSED";
+  phase: "PHASE_ONE" | "PHASE_TWO" | "CLOSED";
   qrSecret: string;
   sequence: number;
   rotationMs: number;

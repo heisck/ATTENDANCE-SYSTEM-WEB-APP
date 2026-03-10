@@ -62,7 +62,6 @@ export async function POST(
           targetUserEmail: targetUser.email,
           credentialsDeleted: credentialCount,
         },
-        ipAddress: "not-collected",
       },
     });
 

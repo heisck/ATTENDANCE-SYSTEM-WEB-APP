@@ -31,7 +31,13 @@ export const registerSchema = z.object({
 
 export const createSessionSchema = z.object({
   courseCode: z.string().min(1, "Course code is required"),
-  phase: z.enum(["INITIAL", "REVERIFY"]).default("INITIAL"),
+  phase: z.preprocess((value) => {
+    if (typeof value !== "string") return value;
+    const normalized = value.trim().toUpperCase();
+    if (normalized === "INITIAL") return "PHASE_ONE";
+    if (normalized === "REVERIFY") return "PHASE_TWO";
+    return normalized;
+  }, z.enum(["PHASE_ONE", "PHASE_TWO"]).default("PHASE_ONE")),
   enableBle: z.boolean().optional().default(false),
 });
 
@@ -39,9 +45,6 @@ export const markAttendanceSchema = z.object({
   sessionId: z.string().min(1),
   qrToken: z.string().min(1),
   qrTimestamp: z.number(),
-  gpsLat: z.number().min(-90).max(90).optional(),
-  gpsLng: z.number().min(-180).max(180).optional(),
-  gpsAccuracy: z.number().optional(),
 });
 
 export const createCourseSchema = z.object({

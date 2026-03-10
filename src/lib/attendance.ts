@@ -1,45 +1,23 @@
-import { AttendancePhase, ReverifyStatus, SessionStatus } from "@prisma/client";
+import { AttendancePhase, SessionStatus } from "@prisma/client";
 import { db } from "./db";
 import { CACHE_KEYS, cacheGet, cacheSet } from "./cache";
 import { clearSessionBleBroadcast } from "./lecturer-ble";
-import {
-  formatQrSequenceId,
-  getQrSequence,
-  getQrSequenceStartTs,
-} from "./qr";
-import { notifyStudentReverifySlot } from "./reverify-notifications";
 
-export const INITIAL_PHASE_MS = 240_000;
-export const REVERIFY_PHASE_MS = 240_000;
-export const TOTAL_SESSION_MS = Math.max(INITIAL_PHASE_MS, REVERIFY_PHASE_MS);
+export const PHASE_DURATION_MS = 240_000;
+export const TOTAL_SESSION_MS = PHASE_DURATION_MS;
 export const QR_ROTATION_MS = 5_000;
 export const QR_GRACE_MS = 1_000;
-export const REVERIFY_MAX_ATTEMPTS = 3;
-export const REVERIFY_MAX_RETRIES = 2;
-export const REVERIFY_SAFETY_BUFFER_MS = 15_000;
-export const REVERIFY_SLOT_NOTIFY_LEAD_MS = 10_000;
-export const EXPECTED_RETRY_RATE = 0.35;
-export const EXPECTED_ATTEMPT_P95_MS = 9_000;
 
 type SessionStateRow = {
   id: string;
   status: SessionStatus;
   phase: AttendancePhase;
   startedAt: Date;
+  endsAt: Date;
   closedAt: Date | null;
-  initialEndsAt: Date | null;
-  reverifyEndsAt: Date | null;
+  relayEnabled: boolean;
   qrRotationMs: number;
   qrGraceMs: number;
-  reverifySelectionRate: number;
-  reverifySelectionDone: boolean;
-  reverifySelectedCount: number;
-};
-
-type ReverifySequenceBounds = {
-  startSequence: number;
-  endSequence: number;
-  slotCount: number;
 };
 
 type SessionStateCacheRow = {
@@ -47,444 +25,56 @@ type SessionStateCacheRow = {
   status: SessionStatus;
   phase: AttendancePhase;
   startedAt: string;
+  endsAt: string;
   closedAt: string | null;
-  initialEndsAt: string | null;
-  reverifyEndsAt: string | null;
+  relayEnabled: boolean;
   qrRotationMs: number;
   qrGraceMs: number;
-  reverifySelectionRate: number;
-  reverifySelectionDone: boolean;
-  reverifySelectedCount: number;
 };
 
-export type ReverifySlot = {
-  sequence: number;
-  sequenceId: string;
-  startsAt: Date;
-  endsAt: Date;
-};
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function shuffleItems<T>(items: T[]): T[] {
-  const arr = [...items];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-function getReverifySequenceBounds(
-  now: Date,
-  reverifyEndsAt: Date,
-  rotationMs: number,
-  graceMs: number
-): ReverifySequenceBounds | null {
-  const windowEndTs = reverifyEndsAt.getTime() - REVERIFY_SAFETY_BUFFER_MS;
-  const earliestStartTs = now.getTime() + REVERIFY_SLOT_NOTIFY_LEAD_MS;
-  const latestStartTs = windowEndTs - (rotationMs + graceMs);
-
-  if (latestStartTs < earliestStartTs) return null;
-
-  const startSequence = Math.ceil(earliestStartTs / rotationMs);
-  const endSequence = Math.floor(latestStartTs / rotationMs);
-  if (endSequence < startSequence) return null;
-
-  return {
-    startSequence,
-    endSequence,
-    slotCount: endSequence - startSequence + 1,
-  };
-}
-
-function buildSlotFromSequence(
-  sequence: number,
-  rotationMs: number,
-  graceMs: number
-): ReverifySlot {
-  const slotStartTs = getQrSequenceStartTs(sequence, rotationMs);
-  return {
-    sequence,
-    sequenceId: formatQrSequenceId(sequence),
-    startsAt: new Date(slotStartTs),
-    endsAt: new Date(slotStartTs + rotationMs + graceMs),
-  };
-}
-
-export function getReverifyPromptAt(slotStartsAt: Date): Date {
-  return new Date(slotStartsAt.getTime() - REVERIFY_SLOT_NOTIFY_LEAD_MS);
-}
-
-export function getReverifySlotFromRecord(
-  requestedAt: Date | null,
-  deadlineAt: Date | null,
-  rotationMs: number,
-  graceMs: number
-): ReverifySlot | null {
-  if (!requestedAt) return null;
-
-  const sequence = getQrSequence(requestedAt.getTime(), rotationMs);
-  return {
-    sequence,
-    sequenceId: formatQrSequenceId(sequence),
-    startsAt: requestedAt,
-    endsAt: deadlineAt ?? new Date(requestedAt.getTime() + rotationMs + graceMs),
-  };
-}
-
-export function getDefaultInitialEndsAt(startedAt: Date): Date {
-  return new Date(startedAt.getTime() + INITIAL_PHASE_MS);
-}
-
-export function getDefaultReverifyEndsAt(startedAt: Date): Date {
-  return new Date(startedAt.getTime() + REVERIFY_PHASE_MS);
+export function getDefaultSessionEndsAt(startedAt: Date): Date {
+  return new Date(startedAt.getTime() + PHASE_DURATION_MS);
 }
 
 function serializeSessionStateRow(session: SessionStateRow): SessionStateCacheRow {
   return {
-    ...session,
+    id: session.id,
+    status: session.status,
+    phase: session.phase,
     startedAt: session.startedAt.toISOString(),
+    endsAt: session.endsAt.toISOString(),
     closedAt: session.closedAt ? session.closedAt.toISOString() : null,
-    initialEndsAt: session.initialEndsAt ? session.initialEndsAt.toISOString() : null,
-    reverifyEndsAt: session.reverifyEndsAt ? session.reverifyEndsAt.toISOString() : null,
+    relayEnabled: session.relayEnabled,
+    qrRotationMs: session.qrRotationMs,
+    qrGraceMs: session.qrGraceMs,
   };
 }
 
 function deserializeSessionStateRow(session: SessionStateCacheRow): SessionStateRow {
   return {
-    ...session,
+    id: session.id,
+    status: session.status,
+    phase: session.phase,
     startedAt: new Date(session.startedAt),
+    endsAt: new Date(session.endsAt),
     closedAt: session.closedAt ? new Date(session.closedAt) : null,
-    initialEndsAt: session.initialEndsAt ? new Date(session.initialEndsAt) : null,
-    reverifyEndsAt: session.reverifyEndsAt ? new Date(session.reverifyEndsAt) : null,
+    relayEnabled: Boolean((session as Partial<SessionStateCacheRow>).relayEnabled),
+    qrRotationMs: session.qrRotationMs,
+    qrGraceMs: session.qrGraceMs,
   };
 }
 
 export function deriveAttendancePhase(
-  session: Pick<
-    SessionStateRow,
-    "status" | "phase" | "startedAt" | "initialEndsAt" | "reverifyEndsAt"
-  >,
+  session: Pick<SessionStateRow, "status" | "phase" | "endsAt">,
   now: Date = new Date()
 ): AttendancePhase {
   if (session.status === "CLOSED") {
     return "CLOSED";
   }
-
-  const phaseEndsAt =
-    session.phase === "REVERIFY"
-      ? session.reverifyEndsAt ?? getDefaultReverifyEndsAt(session.startedAt)
-      : session.initialEndsAt ?? getDefaultInitialEndsAt(session.startedAt);
-
-  if (now >= phaseEndsAt) return "CLOSED";
+  if (now >= session.endsAt) {
+    return "CLOSED";
+  }
   return session.phase;
-}
-
-export function computeAdaptiveSelectionCount(
-  eligibleCount: number,
-  selectionRate: number
-): number {
-  if (eligibleCount <= 0) return 0;
-
-  const normalizedRate = clamp(selectionRate, 0.05, 1);
-  const baseTarget = Math.max(1, Math.ceil(eligibleCount * normalizedRate));
-
-  const usableWindowMs = REVERIFY_PHASE_MS - REVERIFY_SAFETY_BUFFER_MS;
-  const totalAttemptCapacity = Math.max(
-    1,
-    Math.floor((usableWindowMs / EXPECTED_ATTEMPT_P95_MS) * 0.85)
-  );
-
-  const expectedAttemptsPerSelected =
-    1 + EXPECTED_RETRY_RATE + EXPECTED_RETRY_RATE * EXPECTED_RETRY_RATE;
-  const maxByCapacity = Math.max(
-    1,
-    Math.floor(totalAttemptCapacity / expectedAttemptsPerSelected)
-  );
-
-  return Math.min(eligibleCount, Math.min(baseTarget, maxByCapacity));
-}
-
-async function ensureReverifySelection(
-  sessionId: string,
-  now: Date
-): Promise<void> {
-  let scheduledNotifications: Array<{
-    studentId: string;
-    sequence: number;
-    slotStartsAt: Date;
-    slotEndsAt: Date;
-    batchNumber: number;
-    totalBatches: number;
-  }> = [];
-
-  await db.$transaction(async (tx) => {
-    const session = await tx.attendanceSession.findUnique({
-      where: { id: sessionId },
-      select: {
-        id: true,
-        status: true,
-        phase: true,
-        reverifySelectionDone: true,
-        reverifySelectionRate: true,
-        reverifyEndsAt: true,
-        qrRotationMs: true,
-        qrGraceMs: true,
-      },
-    });
-
-    if (!session) return;
-    if (session.status !== "ACTIVE" || session.phase !== "REVERIFY") return;
-    if (!session.reverifyEndsAt) return;
-
-    const candidates = await tx.attendanceRecord.findMany({
-      where: {
-        sessionId,
-        reverifyStatus: "NOT_REQUIRED",
-      },
-      select: { id: true, studentId: true },
-    });
-
-    const currentSelectedCount = await tx.attendanceRecord.count({
-      where: {
-        sessionId,
-        reverifyRequired: true,
-      },
-    });
-
-    if (candidates.length <= 0) {
-      await tx.attendanceSession.update({
-        where: { id: sessionId },
-        data: {
-          reverifySelectionDone: true,
-          reverifySelectedCount: currentSelectedCount,
-        },
-      });
-      return;
-    }
-
-    const sequenceBounds = getReverifySequenceBounds(
-      now,
-      session.reverifyEndsAt,
-      session.qrRotationMs,
-      session.qrGraceMs
-    );
-    if (!sequenceBounds) {
-      // If no assignment slot can be allocated within this window,
-      // mark remaining NOT_REQUIRED records as missed so phase-two
-      // state is still explicit and retry can be requested.
-      await tx.attendanceRecord.updateMany({
-        where: {
-          id: { in: candidates.map((candidate) => candidate.id) },
-          reverifyStatus: "NOT_REQUIRED",
-        },
-        data: {
-          reverifyRequired: true,
-          reverifyStatus: "MISSED",
-          flagged: true,
-        },
-      });
-
-      const totalSelectedCount = await tx.attendanceRecord.count({
-        where: {
-          sessionId,
-          reverifyRequired: true,
-        },
-      });
-
-      await tx.attendanceSession.update({
-        where: { id: sessionId },
-        data: {
-          reverifySelectionDone: true,
-          reverifySelectedCount: totalSelectedCount,
-        },
-      });
-      return;
-    }
-
-    const selectedCandidates = shuffleItems(candidates);
-    const studentsPerSlot = Math.max(
-      1,
-      Math.ceil(selectedCandidates.length / sequenceBounds.slotCount)
-    );
-    const totalBatches = Math.ceil(selectedCandidates.length / studentsPerSlot);
-
-    for (let index = 0; index < selectedCandidates.length; index++) {
-      const slotOffset = Math.floor(index / studentsPerSlot);
-      const sequence = sequenceBounds.startSequence + slotOffset;
-      const slot = buildSlotFromSequence(
-        sequence,
-        session.qrRotationMs,
-        session.qrGraceMs
-      );
-
-      await tx.attendanceRecord.update({
-        where: { id: selectedCandidates[index].id },
-        data: {
-          reverifyRequired: true,
-          reverifyStatus: "PENDING",
-          reverifyAttemptCount: 1,
-          reverifyRetryCount: 0,
-          reverifyRequestedAt: slot.startsAt,
-          reverifyDeadlineAt: slot.endsAt,
-          flagged: false,
-        },
-      });
-
-      scheduledNotifications.push({
-        studentId: selectedCandidates[index].studentId,
-        sequence: slot.sequence,
-        slotStartsAt: slot.startsAt,
-        slotEndsAt: slot.endsAt,
-        batchNumber: slotOffset + 1,
-        totalBatches,
-      });
-    }
-
-    const totalSelectedCount = await tx.attendanceRecord.count({
-      where: {
-        sessionId,
-        reverifyRequired: true,
-      },
-    });
-
-    await tx.attendanceSession.update({
-      where: { id: sessionId },
-      data: {
-        reverifySelectionDone: true,
-        reverifySelectedCount: totalSelectedCount,
-      },
-    });
-  });
-
-  if (scheduledNotifications.length > 0) {
-    await Promise.allSettled(
-      scheduledNotifications.map((item) =>
-        notifyStudentReverifySlot({
-          studentId: item.studentId,
-          sessionId,
-          sequence: item.sequence,
-          slotStartsAt: item.slotStartsAt,
-          slotEndsAt: item.slotEndsAt,
-          attemptCount: 1,
-          retryCount: 0,
-          batchNumber: item.batchNumber,
-          totalBatches: item.totalBatches,
-          reason: "INITIAL_SELECTION",
-        })
-      )
-    );
-  }
-}
-
-async function expirePendingReverify(
-  session: SessionStateRow,
-  now: Date
-): Promise<void> {
-  const staleRows = await db.attendanceRecord.findMany({
-    where: {
-      sessionId: session.id,
-      reverifyStatus: {
-        in: ["PENDING", "RETRY_PENDING"],
-      },
-      reverifyDeadlineAt: { lt: now },
-    },
-    select: {
-      id: true,
-      studentId: true,
-      reverifyAttemptCount: true,
-      reverifyRetryCount: true,
-    },
-    orderBy: { reverifyDeadlineAt: "asc" },
-  });
-
-  if (staleRows.length === 0) return;
-
-  const pendingStatuses: ReverifyStatus[] = ["PENDING", "RETRY_PENDING"];
-  const notificationsToSend: Array<{
-    studentId: string;
-    sequence: number;
-    slotStartsAt: Date;
-    slotEndsAt: Date;
-    attemptCount: number;
-    retryCount: number;
-  }> = [];
-
-  for (const row of staleRows) {
-    const canRetry =
-      row.reverifyAttemptCount < REVERIFY_MAX_ATTEMPTS &&
-      row.reverifyRetryCount < REVERIFY_MAX_RETRIES;
-
-    if (canRetry) {
-      const slot = await allocateRetrySlot(session.id, session, now);
-      if (slot) {
-        const promoted = await db.attendanceRecord.updateMany({
-          where: {
-            id: row.id,
-            reverifyStatus: { in: pendingStatuses },
-            reverifyDeadlineAt: { lt: now },
-          },
-          data: {
-            reverifyStatus: "RETRY_PENDING",
-            reverifyRetryCount: { increment: 1 },
-            reverifyAttemptCount: { increment: 1 },
-            reverifyRequestedAt: slot.startsAt,
-            reverifyDeadlineAt: slot.endsAt,
-            flagged: true,
-          },
-        });
-
-        if (promoted.count === 1) {
-          notificationsToSend.push({
-            studentId: row.studentId,
-            sequence: slot.sequence,
-            slotStartsAt: slot.startsAt,
-            slotEndsAt: slot.endsAt,
-            attemptCount: row.reverifyAttemptCount + 1,
-            retryCount: row.reverifyRetryCount + 1,
-          });
-          continue;
-        }
-      }
-    }
-
-    const exhausted =
-      row.reverifyAttemptCount >= REVERIFY_MAX_ATTEMPTS ||
-      row.reverifyRetryCount >= REVERIFY_MAX_RETRIES;
-
-    await db.attendanceRecord.updateMany({
-      where: {
-        id: row.id,
-        reverifyStatus: { in: pendingStatuses },
-        reverifyDeadlineAt: { lt: now },
-      },
-      data: {
-        reverifyStatus: exhausted ? "FAILED" : "MISSED",
-        reverifyDeadlineAt: null,
-        flagged: true,
-      },
-    });
-  }
-
-  if (notificationsToSend.length > 0) {
-    await Promise.allSettled(
-      notificationsToSend.map((item) =>
-        notifyStudentReverifySlot({
-          studentId: item.studentId,
-          sessionId: session.id,
-          sequence: item.sequence,
-          slotStartsAt: item.slotStartsAt,
-          slotEndsAt: item.slotEndsAt,
-          attemptCount: item.attemptCount,
-          retryCount: item.retryCount,
-          reason: "AUTO_RETRY",
-        })
-      )
-    );
-  }
 }
 
 export async function syncAttendanceSessionState(
@@ -504,46 +94,31 @@ export async function syncAttendanceSessionState(
       status: true,
       phase: true,
       startedAt: true,
+      endsAt: true,
       closedAt: true,
-      initialEndsAt: true,
-      reverifyEndsAt: true,
+      relayEnabled: true,
       qrRotationMs: true,
       qrGraceMs: true,
-      reverifySelectionRate: true,
-      reverifySelectionDone: true,
-      reverifySelectedCount: true,
     },
   });
 
   if (!session) return null;
 
-  const initialEndsAt =
-    session.phase === "INITIAL"
-      ? session.initialEndsAt ?? getDefaultInitialEndsAt(session.startedAt)
-      : session.initialEndsAt;
-  const reverifyEndsAt =
-    session.phase === "REVERIFY"
-      ? session.reverifyEndsAt ?? getDefaultReverifyEndsAt(session.startedAt)
-      : session.reverifyEndsAt;
   const derivedPhase = deriveAttendancePhase(
     {
       status: session.status,
       phase: session.phase,
-      startedAt: session.startedAt,
-      initialEndsAt,
-      reverifyEndsAt,
+      endsAt: session.endsAt,
     },
     now
   );
 
   const updateData: Record<string, unknown> = {};
-  if (!session.initialEndsAt) updateData.initialEndsAt = initialEndsAt;
-  if (!session.reverifyEndsAt) updateData.reverifyEndsAt = reverifyEndsAt;
-
   if (derivedPhase === "CLOSED") {
     updateData.phase = "CLOSED";
     if (session.status !== "CLOSED") updateData.status = "CLOSED";
     if (!session.closedAt) updateData.closedAt = now;
+    updateData.relayEnabled = false;
   }
 
   if (Object.keys(updateData).length > 0) {
@@ -555,90 +130,23 @@ export async function syncAttendanceSessionState(
         status: true,
         phase: true,
         startedAt: true,
+        endsAt: true,
         closedAt: true,
-        initialEndsAt: true,
-        reverifyEndsAt: true,
+        relayEnabled: true,
         qrRotationMs: true,
         qrGraceMs: true,
-        reverifySelectionRate: true,
-        reverifySelectionDone: true,
-        reverifySelectedCount: true,
       },
     });
   }
 
-  if (session) {
-    if (session.status === "CLOSED" || session.phase === "CLOSED") {
-      await clearSessionBleBroadcast(session.id);
-    }
-    await cacheSet(cacheKey, serializeSessionStateRow(session), 2);
+  if (session.status === "CLOSED" || session.phase === "CLOSED") {
+    await clearSessionBleBroadcast(session.id);
   }
 
+  await cacheSet(cacheKey, serializeSessionStateRow(session), 2);
   return session;
 }
 
-export async function allocateRetrySlot(
-  sessionId: string,
-  session: Pick<SessionStateRow, "reverifyEndsAt" | "qrRotationMs" | "qrGraceMs">,
-  now: Date
-): Promise<ReverifySlot | null> {
-  if (!session.reverifyEndsAt) return null;
-
-  const bounds = getReverifySequenceBounds(
-    now,
-    session.reverifyEndsAt,
-    session.qrRotationMs,
-    session.qrGraceMs
-  );
-  if (!bounds) return null;
-
-  const latestReserved = await db.attendanceRecord.findFirst({
-    where: {
-      sessionId,
-      reverifyStatus: {
-        in: ["PENDING", "RETRY_PENDING"],
-      },
-      reverifyRequestedAt: { not: null },
-      reverifyDeadlineAt: { gt: now },
-    },
-    select: {
-      reverifyRequestedAt: true,
-    },
-    orderBy: { reverifyRequestedAt: "desc" },
-  });
-
-  let sequence = bounds.startSequence;
-  if (latestReserved?.reverifyRequestedAt) {
-    const latestSequence = getQrSequence(
-      latestReserved.reverifyRequestedAt.getTime(),
-      session.qrRotationMs
-    );
-    sequence = Math.max(sequence, latestSequence + 1);
-  }
-
-  if (sequence > bounds.endSequence) {
-    return null;
-  }
-
-  return buildSlotFromSequence(sequence, session.qrRotationMs, session.qrGraceMs);
-}
-
-export function getPhaseEndsAt(
-  session: Pick<SessionStateRow, "phase" | "initialEndsAt" | "reverifyEndsAt" | "startedAt">
-): Date {
-  if (session.phase === "REVERIFY") {
-    return session.reverifyEndsAt ?? getDefaultReverifyEndsAt(session.startedAt);
-  }
-  if (session.phase === "INITIAL") {
-    return session.initialEndsAt ?? getDefaultInitialEndsAt(session.startedAt);
-  }
-  return (
-    session.reverifyEndsAt ??
-    session.initialEndsAt ??
-    getDefaultInitialEndsAt(session.startedAt)
-  );
-}
-
-export function isReverifyPending(status: ReverifyStatus): boolean {
-  return status === "PENDING" || status === "RETRY_PENDING";
+export function getPhaseEndsAt(session: Pick<SessionStateRow, "endsAt">): Date {
+  return session.endsAt;
 }

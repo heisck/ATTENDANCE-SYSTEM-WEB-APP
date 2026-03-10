@@ -2,10 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
-  INITIAL_PHASE_MS,
-  REVERIFY_PHASE_MS,
-  getDefaultInitialEndsAt,
-  getDefaultReverifyEndsAt,
+  getDefaultSessionEndsAt,
   QR_GRACE_MS,
   QR_ROTATION_MS,
 } from "@/lib/attendance";
@@ -17,6 +14,7 @@ import {
   clearSessionBleBroadcast,
   setSessionBleBroadcast,
 } from "@/lib/lecturer-ble";
+import { getStudentPhaseCompletionForCourseDay } from "@/lib/phase-completion";
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -65,16 +63,9 @@ export async function POST(request: NextRequest) {
         lecturerId: user.id,
         phase: parsed.phase,
         startedAt,
-        initialEndsAt:
-          parsed.phase === "INITIAL" ? getDefaultInitialEndsAt(startedAt) : null,
-        reverifyEndsAt:
-          parsed.phase === "REVERIFY" ? getDefaultReverifyEndsAt(startedAt) : null,
+        endsAt: getDefaultSessionEndsAt(startedAt),
         qrRotationMs: QR_ROTATION_MS,
         qrGraceMs: QR_GRACE_MS,
-        gpsLat: 0,
-        gpsLng: 0,
-        radiusMeters: 0,
-        reverifySelectionDone: true,
         relayEnabled: parsed.enableBle,
         relayOpenTime: parsed.enableBle ? startedAt : null,
         qrSecret: generateQrSecret(),
@@ -83,10 +74,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (parsed.enableBle) {
-      const phaseEndsAt =
-        parsed.phase === "REVERIFY"
-          ? attendanceSession.reverifyEndsAt ?? getDefaultReverifyEndsAt(startedAt)
-          : attendanceSession.initialEndsAt ?? getDefaultInitialEndsAt(startedAt);
+      const phaseEndsAt = attendanceSession.endsAt;
 
       const beaconName = buildDefaultBeaconName({
         courseCode: course.code,
@@ -148,22 +136,7 @@ export async function GET(request: NextRequest) {
   const autoClosableSessions = await db.attendanceSession.findMany({
     where: {
       status: "ACTIVE",
-      OR: [
-        {
-          phase: "INITIAL",
-          OR: [
-            { initialEndsAt: { lte: now } },
-            { initialEndsAt: null, startedAt: { lte: new Date(now.getTime() - INITIAL_PHASE_MS) } },
-          ],
-        },
-        {
-          phase: "REVERIFY",
-          OR: [
-            { reverifyEndsAt: { lte: now } },
-            { reverifyEndsAt: null, startedAt: { lte: new Date(now.getTime() - REVERIFY_PHASE_MS) } },
-          ],
-        },
-      ],
+      endsAt: { lte: now },
     },
     select: { id: true },
   });
@@ -171,22 +144,7 @@ export async function GET(request: NextRequest) {
   await db.attendanceSession.updateMany({
     where: {
       status: "ACTIVE",
-      OR: [
-        {
-          phase: "INITIAL",
-          OR: [
-            { initialEndsAt: { lte: now } },
-            { initialEndsAt: null, startedAt: { lte: new Date(now.getTime() - INITIAL_PHASE_MS) } },
-          ],
-        },
-        {
-          phase: "REVERIFY",
-          OR: [
-            { reverifyEndsAt: { lte: now } },
-            { reverifyEndsAt: null, startedAt: { lte: new Date(now.getTime() - REVERIFY_PHASE_MS) } },
-          ],
-        },
-      ],
+      endsAt: { lte: now },
     },
     data: {
       status: "CLOSED",
@@ -223,7 +181,17 @@ export async function GET(request: NextRequest) {
       course: true,
       _count: { select: { records: true } },
       ...(user.role === "STUDENT"
-        ? { records: { where: { studentId: user.id }, select: { id: true } } }
+        ? {
+            records: {
+              where: { studentId: user.id },
+              select: {
+                id: true,
+                webauthnUsed: true,
+                qrToken: true,
+                bleSignalStrength: true,
+              },
+            },
+          }
         : {}),
     },
     orderBy: { startedAt: "desc" },
@@ -231,10 +199,32 @@ export async function GET(request: NextRequest) {
   });
 
   if (user.role === "STUDENT") {
-    const payload = sessions.map((s) => {
-      const { records, ...rest } = s as any;
-      return { ...rest, hasMarked: Array.isArray(records) && records.length > 0 };
-    });
+    const payload = await Promise.all(
+      sessions.map(async (s) => {
+        const { records, ...rest } = s as any;
+        const phaseCompletion = await getStudentPhaseCompletionForCourseDay({
+          studentId: user.id,
+          courseId: s.courseId,
+          referenceTime: s.startedAt,
+        });
+
+        return {
+          ...rest,
+          hasMarked: Array.isArray(records) && records.length > 0,
+          layers:
+            Array.isArray(records) && records.length > 0
+              ? {
+                  webauthn: Boolean(records[0]?.webauthnUsed),
+                  qr:
+                    typeof records[0]?.qrToken === "string" &&
+                    records[0].qrToken.length > 0,
+                  ble: records[0]?.bleSignalStrength !== null,
+                }
+              : undefined,
+          phaseCompletion,
+        };
+      })
+    );
     await cacheSet(cacheKey, payload, 2);
     return NextResponse.json(payload);
   }

@@ -87,7 +87,6 @@ CREATE INDEX IF NOT EXISTS "BleDeviceSignature_userDeviceId_idx" ON "BleDeviceSi
 ALTER TABLE "AttendanceRecord" ADD COLUMN IF NOT EXISTS "deviceToken" TEXT;
 ALTER TABLE "AttendanceRecord" ADD COLUMN IF NOT EXISTS "bleSignalStrength" INTEGER;
 ALTER TABLE "AttendanceRecord" ADD COLUMN IF NOT EXISTS "deviceConsistency" REAL;
-ALTER TABLE "AttendanceRecord" ADD COLUMN IF NOT EXISTS "gpsVelocity" REAL;
 ALTER TABLE "AttendanceRecord" ADD COLUMN IF NOT EXISTS "anomalyScore" REAL;
 
 -- Add indexes for new columns

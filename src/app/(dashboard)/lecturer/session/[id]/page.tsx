@@ -19,7 +19,7 @@ import { toast } from "sonner";
 interface SessionData {
   id: string;
   status: string;
-  phase: "INITIAL" | "REVERIFY" | "CLOSED";
+  phase: "PHASE_ONE" | "PHASE_TWO" | "CLOSED";
   phaseEndsAt: string;
   startedAt: string;
   course: { code: string; name: string };
@@ -46,13 +46,13 @@ interface BleStatus {
   sessionMetaCharacteristicUuid: string;
   manufacturerCompanyId: number;
   manufacturerDataHex: string | null;
-  phase: "INITIAL" | "REVERIFY" | "CLOSED";
+  phase: "PHASE_ONE" | "PHASE_TWO" | "CLOSED";
   phaseEndsAt: string;
 }
 
 function getPhaseLabel(phase: SessionData["phase"]) {
-  if (phase === "INITIAL") return "Phase 1";
-  if (phase === "REVERIFY") return "Phase 2";
+  if (phase === "PHASE_ONE") return "Phase 1";
+  if (phase === "PHASE_TWO") return "Phase 2";
   return "Closed";
 }
 

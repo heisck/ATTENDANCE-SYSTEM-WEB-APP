@@ -9,8 +9,6 @@ export async function onboardOrganization(input: {
   adminName: string;
   adminEmail: string;
   adminPassword: string;
-  campusLat?: number;
-  campusLng?: number;
 }) {
   const existingOrg = await db.organization.findUnique({
     where: { slug: input.orgSlug },
@@ -34,9 +32,6 @@ export async function onboardOrganization(input: {
       slug: input.orgSlug,
       domain: input.orgDomain,
       settings: {
-        campusLat: input.campusLat || 0,
-        campusLng: input.campusLng || 0,
-        defaultRadiusMeters: 500,
         confidenceThreshold: 70,
         studentEmailDomains: input.orgDomain ? [input.orgDomain, `st.${input.orgDomain}`] : [],
         timezone: "UTC",

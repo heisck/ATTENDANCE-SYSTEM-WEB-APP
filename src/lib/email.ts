@@ -1,3 +1,7 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import nodemailer from "nodemailer";
+
 type SendEmailInput = {
   to: string;
   subject: string;
@@ -63,8 +67,6 @@ function getGmailConfig() {
 
 function getTransporter(user: string, pass: string) {
   if (!cachedTransporter) {
-    // Intentionally using require to avoid type coupling on optional package typings.
-    const nodemailer = require("nodemailer");
     cachedTransporter = nodemailer.createTransport({
       host: GMAIL_SMTP_HOST,
       port: GMAIL_SMTP_PORT,
@@ -82,10 +84,8 @@ async function getBrandLogoAttachment() {
   }
 
   try {
-    const fs = require("node:fs/promises");
-    const path = require("node:path");
-    const logoPath = path.join(process.cwd(), "public", "web-app-manifest-192x192.png");
-    const content = await fs.readFile(logoPath);
+    const logoPath = join(process.cwd(), "public", "web-app-manifest-192x192.png");
+    const content = await readFile(logoPath);
 
     cachedBrandLogo = {
       filename: "attendance-iq-logo.png",

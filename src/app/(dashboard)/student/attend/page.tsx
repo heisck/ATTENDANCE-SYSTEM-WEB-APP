@@ -23,30 +23,37 @@ import {
 type Step = "webauthn" | "session" | "qr" | "result";
 type QrPortStatus = "PENDING" | "APPROVED" | "REJECTED" | null;
 type ScanMode = "QR" | "BLE";
+type PendingPhase = "PHASE_ONE" | "PHASE_TWO" | null;
+
+interface StudentPhaseCompletion {
+  phaseOneDone: boolean;
+  phaseTwoDone: boolean;
+  overallPresent: boolean;
+  pendingPhase: PendingPhase;
+}
 
 interface ActiveSession {
   id: string;
-  phase: "INITIAL" | "REVERIFY" | "CLOSED";
-  radiusMeters: number;
+  phase: "PHASE_ONE" | "PHASE_TWO" | "CLOSED";
   course: { code: string; name: string };
   hasMarked?: boolean;
+  layers?: LayerResult;
+  phaseCompletion?: StudentPhaseCompletion | null;
 }
 
 interface LayerResult {
   webauthn: boolean;
-  gps: boolean;
   qr: boolean;
   ble?: boolean;
-  ip?: boolean;
 }
 
 interface AttendanceResult {
   success: boolean;
   confidence: number;
   flagged: boolean;
-  gpsDistance: number;
   layers: LayerResult;
   alreadyMarked?: boolean;
+  phaseCompletion?: StudentPhaseCompletion | null;
   error?: string;
 }
 
@@ -55,7 +62,7 @@ interface SessionSyncResponse {
   session: {
     id: string;
     status: "ACTIVE" | "CLOSED";
-    phase: "INITIAL" | "REVERIFY" | "CLOSED";
+    phase: "PHASE_ONE" | "PHASE_TWO" | "CLOSED";
     phaseEndsAt: string;
     currentSequenceId: string;
     nextSequenceId: string;
@@ -65,8 +72,10 @@ interface SessionSyncResponse {
     markedAt: string;
     flagged: boolean;
     confidence: number;
+    layers?: LayerResult;
   } | null;
   qrPortStatus?: QrPortStatus;
+  phaseCompletion?: StudentPhaseCompletion | null;
 }
 
 interface SessionBleState {
@@ -80,14 +89,14 @@ interface SessionBleState {
   sessionMetaCharacteristicUuid: string;
   manufacturerCompanyId: number;
   manufacturerDataHex: string | null;
-  phase: "INITIAL" | "REVERIFY" | "CLOSED";
+  phase: "PHASE_ONE" | "PHASE_TWO" | "CLOSED";
   phaseEndsAt: string;
 }
 
 interface BleScanTokenResult {
   token: string;
   sequence: number;
-  phase: "INITIAL" | "REVERIFY";
+  phase: "PHASE_ONE" | "PHASE_TWO";
   tokenTimestamp: number;
   beaconName?: string;
   signalStrength?: number;
@@ -117,8 +126,8 @@ function detectDeviceTypeFromUserAgent(userAgent: string): "iOS" | "Android" | "
 }
 
 function phaseLabel(phase: ActiveSession["phase"]) {
-  if (phase === "INITIAL") return "Phase 1";
-  if (phase === "REVERIFY") return "Phase 2";
+  if (phase === "PHASE_ONE") return "Phase 1";
+  if (phase === "PHASE_TWO") return "Phase 2";
   return "Closed";
 }
 
@@ -133,6 +142,7 @@ export default function AttendPage() {
 
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [selectedSession, setSelectedSession] = useState<ActiveSession | null>(null);
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -151,10 +161,14 @@ export default function AttendPage() {
   const mapSessions = (data: any[]): ActiveSession[] =>
     data.map((s: any) => ({
       id: s.id,
-      phase: s.phase ?? "INITIAL",
-      radiusMeters: s.radiusMeters ?? 0,
+      phase: s.phase ?? "PHASE_ONE",
       course: s.course ?? { code: s.courseCode ?? "", name: s.courseName ?? "" },
       hasMarked: s.hasMarked ?? false,
+      layers: s.layers,
+      phaseCompletion:
+        s.phaseCompletion && typeof s.phaseCompletion === "object"
+          ? s.phaseCompletion
+          : null,
     }));
 
   const fetchSessionSync = useCallback(async (sessionId: string) => {
@@ -203,6 +217,7 @@ export default function AttendPage() {
 
   const loadSessions = useCallback(async () => {
     setSessionsLoading(true);
+    setSessionsError(null);
     try {
       const res = await fetch("/api/attendance/sessions?status=ACTIVE", {
         cache: "no-store",
@@ -210,8 +225,9 @@ export default function AttendPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load sessions");
       setSessions(Array.isArray(data) ? mapSessions(data) : []);
-    } catch {
+    } catch (error: any) {
       setSessions([]);
+      setSessionsError(error?.message || "Failed to load active sessions.");
     } finally {
       setSessionsLoading(false);
     }
@@ -249,69 +265,34 @@ export default function AttendPage() {
     void checkDevice();
   }, [router]);
 
-  useEffect(() => {
-    if (hasDevice !== true) return;
-    void loadSessions();
-  }, [hasDevice, loadSessions]);
-
-  useEffect(() => {
-    if (!activeSessionId) return;
-
-    let cancelled = false;
-    const sync = async () => {
+  const syncActiveSession = useCallback(
+    async (sessionId: string) => {
       try {
-        const body = await fetchSessionSync(activeSessionId);
-        if (cancelled) return;
-
+        const body = await fetchSessionSync(sessionId);
         if (body.session.status !== "ACTIVE") {
           setActiveSessionId(null);
-          if (step === "qr") {
-            setStep("session");
-            setSelectedSession(null);
-            void loadSessions();
-            toast.info("This session has ended. Select an active session to continue.");
-          }
-          return;
+          setStep("session");
+          setSelectedSession(null);
+          await loadSessions();
+          toast.info("This session has ended. Select an active session to continue.");
+          return null;
         }
 
+        let bleState: SessionBleState | null = null;
         try {
-          await fetchSessionBle(activeSessionId);
+          bleState = await fetchSessionBle(sessionId);
         } catch {
-          // Ignore transient BLE sync errors; fallback to QR remains available.
+          setSessionBle(null);
         }
-        if (cancelled) return;
-        if (body.attendance && result?.alreadyMarked) {
-          setResult((current) =>
-            current
-              ? {
-                  ...current,
-                  confidence: body.attendance?.confidence ?? current.confidence,
-                  flagged: body.attendance?.flagged ?? current.flagged,
-                }
-              : current
-          );
-        }
-      } catch (error: any) {
-        if (!cancelled) {
-          setSyncError(error.message);
-        }
-      }
-    };
 
-    void sync();
-    const timer = window.setInterval(() => void sync(), 3000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [
-    activeSessionId,
-    fetchSessionBle,
-    fetchSessionSync,
-    loadSessions,
-    result?.alreadyMarked,
-    step,
-  ]);
+        return { body, bleState };
+      } catch (error: any) {
+        setSyncError(error.message || "Failed to sync session.");
+        return null;
+      }
+    },
+    [fetchSessionBle, fetchSessionSync, loadSessions]
+  );
 
   useEffect(() => {
     if (!syncError) return;
@@ -353,7 +334,8 @@ export default function AttendPage() {
   const handleWebAuthnVerified = useCallback(() => {
     setWebauthnVerified(true);
     setStep("session");
-  }, []);
+    void loadSessions();
+  }, [loadSessions]);
 
   const handleSelectSession = useCallback(
     async (session: ActiveSession) => {
@@ -361,39 +343,42 @@ export default function AttendPage() {
       setActiveSessionId(session.id);
       setScanMode("QR");
 
-      try {
-        const bleState = await fetchSessionBle(session.id);
-        if (bleState.enabled && bleState.active) {
-          const isAndroidDevice =
-            typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
-          setScanMode(isAndroidDevice ? "BLE" : "QR");
-        }
-      } catch {
-        setSessionBle(null);
+      const synced = await syncActiveSession(session.id);
+      if (!synced) {
+        return;
       }
 
-      if (session.hasMarked) {
-        try {
-          const body = await fetchSessionSync(session.id);
-          setResult({
-            success: true,
-            confidence: body.attendance?.confidence ?? 100,
-            flagged: body.attendance?.flagged ?? false,
-            gpsDistance: 0,
-            layers: { webauthn: true, gps: true, qr: true, ip: false },
-            alreadyMarked: true,
-          });
-          setStep("result");
-        } catch (error: any) {
-          toast.error(error.message || "Failed to load session status");
-        }
+      if (synced.bleState?.enabled && synced.bleState.active) {
+        const isAndroidDevice =
+          typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
+        setScanMode(isAndroidDevice ? "BLE" : "QR");
+      }
+
+      if (session.hasMarked || synced.body.attendance) {
+        const derivedLayers =
+          synced.body.attendance?.layers ??
+          session.layers ?? {
+            webauthn: true,
+            qr: true,
+            ble: false,
+          };
+
+        setResult({
+          success: true,
+          confidence: synced.body.attendance?.confidence ?? 100,
+          flagged: synced.body.attendance?.flagged ?? false,
+          layers: derivedLayers,
+          alreadyMarked: true,
+          phaseCompletion: synced.body.phaseCompletion ?? session.phaseCompletion ?? null,
+        });
+        setStep("result");
         return;
       }
 
       setResult(null);
       setStep("qr");
     },
-    [fetchSessionBle, fetchSessionSync]
+    [syncActiveSession]
   );
 
   const handleInitialQrScan = useCallback(
@@ -447,8 +432,7 @@ export default function AttendPage() {
             success: false,
             confidence: 0,
             flagged: true,
-            gpsDistance: 0,
-            layers: { webauthn: false, gps: false, qr: false, ip: false },
+            layers: { webauthn: false, qr: false, ble: false },
             error: message,
           });
           setStep("result");
@@ -459,12 +443,18 @@ export default function AttendPage() {
           success: true,
           confidence: body.record.confidence,
           flagged: body.record.flagged,
-          gpsDistance: body.record.gpsDistance,
           layers: body.record.layers,
+          phaseCompletion: body.phaseCompletion ?? null,
         });
         setActiveSessionId(data.sessionId);
         setStep("result");
-        toast.success("Attendance marked successfully.");
+        if (body.phaseCompletion?.overallPresent) {
+          toast.success("Attendance complete for Phase 1 and Phase 2.");
+        } else if (body.phaseCompletion?.pendingPhase) {
+          toast.success(`Phase recorded. Pending ${phaseLabel(body.phaseCompletion.pendingPhase)}.`);
+        } else {
+          toast.success("Attendance marked successfully.");
+        }
         void loadSessions();
         return "accepted";
       } catch {
@@ -480,7 +470,7 @@ export default function AttendPage() {
       sessionId: string;
       token: string;
       sequence: number;
-      phase: "INITIAL" | "REVERIFY";
+      phase: "PHASE_ONE" | "PHASE_TWO";
       tokenTimestamp: number;
       beaconName?: string;
       bleSignalStrength?: number;
@@ -540,12 +530,18 @@ export default function AttendPage() {
           success: true,
           confidence: body.record.confidence,
           flagged: body.record.flagged,
-          gpsDistance: body.record.gpsDistance,
           layers: body.record.layers,
+          phaseCompletion: body.phaseCompletion ?? null,
         });
         setActiveSessionId(selectedSession.id);
         setStep("result");
-        toast.success("Attendance marked successfully via Bluetooth beacon.");
+        if (body.phaseCompletion?.overallPresent) {
+          toast.success("Attendance complete for Phase 1 and Phase 2.");
+        } else if (body.phaseCompletion?.pendingPhase) {
+          toast.success(`Phase recorded. Pending ${phaseLabel(body.phaseCompletion.pendingPhase)}.`);
+        } else {
+          toast.success("Attendance marked successfully via Bluetooth beacon.");
+        }
         void loadSessions();
       } catch (error: any) {
         toast.error(error.message || "Failed to mark attendance via Bluetooth");
@@ -594,6 +590,7 @@ export default function AttendPage() {
     setActiveSessionId(null);
     setSyncState(null);
     setSyncError(null);
+    setSessionsError(null);
     setRequestingQrPort(false);
     setQrPortStatusLocal(null);
   }, []);
@@ -647,8 +644,25 @@ export default function AttendPage() {
                   Loading sessions...
                 </div>
               ) : sessions.length === 0 ? (
-                <div className="status-panel">
-                  No active sessions for your courses right now. Ask your lecturer to start a session.
+                <div className="space-y-2">
+                  <div className="status-panel flex items-center justify-between gap-3">
+                    <span>
+                      No active sessions for your courses right now. Ask your lecturer to start a session.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void loadSessions()}
+                      className="inline-flex items-center justify-center rounded-md border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-accent"
+                      aria-label="Retry loading sessions"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </button>
+                  </div>
+                  {sessionsError ? (
+                    <p className="text-xs text-muted-foreground">
+                      {sessionsError}
+                    </p>
+                  ) : null}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -665,7 +679,16 @@ export default function AttendPage() {
                       </span>
                       {s.hasMarked ? (
                         <span className="ml-2 inline-flex rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                          Already marked
+                          Marked this phase
+                        </span>
+                      ) : null}
+                      {s.phaseCompletion?.overallPresent ? (
+                        <span className="ml-2 inline-flex rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] text-foreground">
+                          Present (Phase 1 + 2)
+                        </span>
+                      ) : s.phaseCompletion?.pendingPhase ? (
+                        <span className="ml-2 inline-flex rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
+                          Pending {phaseLabel(s.phaseCompletion.pendingPhase)}
                         </span>
                       ) : null}
                     </button>
@@ -757,13 +780,23 @@ export default function AttendPage() {
               <div className="status-panel p-4 text-center">
                 <CheckCircle2 className="mx-auto h-10 w-10" />
                 <p className="mt-2 font-semibold">
-                  {result.alreadyMarked ? "Attendance already marked" : "Attendance complete"}
+                  {result.phaseCompletion?.overallPresent
+                    ? "Attendance complete (Phase 1 + Phase 2)"
+                    : result.alreadyMarked
+                      ? "Attendance already marked"
+                      : "Phase attendance recorded"}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   {selectedSession
                     ? `${selectedSession.course.code} — ${phaseLabel(selectedSession.phase)}`
                     : "Session completed"}
                 </p>
+                {!result.phaseCompletion?.overallPresent &&
+                result.phaseCompletion?.pendingPhase ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Pending {phaseLabel(result.phaseCompletion.pendingPhase)} to finalize attendance.
+                  </p>
+                ) : null}
               </div>
 
               <div className="rounded-lg border border-border p-4">
@@ -938,8 +971,8 @@ function BleLecturerScanner({
       }
 
       if (
-        parsed.phase !== "INITIAL" &&
-        parsed.phase !== "REVERIFY"
+        parsed.phase !== "PHASE_ONE" &&
+        parsed.phase !== "PHASE_TWO"
       ) {
         throw new Error("BLE token payload has invalid phase.");
       }
@@ -1093,7 +1126,7 @@ function BleLecturerScanner({
         <div className="space-y-3 rounded-md border border-border/70 bg-background/40 p-3">
           <p className="text-sm font-medium">Selected: {selectedName}</p>
           <p className="text-xs text-muted-foreground">
-            Token sequence: E{String(tokenResult.sequence).padStart(3, "0")} · {tokenResult.phase === "INITIAL" ? "Phase 1" : "Phase 2"}
+            Token sequence: E{String(tokenResult.sequence).padStart(3, "0")} · {tokenResult.phase === "PHASE_ONE" ? "Phase 1" : "Phase 2"}
           </p>
           <button
             type="button"

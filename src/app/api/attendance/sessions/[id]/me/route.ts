@@ -5,6 +5,7 @@ import { getQrPortStatus } from "@/lib/qr-port";
 import { db } from "@/lib/db";
 import { getQrSequence } from "@/lib/qr";
 import { cacheGet, cacheSet } from "@/lib/cache";
+import { getStudentPhaseCompletionForCourseDay } from "@/lib/phase-completion";
 
 export async function GET(
   _request: NextRequest,
@@ -60,6 +61,12 @@ export async function GET(
     );
   }
 
+  const phaseCompletion = await getStudentPhaseCompletionForCourseDay({
+    studentId: user.id,
+    courseId: attendanceSession.courseId,
+    referenceTime: attendanceSession.startedAt,
+  });
+
   if (syncedSession.status !== "ACTIVE") {
     const currentSequence = getQrSequence(Date.now(), syncedSession.qrRotationMs);
     return NextResponse.json(
@@ -76,6 +83,7 @@ export async function GET(
         },
         attendance: null,
         qrPortStatus: null,
+        phaseCompletion,
       },
       { status: 410 }
     );
@@ -93,6 +101,9 @@ export async function GET(
       markedAt: true,
       flagged: true,
       confidence: true,
+      webauthnUsed: true,
+      qrToken: true,
+      bleSignalStrength: true,
     },
   });
 
@@ -115,9 +126,15 @@ export async function GET(
           markedAt: record.markedAt,
           flagged: record.flagged,
           confidence: record.confidence,
+          layers: {
+            webauthn: Boolean(record.webauthnUsed),
+            qr: typeof record.qrToken === "string" && record.qrToken.length > 0,
+            ble: record.bleSignalStrength !== null,
+          },
         }
       : null,
     qrPortStatus,
+    phaseCompletion,
   };
 
   await cacheSet(cacheKey, payload, 2);

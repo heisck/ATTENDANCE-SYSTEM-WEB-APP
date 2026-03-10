@@ -25,6 +25,12 @@ export function OverviewMetrics({
   showTitle = true,
   showTopBorder = true,
 }: OverviewMetricsProps) {
+  const [selectedKey, setSelectedKey] = useState(() => items[0]?.key ?? "");
+  const selected = useMemo(
+    () => items.find((item) => item.key === selectedKey) ?? items[0],
+    [items, selectedKey]
+  );
+
   if (compact) {
     return (
       <section className={cn("space-y-2", showTopBorder ? "border-t border-border/70 pt-4" : "pt-0")}>
@@ -52,14 +58,6 @@ export function OverviewMetrics({
       </section>
     );
   }
-
-  const firstKey = items[0]?.key ?? "";
-  const [selectedKey, setSelectedKey] = useState(firstKey);
-
-  const selected = useMemo(
-    () => items.find((item) => item.key === selectedKey) ?? items[0],
-    [items, selectedKey]
-  );
 
   if (!selected) return null;
 

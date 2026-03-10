@@ -109,7 +109,7 @@ export function BleRelayScanner({
         optionalServices: ["generic_access"],
       };
 
-      // @ts-ignore - Web Bluetooth API types
+      // @ts-expect-error Web Bluetooth request options vary by lib.dom typings.
       const device = await navigator.bluetooth.requestDevice(options);
 
       if (!device) {

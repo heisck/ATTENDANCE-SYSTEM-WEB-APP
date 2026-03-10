@@ -66,7 +66,6 @@ export async function GET(request: NextRequest) {
       markedAt: r.markedAt,
       confidence: r.confidence,
       flagged: r.flagged,
-      gpsDistance: r.gpsDistance,
       webauthnUsed: r.webauthnUsed,
     })),
   });

@@ -57,7 +57,6 @@ export default async function StudentHistoryPage() {
           select: {
             sessionId: true,
             flagged: true,
-            reverifyStatus: true,
           },
         })
       : [];
@@ -78,15 +77,11 @@ export default async function StudentHistoryPage() {
     const sessions = monthCourseSessions.get(course.id) || [];
     let attended = 0;
     let flagged = 0;
-    let reverifyMissed = 0;
     for (const item of sessions) {
       const record = monthRecordBySessionId.get(item.id);
       if (!record) continue;
       attended += 1;
       if (record.flagged) flagged += 1;
-      if (record.reverifyStatus === "MISSED" || record.reverifyStatus === "FAILED") {
-        reverifyMissed += 1;
-      }
     }
 
     const totalSessions = sessions.length;
@@ -103,7 +98,6 @@ export default async function StudentHistoryPage() {
       missed,
       attendanceRate,
       flagged,
-      reverifyMissed,
       atRisk,
     };
   });
@@ -146,7 +140,6 @@ export default async function StudentHistoryPage() {
               <p>Missed: {course.missed}</p>
               <p>Rate: {course.attendanceRate}%</p>
               <p>Flagged: {course.flagged}</p>
-              <p>Reverify Missed: {course.reverifyMissed}</p>
             </div>
           </div>
         ))}
@@ -162,9 +155,7 @@ export default async function StudentHistoryPage() {
           { key: "course", label: "Course" },
           { key: "date", label: "Date" },
           { key: "time", label: "Time" },
-          { key: "distance", label: "GPS Distance" },
           { key: "webauthn", label: "Biometric" },
-          { key: "reverify", label: "Reverify" },
           { key: "confidence", label: "Confidence" },
           { key: "status", label: "Status" },
         ]}
@@ -172,9 +163,7 @@ export default async function StudentHistoryPage() {
           course: `${r.session.course.code} - ${r.session.course.name}`,
           date: r.markedAt.toLocaleDateString(),
           time: r.markedAt.toLocaleTimeString(),
-          distance: `${Math.round(r.gpsDistance)}m`,
           webauthn: r.webauthnUsed ? "Yes" : "No",
-          reverify: r.reverifyStatus,
           confidence: `${r.confidence}%`,
           status: r.flagged ? "Flagged" : "Verified",
         }))}

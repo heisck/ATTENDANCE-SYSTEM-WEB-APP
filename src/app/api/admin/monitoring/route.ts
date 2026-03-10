@@ -100,7 +100,7 @@ async function getAllActiveSessionsMonitoring(organizationId: string | null) {
           anomalyCount: anomalies,
           progressPercent: enrolled > 0 ? Math.round((session._count.records / enrolled) * 100) : 0,
           averageConfidence: Math.round(avgConfidence._avg.confidence || 0),
-          estimatedCompletion: estimateCompletion(session.initialEndsAt, session.startedAt),
+          estimatedCompletion: estimateCompletion(session.endsAt, session.startedAt),
         };
       })
     );
@@ -158,7 +158,6 @@ async function getSessionMonitoringDetail(
             flagged: true,
             anomalyScore: true,
             markedAt: true,
-            reverifyStatus: true,
           },
         });
 
@@ -199,8 +198,6 @@ async function getSessionMonitoringDetail(
           averageConfidence: avgConfidence,
           p95Confidence: Math.round(p95Confidence || 0),
           anomaliesByType: flaggedByType,
-          reverifyPending: records.filter((r) => r.reverifyStatus === "PENDING").length,
-          reverifyFailed: records.filter((r) => r.reverifyStatus === "FAILED").length,
           lastUpdated: new Date().toISOString(),
         };
       }
@@ -213,8 +210,7 @@ async function getSessionMonitoringDetail(
         courseName: session.course.name,
         phase: session.phase,
         startedAt: session.startedAt,
-        initialEndsAt: session.initialEndsAt,
-        reverifyEndsAt: session.reverifyEndsAt,
+        endsAt: session.endsAt,
         closedAt: session.closedAt,
       },
       monitoring: cached,
@@ -225,9 +221,7 @@ async function getSessionMonitoringDetail(
   }
 }
 
-function estimateCompletion(initialEndsAt: Date | null, startedAt: Date): Date {
-  // Estimate based on initial phase duration
-  const totalDuration = initialEndsAt ? initialEndsAt.getTime() - startedAt.getTime() : 5 * 60 * 1000;
-  const reverifyDuration = 4 * 60 * 1000; // 4 minutes default reverify
-  return new Date(startedAt.getTime() + totalDuration + reverifyDuration);
+function estimateCompletion(endsAt: Date | null, startedAt: Date): Date {
+  if (endsAt) return endsAt;
+  return new Date(startedAt.getTime() + 4 * 60 * 1000);
 }

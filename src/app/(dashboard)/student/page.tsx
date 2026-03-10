@@ -52,8 +52,7 @@ export default async function StudentDashboard() {
           status: true,
           phase: true,
           startedAt: true,
-          initialEndsAt: true,
-          reverifyEndsAt: true,
+          endsAt: true,
           course: { select: { code: true, name: true } },
         },
         orderBy: { startedAt: "desc" },
@@ -68,9 +67,7 @@ export default async function StudentDashboard() {
         {
           status: sessionItem.status,
           phase: sessionItem.phase,
-          startedAt: sessionItem.startedAt,
-          initialEndsAt: sessionItem.initialEndsAt,
-          reverifyEndsAt: sessionItem.reverifyEndsAt,
+          endsAt: sessionItem.endsAt,
         },
         now
       ),

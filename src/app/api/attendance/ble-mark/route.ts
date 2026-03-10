@@ -23,12 +23,13 @@ import {
 } from "@/lib/device-linking";
 import { getDeviceBleStats } from "@/lib/ble-verification";
 import { getBleBroadcasterPresence, getSessionBleBroadcast } from "@/lib/lecturer-ble";
+import { getStudentPhaseCompletionForCourseDay } from "@/lib/phase-completion";
 
 const markAttendanceBleSchema = z.object({
   sessionId: z.string().min(1),
   token: z.string().min(1),
   sequence: z.number().int().nonnegative(),
-  phase: z.enum(["INITIAL", "REVERIFY"]),
+  phase: z.enum(["PHASE_ONE", "PHASE_TWO"]),
   tokenTimestamp: z.number(),
   beaconName: z.string().min(1).optional(),
   bleSignalStrength: z.number().int().min(-110).max(-20).optional(),
@@ -291,14 +292,11 @@ export async function POST(request: NextRequest) {
 
     const confidence = calculateConfidence({
       webauthnVerified: webauthnUsed,
-      gpsWithinRadius: null,
       qrTokenValid: null,
       bleProximityVerified: true,
       bleSignalStrength: resolvedBleSignalStrength,
-      gpsVelocityAnomaly: false,
       deviceConsistency,
       deviceMismatch,
-      locationJump: false,
     });
 
     const settings = attendanceSession.course.organization.settings as any;
@@ -310,21 +308,21 @@ export async function POST(request: NextRequest) {
       data: {
         sessionId: parsed.sessionId,
         studentId: session.user.id,
-        gpsLat: 0,
-        gpsLng: 0,
-        gpsDistance: 0,
         qrToken: parsed.token,
         webauthnUsed,
-        reverifyRequired: false,
-        reverifyStatus: "NOT_REQUIRED",
         confidence,
         flagged,
         deviceToken,
         bleSignalStrength: resolvedBleSignalStrength,
         deviceConsistency,
-        gpsVelocity: null,
         anomalyScore: hasAnomalies ? Math.max(0, 100 - confidence) : 0,
       },
+    });
+
+    const phaseCompletion = await getStudentPhaseCompletionForCourseDay({
+      studentId: session.user.id,
+      courseId: attendanceSession.courseId,
+      referenceTime: syncedSession.startedAt,
     });
 
     if (hasAnomalies && flagged) {
@@ -356,24 +354,21 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      record: {
-        id: record.id,
-        confidence: record.confidence,
-        flagged: record.flagged,
-        gpsDistance: record.gpsDistance,
-        layers: {
-          webauthn: webauthnUsed,
-          gps: true,
-          qr: tokenValid,
-          ble: true,
-          deviceConsistent: !deviceMismatch,
+        record: {
+          id: record.id,
+          confidence: record.confidence,
+          flagged: record.flagged,
+          layers: {
+            webauthn: webauthnUsed,
+            qr: tokenValid,
+            ble: true,
+            deviceConsistent: !deviceMismatch,
+          },
+          anomalies: {
+            deviceMismatch,
+          },
         },
-        anomalies: {
-          velocityAnomaly: false,
-          locationJump: false,
-          deviceMismatch,
-        },
-      },
+      phaseCompletion,
     });
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {

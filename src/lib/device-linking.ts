@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { cacheGet, cacheSet, cacheDel, CACHE_KEYS, CACHE_TTL } from "./cache";
+import { createHash } from "node:crypto";
 
 /**
  * Device fingerprinting for spoofing detection
@@ -52,9 +53,8 @@ export function generateDeviceFingerprint(
  * Generate a deterministic hash of device fingerprint
  */
 export function hashDeviceFingerprint(fingerprint: DeviceFingerprint): string {
-  const crypto = require("crypto");
   const combined = JSON.stringify(fingerprint);
-  return crypto.createHash("sha256").update(combined).digest("hex");
+  return createHash("sha256").update(combined).digest("hex");
 }
 
 /**

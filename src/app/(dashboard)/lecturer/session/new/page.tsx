@@ -18,18 +18,18 @@ interface Course {
   name: string;
 }
 
-type AttendancePhase = "INITIAL" | "REVERIFY";
+type AttendancePhase = "PHASE_ONE" | "PHASE_TWO";
 
 const phaseLabels: Record<AttendancePhase, string> = {
-  INITIAL: "Phase 1 (Opening)",
-  REVERIFY: "Phase 2 (Closing)",
+  PHASE_ONE: "Phase 1 (Opening)",
+  PHASE_TWO: "Phase 2 (Closing)",
 };
 
 export default function NewSessionPage() {
   const router = useRouter();
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseCode, setCourseCode] = useState("");
-  const [phase, setPhase] = useState<AttendancePhase>("INITIAL");
+  const [phase, setPhase] = useState<AttendancePhase>("PHASE_ONE");
   const [bleEnabled, setBleEnabled] = useState(true);
   const [loading, setLoading] = useState(false);
   const normalizedCourseCode = courseCode.trim().toUpperCase();
@@ -113,7 +113,7 @@ export default function NewSessionPage() {
           <div className="space-y-3">
             <p className="text-sm font-medium">Attendance Phase</p>
             <div className="grid gap-2 sm:grid-cols-2">
-              {(["INITIAL", "REVERIFY"] as AttendancePhase[]).map((phaseKey) => (
+              {(["PHASE_ONE", "PHASE_TWO"] as AttendancePhase[]).map((phaseKey) => (
                 <button
                   key={phaseKey}
                   type="button"

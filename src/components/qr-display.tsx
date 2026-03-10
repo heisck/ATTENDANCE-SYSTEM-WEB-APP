@@ -26,7 +26,7 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [halted, setHalted] = useState(false);
-  const [phase, setPhase] = useState<"INITIAL" | "REVERIFY" | "CLOSED">("INITIAL");
+  const [phase, setPhase] = useState<"PHASE_ONE" | "PHASE_TWO" | "CLOSED">("PHASE_ONE");
   const [phaseEndsAt, setPhaseEndsAt] = useState<string | null>(null);
   const [sequenceId, setSequenceId] = useState<string>("E000");
   const [nextSequenceId, setNextSequenceId] = useState<string>("E001");
@@ -402,7 +402,7 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
 
       <div className="space-y-1 text-center">
         <p className="text-xs font-medium text-foreground">
-          Phase: {phase === "INITIAL" ? "Phase 1" : phase === "REVERIFY" ? "Phase 2" : "Closed"}
+          Phase: {phase === "PHASE_ONE" ? "Phase 1" : phase === "PHASE_TWO" ? "Phase 2" : "Closed"}
         </p>
         {phaseEndsAt && (
           <p className="text-[11px] text-muted-foreground">

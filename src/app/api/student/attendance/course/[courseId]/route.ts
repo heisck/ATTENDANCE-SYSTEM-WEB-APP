@@ -79,8 +79,6 @@ export async function GET(
       markedAt: true,
       confidence: true,
       flagged: true,
-      reverifyStatus: true,
-      reverifyRequired: true,
     },
   });
 
@@ -95,8 +93,6 @@ export async function GET(
       markedAt: record?.markedAt || null,
       confidence: record?.confidence ?? null,
       flagged: record?.flagged ?? false,
-      reverifyRequired: record?.reverifyRequired ?? false,
-      reverifyStatus: record?.reverifyStatus ?? null,
       sessionStatus: sessionItem.status,
       sessionPhase: sessionItem.phase,
     };
