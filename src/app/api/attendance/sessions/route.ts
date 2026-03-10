@@ -205,8 +205,12 @@ export async function GET(request: NextRequest) {
         const phaseCompletion = await getStudentPhaseCompletionForCourseDay({
           studentId: user.id,
           courseId: s.courseId,
+          lecturerId: s.lecturerId,
           referenceTime: s.startedAt,
         });
+
+        const canMarkPhase =
+          s.phase !== "PHASE_TWO" || phaseCompletion.phaseOneDone;
 
         return {
           ...rest,
@@ -221,6 +225,10 @@ export async function GET(request: NextRequest) {
                   ble: records[0]?.bleSignalStrength != null,
                 }
               : undefined,
+          canMarkPhase,
+          blockReason: canMarkPhase
+            ? null
+            : "Complete Phase 1 for this class before marking Phase 2.",
           phaseCompletion,
         };
       })

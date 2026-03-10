@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { QrScanner, type QrScanPayload, type QrScanResult } from "@/components/qr-scanner";
-import { QrDisplay } from "@/components/qr-display";
 import { WebAuthnPrompt } from "@/components/webauthn-prompt";
 import { ATTENDANCE_BLE } from "@/lib/ble-spec";
 import {
@@ -38,6 +37,8 @@ interface ActiveSession {
   course: { code: string; name: string };
   hasMarked?: boolean;
   layers?: LayerResult;
+  canMarkPhase?: boolean;
+  blockReason?: string | null;
   phaseCompletion?: StudentPhaseCompletion | null;
 }
 
@@ -155,6 +156,8 @@ export default function AttendPage() {
   const [qrPortStatusLocal, setQrPortStatusLocal] = useState<QrPortStatus>(null);
   const [initialVerifyTrigger, setInitialVerifyTrigger] = useState(0);
   const [initialScanTrigger, setInitialScanTrigger] = useState(0);
+  const [showPortVerifyOverlay, setShowPortVerifyOverlay] = useState(false);
+  const previousQrPortStatusRef = useRef<QrPortStatus>(null);
 
   const qrPortStatus = syncState?.qrPortStatus ?? qrPortStatusLocal ?? null;
 
@@ -165,6 +168,8 @@ export default function AttendPage() {
       course: s.course ?? { code: s.courseCode ?? "", name: s.courseName ?? "" },
       hasMarked: s.hasMarked ?? false,
       layers: s.layers,
+      canMarkPhase: typeof s.canMarkPhase === "boolean" ? s.canMarkPhase : true,
+      blockReason: typeof s.blockReason === "string" ? s.blockReason : null,
       phaseCompletion:
         s.phaseCompletion && typeof s.phaseCompletion === "object"
           ? s.phaseCompletion
@@ -331,6 +336,32 @@ export default function AttendPage() {
     }
   }, [scanMode, step]);
 
+  useEffect(() => {
+    if (
+      step !== "result" ||
+      !activeSessionId ||
+      !result?.success ||
+      qrPortStatus !== "PENDING"
+    ) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      void syncActiveSession(activeSessionId);
+    }, 3000);
+
+    return () => window.clearInterval(timer);
+  }, [activeSessionId, qrPortStatus, result?.success, step, syncActiveSession]);
+
+  useEffect(() => {
+    const previous = previousQrPortStatusRef.current;
+    if (qrPortStatus === "APPROVED" && previous !== "APPROVED") {
+      setShowPortVerifyOverlay(true);
+      toast.success("QR port approved. Verify passkey to start porting.");
+    }
+    previousQrPortStatusRef.current = qrPortStatus;
+  }, [qrPortStatus]);
+
   const handleWebAuthnVerified = useCallback(() => {
     setWebauthnVerified(true);
     setStep("session");
@@ -339,12 +370,27 @@ export default function AttendPage() {
 
   const handleSelectSession = useCallback(
     async (session: ActiveSession) => {
+      if (session.canMarkPhase === false) {
+        toast.error(session.blockReason || "Complete Phase 1 first before marking Phase 2.");
+        return;
+      }
+
       setSelectedSession(session);
       setActiveSessionId(session.id);
       setScanMode("QR");
 
       const synced = await syncActiveSession(session.id);
       if (!synced) {
+        return;
+      }
+
+      if (
+        session.phase === "PHASE_TWO" &&
+        synced.body.phaseCompletion &&
+        !synced.body.phaseCompletion.phaseOneDone
+      ) {
+        toast.error("Phase 1 must be completed before Phase 2 for this class.");
+        setStep("session");
         return;
       }
 
@@ -593,6 +639,8 @@ export default function AttendPage() {
     setSessionsError(null);
     setRequestingQrPort(false);
     setQrPortStatusLocal(null);
+    setShowPortVerifyOverlay(false);
+    previousQrPortStatusRef.current = null;
   }, []);
 
   return (
@@ -669,8 +717,9 @@ export default function AttendPage() {
                   {sessions.map((s) => (
                     <button
                       key={s.id}
+                      disabled={s.canMarkPhase === false}
                       onClick={() => void handleSelectSession(s)}
-                      className="w-full rounded-md border border-border px-4 py-3 text-left transition-colors hover:bg-accent"
+                      className="w-full rounded-md border border-border px-4 py-3 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <span className="font-medium">{s.course.code}</span>
                       <span className="text-muted-foreground"> — {s.course.name}</span>
@@ -685,6 +734,10 @@ export default function AttendPage() {
                       {s.phaseCompletion?.overallPresent ? (
                         <span className="ml-2 inline-flex rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] text-foreground">
                           Present (Phase 1 + 2)
+                        </span>
+                      ) : s.canMarkPhase === false ? (
+                        <span className="ml-2 inline-flex rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
+                          Phase 1 required first
                         </span>
                       ) : s.phaseCompletion?.pendingPhase ? (
                         <span className="ml-2 inline-flex rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
@@ -782,9 +835,13 @@ export default function AttendPage() {
                 <p className="mt-2 font-semibold">
                   {result.phaseCompletion?.overallPresent
                     ? "Attendance complete (Phase 1 + Phase 2)"
-                    : result.alreadyMarked
-                      ? "Attendance already marked"
-                      : "Phase attendance recorded"}
+                    : result.phaseCompletion?.pendingPhase === "PHASE_TWO"
+                      ? "Phase 1 recorded. Pending Phase 2"
+                      : result.phaseCompletion?.pendingPhase === "PHASE_ONE"
+                        ? "Phase 1 required before Phase 2"
+                        : result.alreadyMarked
+                          ? "Attendance already marked for this phase"
+                          : "Phase attendance recorded"}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   {selectedSession
@@ -842,11 +899,16 @@ export default function AttendPage() {
                   {qrPortStatus === "APPROVED" ? (
                     <div className="space-y-3">
                       <div className="status-panel-subtle text-xs">
-                        Approved. Keep this screen visible so friends can scan the same rotating QR sequence.
+                        Approved. Verify your passkey to open the dedicated QR port screen.
                       </div>
-                      <div className="overflow-x-auto">
-                        <QrDisplay sessionId={activeSessionId} mode="port" />
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowPortVerifyOverlay(true)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-accent"
+                      >
+                        <Fingerprint className="h-4 w-4" />
+                        Verify Passkey to Start Porting
+                      </button>
                     </div>
                   ) : qrPortStatus === "PENDING" ? (
                     <div className="status-panel-subtle text-xs">
@@ -875,13 +937,6 @@ export default function AttendPage() {
               )}
 
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={resetFlow}
-                  className="inline-flex w-fit items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
-                >
-                  Mark Another Session
-                </button>
                 <Link
                   href="/student"
                   className="inline-flex w-fit items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
@@ -893,6 +948,36 @@ export default function AttendPage() {
           )}
         </div>
       )}
+
+      {showPortVerifyOverlay && activeSessionId ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6">
+          <div className="w-full max-w-lg space-y-4 rounded-xl border border-border bg-background p-4 shadow-2xl">
+            <div>
+              <p className="text-base font-semibold">Verify Passkey to Start QR Port</p>
+              <p className="text-sm text-muted-foreground">
+                Passkey verification is required before this device can broadcast the live QR stream.
+              </p>
+            </div>
+
+            <WebAuthnPrompt
+              onVerified={() => {
+                setShowPortVerifyOverlay(false);
+                router.push(`/student/attend/port?sessionId=${encodeURIComponent(activeSessionId)}`);
+              }}
+            />
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowPortVerifyOverlay(false)}
+                className="inline-flex rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-accent"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

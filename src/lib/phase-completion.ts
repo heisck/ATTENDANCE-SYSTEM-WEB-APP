@@ -46,6 +46,7 @@ export function buildStudentPhaseCompletionStatus(input: {
 export async function getStudentPhaseCompletionForCourseDay(input: {
   studentId: string;
   courseId: string;
+  lecturerId?: string | null;
   referenceTime: Date;
 }): Promise<StudentPhaseCompletion> {
   const { start, end } = getUtcDayRange(input.referenceTime);
@@ -54,6 +55,7 @@ export async function getStudentPhaseCompletionForCourseDay(input: {
       studentId: input.studentId,
       session: {
         courseId: input.courseId,
+        ...(input.lecturerId ? { lecturerId: input.lecturerId } : {}),
         startedAt: {
           gte: start,
           lt: end,
@@ -83,6 +85,7 @@ export async function getStudentPhaseCompletionForSession(input: {
     where: { id: input.sessionId },
     select: {
       courseId: true,
+      lecturerId: true,
       startedAt: true,
     },
   });
@@ -92,6 +95,7 @@ export async function getStudentPhaseCompletionForSession(input: {
   return getStudentPhaseCompletionForCourseDay({
     studentId: input.studentId,
     courseId: attendanceSession.courseId,
+    lecturerId: attendanceSession.lecturerId,
     referenceTime: attendanceSession.startedAt,
   });
 }

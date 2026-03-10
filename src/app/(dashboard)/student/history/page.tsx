@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getStudentGateState } from "@/lib/student-gates";
 import { redirect } from "next/navigation";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
+import { getStudentPhaseCompletionForCourseDay } from "@/lib/phase-completion";
 
 export default async function StudentHistoryPage() {
   const session = await auth();
@@ -110,6 +111,39 @@ export default async function StudentHistoryPage() {
     orderBy: { markedAt: "desc" },
   });
 
+  const completionInputByKey = new Map<
+    string,
+    { courseId: string; lecturerId: string; referenceTime: Date }
+  >();
+  for (const record of records) {
+    const key = [
+      record.session.courseId,
+      record.session.lecturerId,
+      record.session.startedAt.toISOString().slice(0, 10),
+    ].join(":");
+    if (!completionInputByKey.has(key)) {
+      completionInputByKey.set(key, {
+        courseId: record.session.courseId,
+        lecturerId: record.session.lecturerId,
+        referenceTime: record.session.startedAt,
+      });
+    }
+  }
+
+  const completionByKey = new Map(
+    await Promise.all(
+      Array.from(completionInputByKey.entries()).map(async ([key, input]) => {
+        const completion = await getStudentPhaseCompletionForCourseDay({
+          studentId: session.user.id,
+          courseId: input.courseId,
+          lecturerId: input.lecturerId,
+          referenceTime: input.referenceTime,
+        });
+        return [key, completion] as const;
+      })
+    )
+  );
+
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted-foreground">
@@ -159,14 +193,31 @@ export default async function StudentHistoryPage() {
           { key: "confidence", label: "Confidence" },
           { key: "status", label: "Status" },
         ]}
-        data={records.map((r) => ({
-          course: `${r.session.course.code} - ${r.session.course.name}`,
-          date: r.markedAt.toLocaleDateString(),
-          time: r.markedAt.toLocaleTimeString(),
-          webauthn: r.webauthnUsed ? "Yes" : "No",
-          confidence: `${r.confidence}%`,
-          status: r.flagged ? "Flagged" : "Verified",
-        }))}
+        data={records.map((r) => {
+          const completionKey = [
+            r.session.courseId,
+            r.session.lecturerId,
+            r.session.startedAt.toISOString().slice(0, 10),
+          ].join(":");
+          const phaseState = completionByKey.get(completionKey);
+
+          return {
+            course: `${r.session.course.code} - ${r.session.course.name}`,
+            date: r.markedAt.toLocaleDateString(),
+            time: r.markedAt.toLocaleTimeString(),
+            webauthn: r.webauthnUsed ? "Yes" : "No",
+            confidence: `${r.confidence}%`,
+            status: r.flagged
+              ? "Flagged"
+              : phaseState?.overallPresent
+                ? "Present (Phase 1 + 2)"
+                : phaseState?.pendingPhase === "PHASE_TWO"
+                  ? "Phase 1 Done (Pending Phase 2)"
+                  : phaseState?.pendingPhase === "PHASE_ONE"
+                    ? "Phase 1 Missing"
+                    : "Recorded",
+          };
+        })}
         emptyMessage="No attendance history yet."
       />
     </div>

@@ -64,6 +64,7 @@ export async function GET(
   const phaseCompletion = await getStudentPhaseCompletionForCourseDay({
     studentId: user.id,
     courseId: attendanceSession.courseId,
+    lecturerId: attendanceSession.lecturerId,
     referenceTime: attendanceSession.startedAt,
   });
 
@@ -129,7 +130,7 @@ export async function GET(
           layers: {
             webauthn: Boolean(record.webauthnUsed),
             qr: typeof record.qrToken === "string" && record.qrToken.length > 0,
-            ble: record.bleSignalStrength !== null,
+            ble: record.bleSignalStrength != null,
           },
         }
       : null,

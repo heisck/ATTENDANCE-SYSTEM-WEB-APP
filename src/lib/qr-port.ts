@@ -206,3 +206,30 @@ export async function rejectQrPort(qrPortRequestId: string, lecturerId: string) 
   );
   return { success: true, message: "QR port rejected" };
 }
+
+export async function stopQrPort(sessionId: string, studentId: string) {
+  const req = await db.qrPortRequest.findUnique({
+    where: { sessionId_studentId: { sessionId, studentId } },
+    select: { id: true, status: true },
+  });
+
+  if (!req) {
+    return { success: false, message: "No QR port request found for this session." };
+  }
+
+  if (req.status !== "APPROVED") {
+    return { success: false, message: "QR port is not currently active." };
+  }
+
+  await db.qrPortRequest.update({
+    where: { id: req.id },
+    data: {
+      status: "REJECTED",
+      reviewedAt: new Date(),
+      reviewedBy: studentId,
+    },
+  });
+
+  await cacheSet(`attendance:qr-port-status:${sessionId}:${studentId}`, "REJECTED", 120);
+  return { success: true, message: "QR port stopped." };
+}

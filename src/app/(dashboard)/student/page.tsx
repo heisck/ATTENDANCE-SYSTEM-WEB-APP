@@ -10,6 +10,7 @@ import { StudentLiveSessionsTable } from "@/components/dashboard/student-live-se
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { getStudentHubContext } from "@/lib/student-hub";
+import { getStudentPhaseCompletionForCourseDay } from "@/lib/phase-completion";
 
 export default async function StudentDashboard() {
   const session = await auth();
@@ -82,6 +83,17 @@ export default async function StudentDashboard() {
   const hasCredential = await db.webAuthnCredential.count({
     where: { userId },
   });
+
+  const recentPhaseCompletion = await Promise.all(
+    recentRecords.map((record) =>
+      getStudentPhaseCompletionForCourseDay({
+        studentId: userId,
+        courseId: record.session.courseId,
+        lecturerId: record.session.lecturerId,
+        referenceTime: record.session.startedAt,
+      })
+    )
+  );
 
   const hubContext = await getStudentHubContext(userId);
   const studentHubAccess = hubContext?.hubAccess;
@@ -169,20 +181,45 @@ export default async function StudentDashboard() {
             { key: "confidence", label: "Confidence" },
             { key: "status", label: "Status" },
           ]}
-          data={recentRecords.map((r) => ({
-            course: `${r.session.course.code} - ${r.session.course.name}`,
-            date: r.markedAt.toLocaleDateString(),
-            confidence: `${r.confidence}%`,
-            status: r.flagged ? (
-              <span className="inline-flex rounded-full border border-border bg-muted/70 px-2 py-0.5 text-xs font-medium">
-                Flagged
-              </span>
-            ) : (
-              <span className="inline-flex rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium">
-                Verified
-              </span>
-            ),
-          }))}
+          data={recentRecords.map((r, index) => {
+            const phaseState = recentPhaseCompletion[index];
+            const statusText = r.flagged
+              ? "Flagged"
+              : phaseState?.overallPresent
+                ? "Present (Phase 1 + 2)"
+                : phaseState?.pendingPhase === "PHASE_TWO"
+                  ? "Phase 1 Done (Pending Phase 2)"
+                  : phaseState?.pendingPhase === "PHASE_ONE"
+                    ? "Phase 1 Missing"
+                    : "Recorded";
+
+            return {
+              course: `${r.session.course.code} - ${r.session.course.name}`,
+              date: r.markedAt.toLocaleDateString(),
+              confidence: `${r.confidence}%`,
+              status: r.flagged ? (
+                <span className="inline-flex rounded-full border border-border bg-muted/70 px-2 py-0.5 text-xs font-medium">
+                  Flagged
+                </span>
+              ) : statusText === "Present (Phase 1 + 2)" ? (
+                <span className="inline-flex rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium">
+                  Present (Phase 1 + 2)
+                </span>
+              ) : statusText === "Phase 1 Done (Pending Phase 2)" ? (
+                <span className="inline-flex rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium">
+                  Phase 1 Done
+                </span>
+              ) : statusText === "Phase 1 Missing" ? (
+                <span className="inline-flex rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium">
+                  Phase 1 Missing
+                </span>
+              ) : (
+                <span className="inline-flex rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium">
+                  Recorded
+                </span>
+              ),
+            };
+          })}
           emptyMessage="No attendance records yet. Mark your first attendance!"
         />
       </section>

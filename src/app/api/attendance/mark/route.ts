@@ -128,6 +128,7 @@ export async function POST(request: NextRequest) {
           select: {
             id: true,
             courseId: true,
+            lecturerId: true,
             qrSecret: true,
             course: {
               select: {
@@ -161,6 +162,24 @@ export async function POST(request: NextRequest) {
 
     if (!isEnrolled) {
       return NextResponse.json({ error: "You are not enrolled in this course" }, { status: 403 });
+    }
+
+    if (syncedSession.phase === "PHASE_TWO") {
+      const phaseCompletionGate = await getStudentPhaseCompletionForCourseDay({
+        studentId: session.user.id,
+        courseId: attendanceSession.courseId,
+        lecturerId: attendanceSession.lecturerId,
+        referenceTime: syncedSession.startedAt,
+      });
+      if (!phaseCompletionGate.phaseOneDone) {
+        return NextResponse.json(
+          {
+            error:
+              "Phase 1 attendance is required before you can mark Phase 2 for this class.",
+          },
+          { status: 403 }
+        );
+      }
     }
 
     const existing = await db.attendanceRecord.findUnique({
@@ -276,6 +295,7 @@ export async function POST(request: NextRequest) {
       phaseCompletion = await getStudentPhaseCompletionForCourseDay({
         studentId: session.user.id,
         courseId: attendanceSession.courseId,
+        lecturerId: attendanceSession.lecturerId,
         referenceTime: syncedSession.startedAt,
       });
     } catch (phaseError) {
