@@ -21,8 +21,8 @@ enum SessionStatus {
 }
 
 enum AttendancePhase {
-  PHASE_ONE @map("INITIAL")
-  PHASE_TWO @map("REVERIFY")
+  PHASE_ONE
+  PHASE_TWO
   CLOSED
 }
 
