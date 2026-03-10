@@ -21,8 +21,8 @@ enum SessionStatus {
 }
 
 enum AttendancePhase {
-  PHASE_ONE
-  PHASE_TWO
+  PHASE_ONE @map("INITIAL")
+  PHASE_TWO @map("REVERIFY")
   CLOSED
 }
 
@@ -667,7 +667,7 @@ model AttendanceSession {
   lecturerId   String
   status       SessionStatus   @default(ACTIVE)
   phase        AttendancePhase @default(PHASE_ONE)
-  endsAt       DateTime
+  endsAt       DateTime        @default(now())
   qrRotationMs Int             @default(5000)
   qrGraceMs    Int             @default(1000)
   qrSecret     String
@@ -699,7 +699,7 @@ model AttendanceRecord {
   studentId    String
   qrToken      String
   webauthnUsed Boolean @default(true)
-  confidence   Int
+  confidence   Int     @default(0)
   flagged      Boolean @default(false)
   // New device and security fields
   deviceToken       String? // Which device submitted this

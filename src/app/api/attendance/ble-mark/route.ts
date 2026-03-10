@@ -319,11 +319,25 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const phaseCompletion = await getStudentPhaseCompletionForCourseDay({
-      studentId: session.user.id,
-      courseId: attendanceSession.courseId,
-      referenceTime: syncedSession.startedAt,
-    });
+    let phaseCompletion: Awaited<
+      ReturnType<typeof getStudentPhaseCompletionForCourseDay>
+    > | null = null;
+    try {
+      phaseCompletion = await getStudentPhaseCompletionForCourseDay({
+        studentId: session.user.id,
+        courseId: attendanceSession.courseId,
+        referenceTime: syncedSession.startedAt,
+      });
+    } catch (phaseCompletionError) {
+      logError("attendance/ble-mark-phase-completion", phaseCompletionError, {
+        studentId: session.user.id,
+        courseId: attendanceSession.courseId,
+        referenceTime:
+          syncedSession.startedAt instanceof Date
+            ? syncedSession.startedAt.toISOString()
+            : String(syncedSession.startedAt),
+      });
+    }
 
     if (hasAnomalies && flagged) {
       await db.attendanceAnomaly.createMany({

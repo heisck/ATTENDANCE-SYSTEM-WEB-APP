@@ -1,12 +1,19 @@
 import { db } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 
 export async function createAuditLog(
   userId: string,
   action: string,
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>,
+  ipAddress?: string | null
 ) {
+  const metadataWithIp =
+    typeof ipAddress === "string" && ipAddress.trim().length > 0
+      ? { ...metadata, ipAddress: ipAddress.trim() }
+      : metadata;
+
   return db.auditLog.create({
-    data: { userId, action, metadata },
+    data: { userId, action, metadata: metadataWithIp as Prisma.InputJsonValue },
   });
 }
 

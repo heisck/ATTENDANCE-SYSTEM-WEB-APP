@@ -42,9 +42,9 @@ interface ActiveSession {
 }
 
 interface LayerResult {
-  webauthn: boolean;
-  qr: boolean;
-  ble?: boolean;
+  webauthn: boolean | null;
+  qr: boolean | null;
+  ble: boolean | null;
 }
 
 interface AttendanceResult {
@@ -358,9 +358,9 @@ export default function AttendPage() {
         const derivedLayers =
           synced.body.attendance?.layers ??
           session.layers ?? {
-            webauthn: true,
-            qr: true,
-            ble: false,
+            webauthn: null,
+            qr: null,
+            ble: null,
           };
 
         setResult({
@@ -810,14 +810,18 @@ export default function AttendPage() {
                   />
                   <LayerRow
                     icon={
-                      result.layers.ble ? (
+                      result.layers.ble === true ? (
                         <Bluetooth className="h-4 w-4" />
                       ) : (
                         <QrCode className="h-4 w-4" />
                       )
                     }
-                    label={result.layers.ble ? "Lecturer BLE Beacon" : "Live QR Token"}
-                    passed={result.layers.ble || result.layers.qr}
+                    label={result.layers.ble === true ? "Lecturer BLE Beacon" : "Live QR Token"}
+                    passed={
+                      result.layers.ble === null && result.layers.qr === null
+                        ? null
+                        : result.layers.ble === true || result.layers.qr === true
+                    }
                     points={50}
                   />
                 </div>
@@ -901,13 +905,16 @@ function LayerRow({
 }: {
   icon: ReactNode;
   label: string;
-  passed: boolean;
+  passed: boolean | null;
   points: number;
 }) {
+  const isPassed = passed === true;
+  const isUnknown = passed === null;
+
   return (
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <span className={passed ? "text-foreground" : "text-muted-foreground"}>
+        <span className={isPassed ? "text-foreground" : "text-muted-foreground"}>
           {icon}
         </span>
         <span className="text-sm">{label}</span>
@@ -915,12 +922,14 @@ function LayerRow({
       <div className="flex items-center gap-2">
         <span
           className={`text-xs font-medium ${
-            passed ? "text-foreground" : "text-muted-foreground"
+            isPassed ? "text-foreground" : "text-muted-foreground"
           }`}
         >
-          {passed ? `+${points}` : "+0"}
+          {isUnknown ? "Unknown" : isPassed ? `+${points}` : "+0"}
         </span>
-        {passed ? (
+        {isUnknown ? (
+          <span className="text-xs text-muted-foreground">-</span>
+        ) : isPassed ? (
           <CheckCircle2 className="h-4 w-4 text-foreground" />
         ) : (
           <XCircle className="h-4 w-4 text-muted-foreground" />

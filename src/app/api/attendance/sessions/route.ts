@@ -218,7 +218,7 @@ export async function GET(request: NextRequest) {
                   qr:
                     typeof records[0]?.qrToken === "string" &&
                     records[0].qrToken.length > 0,
-                  ble: records[0]?.bleSignalStrength !== null,
+                  ble: records[0]?.bleSignalStrength != null,
                 }
               : undefined,
           phaseCompletion,
