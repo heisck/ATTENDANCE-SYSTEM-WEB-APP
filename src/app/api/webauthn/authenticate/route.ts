@@ -5,6 +5,10 @@ import {
   verifyAuthentication,
 } from "@/lib/webauthn";
 import { logError, ApiErrorMessages } from "@/lib/api-error";
+import {
+  clearAttendanceProofCookie,
+  setAttendanceProofCookie,
+} from "@/lib/attendance-proof";
 
 export async function GET() {
   const session = await auth();
@@ -33,15 +37,22 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const verification = await verifyAuthentication(session.user.id, body);
-
-    return NextResponse.json({
+    const response = NextResponse.json({
       verified: verification.verified,
     });
+    if (verification.verified) {
+      setAttendanceProofCookie(response, session.user.id);
+    } else {
+      clearAttendanceProofCookie(response);
+    }
+    return response;
   } catch (error: unknown) {
     logError("webauthn/authenticate POST", error, { userId: session.user.id });
-    return NextResponse.json(
+    const response = NextResponse.json(
       { error: ApiErrorMessages.WEBAUTHN_CHALLENGE_FAILED },
       { status: 400 }
     );
+    clearAttendanceProofCookie(response);
+    return response;
   }
 }

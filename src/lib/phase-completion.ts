@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { cacheDel, cacheGet, cacheSet } from "@/lib/cache";
 
 export type PendingPhase = "PHASE_ONE" | "PHASE_TWO" | null;
 
@@ -25,6 +26,17 @@ function getUtcDayRange(reference: Date) {
   return { start, end };
 }
 
+function buildPhaseCompletionCacheKey(input: {
+  studentId: string;
+  courseId: string;
+  lecturerId?: string | null;
+  referenceTime: Date;
+}) {
+  const { start } = getUtcDayRange(input.referenceTime);
+  const dayKey = start.toISOString().slice(0, 10);
+  return `attendance:phase-completion:${input.studentId}:${input.courseId}:${input.lecturerId ?? "all"}:${dayKey}`;
+}
+
 export function buildStudentPhaseCompletionStatus(input: {
   phaseOneDone: boolean;
   phaseTwoDone: boolean;
@@ -49,32 +61,39 @@ export async function getStudentPhaseCompletionForCourseDay(input: {
   lecturerId?: string | null;
   referenceTime: Date;
 }): Promise<StudentPhaseCompletion> {
+  const cacheKey = buildPhaseCompletionCacheKey(input);
+  const cached = await cacheGet<StudentPhaseCompletion>(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const { start, end } = getUtcDayRange(input.referenceTime);
-  const rows = await db.attendanceRecord.findMany({
+  const rows = await db.attendanceSession.findMany({
     where: {
-      studentId: input.studentId,
-      session: {
-        courseId: input.courseId,
-        ...(input.lecturerId ? { lecturerId: input.lecturerId } : {}),
-        startedAt: {
-          gte: start,
-          lt: end,
+      courseId: input.courseId,
+      ...(input.lecturerId ? { lecturerId: input.lecturerId } : {}),
+      startedAt: {
+        gte: start,
+        lt: end,
+      },
+      records: {
+        some: {
+          studentId: input.studentId,
         },
       },
     },
     select: {
-      session: {
-        select: {
-          phase: true,
-        },
-      },
+      phase: true,
     },
+    distinct: ["phase"],
   });
 
-  const phaseOneDone = rows.some((row) => row.session.phase === "PHASE_ONE");
-  const phaseTwoDone = rows.some((row) => row.session.phase === "PHASE_TWO");
+  const phaseOneDone = rows.some((row) => row.phase === "PHASE_ONE");
+  const phaseTwoDone = rows.some((row) => row.phase === "PHASE_TWO");
 
-  return buildStudentPhaseCompletionStatus({ phaseOneDone, phaseTwoDone });
+  const result = buildStudentPhaseCompletionStatus({ phaseOneDone, phaseTwoDone });
+  await cacheSet(cacheKey, result, 300);
+  return result;
 }
 
 export async function getStudentPhaseCompletionForSession(input: {
@@ -98,4 +117,13 @@ export async function getStudentPhaseCompletionForSession(input: {
     lecturerId: attendanceSession.lecturerId,
     referenceTime: attendanceSession.startedAt,
   });
+}
+
+export async function invalidateStudentPhaseCompletionForCourseDay(input: {
+  studentId: string;
+  courseId: string;
+  lecturerId?: string | null;
+  referenceTime: Date;
+}) {
+  await cacheDel(buildPhaseCompletionCacheKey(input));
 }

@@ -116,7 +116,8 @@ export function LecturerBleBroadcasterSync({
         } | null;
 
         if (!tokenResponse.ok || !tokenBody || !("current" in tokenBody)) {
-          throw new Error(tokenBody?.error || "Failed to fetch BLE token stream.");
+          const errBody = tokenBody as { error?: string } | null;
+          throw new Error(errBody?.error || "Failed to fetch BLE token stream.");
         }
 
         const sessionMetaPayload = JSON.stringify({

@@ -8,14 +8,41 @@ type MemoryCacheEntry = {
 const redisUrl = process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL;
 const memoryCache = new Map<string, MemoryCacheEntry>();
 let redis: Redis | null = null;
+let memoryCleanupStarted = false;
+
+const MEMORY_CACHE_CLEANUP_INTERVAL_MS = 60_000;
+
+export class SharedRedisRequiredError extends Error {
+  constructor(message: string = "Redis is required for this operation in production") {
+    super(message);
+    this.name = "SharedRedisRequiredError";
+  }
+}
 
 function nowMs() {
   return Date.now();
 }
 
-function patternToRegex(pattern: string): RegExp {
-  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`^${escaped.replace(/\*/g, ".*")}$`);
+function canUseMemoryFallback() {
+  return process.env.NODE_ENV !== "production";
+}
+
+function startMemoryCleanupIfNeeded() {
+  if (memoryCleanupStarted || !canUseMemoryFallback()) {
+    return;
+  }
+
+  const timer = setInterval(() => {
+    const now = nowMs();
+    for (const [key, entry] of memoryCache.entries()) {
+      if (entry.expiresAt <= now) {
+        memoryCache.delete(key);
+      }
+    }
+  }, MEMORY_CACHE_CLEANUP_INTERVAL_MS);
+
+  timer.unref?.();
+  memoryCleanupStarted = true;
 }
 
 function memoryGetRaw(key: string): string | null {
@@ -29,6 +56,7 @@ function memoryGetRaw(key: string): string | null {
 }
 
 function memorySetRaw(key: string, value: string, ttlSeconds: number) {
+  startMemoryCleanupIfNeeded();
   memoryCache.set(key, {
     value,
     expiresAt: nowMs() + ttlSeconds * 1000,
@@ -37,16 +65,6 @@ function memorySetRaw(key: string, value: string, ttlSeconds: number) {
 
 function memoryDelKey(key: string): boolean {
   return memoryCache.delete(key);
-}
-
-function memoryKeysByPattern(pattern: string): string[] {
-  const regex = patternToRegex(pattern);
-  const keys: string[] = [];
-  for (const key of memoryCache.keys()) {
-    if (memoryGetRaw(key) === null) continue;
-    if (regex.test(key)) keys.push(key);
-  }
-  return keys;
 }
 
 function memoryIncrement(key: string, ttlSeconds: number): number {
@@ -58,7 +76,7 @@ function memoryIncrement(key: string, ttlSeconds: number): number {
 }
 
 function shouldUseMemoryFallback() {
-  return !redisUrl;
+  return canUseMemoryFallback() && !redisUrl;
 }
 
 export function getRedis(): Redis | null {
@@ -116,7 +134,7 @@ export const CACHE_TTL = {
 
 export async function cacheGet<T>(key: string): Promise<T | null> {
   const client = getRedis();
-  if (!client || shouldUseMemoryFallback()) {
+  if (shouldUseMemoryFallback()) {
     const data = memoryGetRaw(key);
     if (!data) return null;
     try {
@@ -127,20 +145,27 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
     }
   }
 
+  if (!client) {
+    return null;
+  }
+
   try {
     const data = await client.get(key);
     if (!data) return null;
     return JSON.parse(data) as T;
   } catch (error) {
     console.error(`[v0] Cache get error for ${key}:`, error);
-    const data = memoryGetRaw(key);
-    if (!data) return null;
-    try {
-      return JSON.parse(data) as T;
-    } catch {
-      memoryDelKey(key);
-      return null;
+    if (canUseMemoryFallback()) {
+      const data = memoryGetRaw(key);
+      if (!data) return null;
+      try {
+        return JSON.parse(data) as T;
+      } catch {
+        memoryDelKey(key);
+        return null;
+      }
     }
+    return null;
   }
 }
 
@@ -152,9 +177,13 @@ export async function cacheSet<T>(
   const payload = JSON.stringify(value);
   const client = getRedis();
 
-  if (!client || shouldUseMemoryFallback()) {
+  if (shouldUseMemoryFallback()) {
     memorySetRaw(key, payload, ttlSeconds);
     return true;
+  }
+
+  if (!client) {
+    return false;
   }
 
   try {
@@ -162,16 +191,23 @@ export async function cacheSet<T>(
     return true;
   } catch (error) {
     console.error(`[v0] Cache set error for ${key}:`, error);
-    memorySetRaw(key, payload, ttlSeconds);
-    return true;
+    if (canUseMemoryFallback()) {
+      memorySetRaw(key, payload, ttlSeconds);
+      return true;
+    }
+    return false;
   }
 }
 
 export async function cacheDel(key: string): Promise<boolean> {
   const client = getRedis();
-  const memoryDeleted = memoryDelKey(key);
+  const memoryDeleted = canUseMemoryFallback() ? memoryDelKey(key) : false;
 
-  if (!client || shouldUseMemoryFallback()) {
+  if (shouldUseMemoryFallback()) {
+    return memoryDeleted;
+  }
+
+  if (!client) {
     return memoryDeleted;
   }
 
@@ -184,33 +220,14 @@ export async function cacheDel(key: string): Promise<boolean> {
   }
 }
 
-export async function cacheInvalidatePattern(pattern: string): Promise<number> {
-  const client = getRedis();
-  const memoryKeys = memoryKeysByPattern(pattern);
-  let memoryDeleted = 0;
-  for (const key of memoryKeys) {
-    if (memoryDelKey(key)) memoryDeleted += 1;
-  }
-
-  if (!client || shouldUseMemoryFallback()) {
-    return memoryDeleted;
-  }
-
-  try {
-    const keys = await client.keys(pattern);
-    if (keys.length === 0) return memoryDeleted;
-    const deleted = await client.del(...keys);
-    return memoryDeleted + deleted;
-  } catch (error) {
-    console.error(`[v0] Cache pattern invalidation error for ${pattern}:`, error);
-    return memoryDeleted;
-  }
-}
-
 export async function cacheIncrement(key: string, ttlSeconds: number): Promise<number> {
   const client = getRedis();
-  if (!client || shouldUseMemoryFallback()) {
+  if (shouldUseMemoryFallback()) {
     return memoryIncrement(key, ttlSeconds);
+  }
+
+  if (!client) {
+    throw new SharedRedisRequiredError();
   }
 
   try {
@@ -222,7 +239,10 @@ export async function cacheIncrement(key: string, ttlSeconds: number): Promise<n
     return count;
   } catch (error) {
     console.error(`[v0] Cache increment error for ${key}:`, error);
-    return memoryIncrement(key, ttlSeconds);
+    if (canUseMemoryFallback()) {
+      return memoryIncrement(key, ttlSeconds);
+    }
+    throw new SharedRedisRequiredError();
   }
 }
 
@@ -247,7 +267,7 @@ export async function checkRateLimit(
 
 export async function cacheGetBatch<T>(keys: string[]): Promise<(T | null)[]> {
   const client = getRedis();
-  if (!client || shouldUseMemoryFallback()) {
+  if (shouldUseMemoryFallback()) {
     return keys.map((key) => {
       const raw = memoryGetRaw(key);
       if (!raw) return null;
@@ -258,6 +278,10 @@ export async function cacheGetBatch<T>(keys: string[]): Promise<(T | null)[]> {
         return null;
       }
     });
+  }
+
+  if (!client) {
+    return keys.map(() => null);
   }
 
   try {
@@ -273,6 +297,9 @@ export async function cacheGetBatch<T>(keys: string[]): Promise<(T | null)[]> {
     });
   } catch (error) {
     console.error("[v0] Cache batch get error:", error);
+    if (!canUseMemoryFallback()) {
+      return keys.map(() => null);
+    }
     return keys.map((key) => {
       const raw = memoryGetRaw(key);
       if (!raw) return null;
@@ -290,11 +317,15 @@ export async function cacheSetBatch<T>(
   items: Array<{ key: string; value: T; ttl: number }>
 ): Promise<number> {
   const client = getRedis();
-  if (!client || shouldUseMemoryFallback()) {
+  if (shouldUseMemoryFallback()) {
     items.forEach(({ key, value, ttl }) => {
       memorySetRaw(key, JSON.stringify(value), ttl);
     });
     return items.length;
+  }
+
+  if (!client) {
+    return 0;
   }
 
   try {
@@ -307,6 +338,9 @@ export async function cacheSetBatch<T>(
     return items.length;
   } catch (error) {
     console.error("[v0] Cache batch set error:", error);
+    if (!canUseMemoryFallback()) {
+      return 0;
+    }
     items.forEach(({ key, value, ttl }) => {
       memorySetRaw(key, JSON.stringify(value), ttl);
     });
@@ -336,14 +370,18 @@ export async function cacheGetOrCompute<T>(
 
 export async function cacheHealthCheck(): Promise<boolean> {
   const client = getRedis();
-  if (!client || shouldUseMemoryFallback()) {
+  if (shouldUseMemoryFallback()) {
     return true;
+  }
+
+  if (!client) {
+    return false;
   }
 
   try {
     const result = await client.ping();
     return result === "PONG";
   } catch {
-    return memoryCache.size >= 0;
+    return canUseMemoryFallback() ? memoryCache.size >= 0 : false;
   }
 }

@@ -275,6 +275,13 @@ export async function verifyAuthentication(
   }
   const expectedChallenge = challengeRecord.challenge;
 
+  const consumedChallenge = await db.webAuthnChallenge.deleteMany({
+    where: { id: challengeRecord.id },
+  });
+  if (consumedChallenge.count !== 1) {
+    throw new Error("WebAuthn challenge invalid or already used");
+  }
+
   const credential = await db.webAuthnCredential.findUnique({
     where: { credentialId: response.id },
   });
@@ -333,14 +340,20 @@ export async function verifyAuthentication(
   } as any);
 
   if (verification.verified) {
-    await db.webAuthnCredential.update({
-      where: { credentialId: response.id },
-      data: { counter: BigInt(verification.authenticationInfo.newCounter) },
+    const counterAdvanced = await db.webAuthnCredential.updateMany({
+      where: {
+        id: resolvedCredential.id,
+        counter: resolvedCredential.counter,
+      },
+      data: {
+        counter: BigInt(verification.authenticationInfo.newCounter),
+      },
     });
+    if (counterAdvanced.count !== 1) {
+      throw new Error("WebAuthn credential counter already advanced");
+    }
   }
 
-  // Clean up challenge after verification attempt
-  await db.webAuthnChallenge.deleteMany({ where: { userId } });
   return verification;
 }
 

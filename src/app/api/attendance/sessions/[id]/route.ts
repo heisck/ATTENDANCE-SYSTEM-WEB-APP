@@ -3,8 +3,32 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getPhaseEndsAt, syncAttendanceSessionState } from "@/lib/attendance";
 import { generateQrPayload } from "@/lib/qr";
-import { CACHE_KEYS, cacheDel, cacheInvalidatePattern } from "@/lib/cache";
+import { CACHE_KEYS, cacheDel } from "@/lib/cache";
 import { clearSessionBleBroadcast } from "@/lib/lecturer-ble";
+
+async function invalidateClosedSessionCaches(sessionId: string, lecturerId: string, courseId: string) {
+  const enrollmentRows = await db.enrollment.findMany({
+    where: { courseId },
+    select: { studentId: true },
+  });
+
+  await Promise.all([
+    cacheDel(`attendance:session-meta:${sessionId}`),
+    cacheDel(`attendance:session-secret:${sessionId}`),
+    cacheDel(`attendance:mark-session:${sessionId}`),
+    cacheDel(CACHE_KEYS.SESSION_STATE(sessionId)),
+    cacheDel(`attendance:sessions:list:LECTURER:${lecturerId}:ACTIVE`),
+    cacheDel(`attendance:sessions:list:LECTURER:${lecturerId}:ALL`),
+    cacheDel(`attendance:sessions:list:LECTURER:${lecturerId}:CLOSED`),
+    ...enrollmentRows.flatMap((row) => [
+      cacheDel(`attendance:session-me:${sessionId}:${row.studentId}`),
+      cacheDel(`attendance:sessions:list:STUDENT:${row.studentId}:ACTIVE`),
+      cacheDel(`attendance:sessions:list:STUDENT:${row.studentId}:ALL`),
+      cacheDel(`attendance:sessions:list:STUDENT:${row.studentId}:CLOSED`),
+      cacheDel(`student:live-sessions:${row.studentId}`),
+    ]),
+  ]);
+}
 
 export async function GET(
   _request: NextRequest,
@@ -54,6 +78,7 @@ export async function GET(
 
   return NextResponse.json({
     ...attendanceSession,
+    status: syncedSession.status,
     phase: syncedSession.phase,
     endsAt: syncedSession.endsAt,
     phaseEndsAt: getPhaseEndsAt(syncedSession),
@@ -76,6 +101,11 @@ export async function PATCH(
 
   const attendanceSession = await db.attendanceSession.findUnique({
     where: { id },
+    select: {
+      id: true,
+      courseId: true,
+      lecturerId: true,
+    },
   });
 
   if (!attendanceSession || attendanceSession.lecturerId !== user.id) {
@@ -91,19 +121,14 @@ export async function PATCH(
       relayEnabled: false,
     },
   });
+
   try {
     await clearSessionBleBroadcast(id);
   } catch (error) {
     console.error("Failed to clear BLE broadcast during session close:", error);
   }
-  await cacheDel(`attendance:session-meta:${id}`);
-  await cacheDel(`attendance:session-secret:${id}`);
-  await cacheDel(CACHE_KEYS.SESSION_STATE(id));
-  await cacheInvalidatePattern(`attendance:session-me:${id}:*`);
-  await cacheInvalidatePattern(`attendance:enrollment:${id}:*`);
-  await cacheDel(`attendance:sessions:list:LECTURER:${user.id}:ACTIVE`);
-  await cacheDel(`attendance:sessions:list:LECTURER:${user.id}:ALL`);
-  await cacheDel(`attendance:sessions:list:LECTURER:${user.id}:CLOSED`);
+
+  await invalidateClosedSessionCaches(id, user.id, attendanceSession.courseId);
 
   return NextResponse.json(updated);
 }

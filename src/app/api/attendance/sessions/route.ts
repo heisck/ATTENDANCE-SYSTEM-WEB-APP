@@ -2,19 +2,34 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
+  deriveAttendancePhase,
   getDefaultSessionEndsAt,
   QR_GRACE_MS,
   QR_ROTATION_MS,
 } from "@/lib/attendance";
 import { generateQrSecret } from "@/lib/qr";
 import { createSessionSchema } from "@/lib/validators";
-import { cacheDel, cacheGet, cacheInvalidatePattern, cacheSet } from "@/lib/cache";
+import { cacheDel, cacheGet, cacheSet } from "@/lib/cache";
 import {
   buildDefaultBeaconName,
-  clearSessionBleBroadcast,
   setSessionBleBroadcast,
 } from "@/lib/lecturer-ble";
 import { getStudentPhaseCompletionForCourseDay } from "@/lib/phase-completion";
+
+const SESSION_LIST_CACHE_TTL_SECONDS = 10;
+
+async function invalidateStudentSessionKeys(studentIds: string[]) {
+  await Promise.all(
+    studentIds.map((studentId) =>
+      Promise.all([
+        cacheDel(`attendance:sessions:list:STUDENT:${studentId}:ACTIVE`),
+        cacheDel(`attendance:sessions:list:STUDENT:${studentId}:ALL`),
+        cacheDel(`attendance:sessions:list:STUDENT:${studentId}:CLOSED`),
+        cacheDel(`student:live-sessions:${studentId}`),
+      ])
+    )
+  );
+}
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -24,7 +39,10 @@ export async function POST(request: NextRequest) {
 
   const user = session.user as any;
   if (user.role !== "LECTURER") {
-    return NextResponse.json({ error: "Only lecturers can create sessions" }, { status: 403 });
+    return NextResponse.json(
+      { error: "Only lecturers can create sessions" },
+      { status: 403 }
+    );
   }
 
   try {
@@ -46,17 +64,23 @@ export async function POST(request: NextRequest) {
     }
 
     const existing = await db.attendanceSession.findFirst({
-      where: { courseId: course.id, status: "ACTIVE" },
+      where: {
+        courseId: course.id,
+        status: "ACTIVE",
+        endsAt: { gt: new Date() },
+      },
     });
     if (existing) {
       return NextResponse.json(
-        { error: "An active session already exists for this course", sessionId: existing.id },
+        {
+          error: "An active session already exists for this course",
+          sessionId: existing.id,
+        },
         { status: 409 }
       );
     }
 
     const startedAt = new Date();
-
     const attendanceSession = await db.attendanceSession.create({
       data: {
         courseId: course.id,
@@ -74,8 +98,6 @@ export async function POST(request: NextRequest) {
     });
 
     if (parsed.enableBle) {
-      const phaseEndsAt = attendanceSession.endsAt;
-
       const beaconName = buildDefaultBeaconName({
         courseCode: course.code,
         sessionId: attendanceSession.id,
@@ -86,27 +108,21 @@ export async function POST(request: NextRequest) {
         lecturerId: user.id,
         beaconName,
         startedAt,
-        expiresAt: phaseEndsAt,
+        expiresAt: attendanceSession.endsAt,
       });
     }
-    await cacheDel(`attendance:sessions:list:LECTURER:${user.id}:ACTIVE`);
-    await cacheDel(`attendance:sessions:list:LECTURER:${user.id}:ALL`);
-    await cacheDel(`attendance:sessions:list:LECTURER:${user.id}:CLOSED`);
+
+    await Promise.all([
+      cacheDel(`attendance:sessions:list:LECTURER:${user.id}:ACTIVE`),
+      cacheDel(`attendance:sessions:list:LECTURER:${user.id}:ALL`),
+      cacheDel(`attendance:sessions:list:LECTURER:${user.id}:CLOSED`),
+    ]);
 
     const enrollmentRows = await db.enrollment.findMany({
       where: { courseId: course.id },
       select: { studentId: true },
     });
-    await Promise.all(
-      enrollmentRows.map((row) =>
-        Promise.all([
-          cacheDel(`attendance:sessions:list:STUDENT:${row.studentId}:ACTIVE`),
-          cacheDel(`attendance:sessions:list:STUDENT:${row.studentId}:ALL`),
-          cacheDel(`attendance:sessions:list:STUDENT:${row.studentId}:CLOSED`),
-          cacheDel(`student:live-sessions:${row.studentId}`),
-        ])
-      )
-    );
+    await invalidateStudentSessionKeys(enrollmentRows.map((row) => row.studentId));
 
     return NextResponse.json(attendanceSession, { status: 201 });
   } catch (error: any) {
@@ -125,58 +141,34 @@ export async function GET(request: NextRequest) {
   }
 
   const user = session.user as any;
-  const statusFilter = new URL(request.url).searchParams.get("status")?.toUpperCase() || null;
-  const cacheKey = `attendance:sessions:list:${user.role}:${user.id}:${statusFilter ?? "ALL"}`;
+  const now = new Date();
+  const statusFilter =
+    new URL(request.url).searchParams.get("status")?.toUpperCase() || null;
+  const effectiveStatusFilter =
+    user.role === "STUDENT" && !statusFilter ? "ACTIVE" : statusFilter ?? "ALL";
+  const cacheKey = `attendance:sessions:list:${user.role}:${user.id}:${effectiveStatusFilter}`;
   const cached = await cacheGet<any[]>(cacheKey);
   if (cached) {
     return NextResponse.json(cached);
   }
 
-  const now = new Date();
-  const autoClosableSessions = await db.attendanceSession.findMany({
-    where: {
-      status: "ACTIVE",
-      endsAt: { lte: now },
-    },
-    select: { id: true },
-  });
-
-  await db.attendanceSession.updateMany({
-    where: {
-      status: "ACTIVE",
-      endsAt: { lte: now },
-    },
-    data: {
-      status: "CLOSED",
-      phase: "CLOSED",
-      closedAt: now,
-      relayEnabled: false,
-    },
-  });
-  await Promise.all(
-    autoClosableSessions.map((item) =>
-      Promise.all([
-        clearSessionBleBroadcast(item.id),
-        cacheInvalidatePattern(`attendance:session-me:${item.id}:*`),
-        cacheInvalidatePattern(`attendance:enrollment:${item.id}:*`),
-      ])
-    )
-  );
-
-  const where =
+  const whereBase =
     user.role === "LECTURER"
       ? { lecturerId: user.id }
       : user.role === "STUDENT"
-        ? { course: { enrollments: { some: { studentId: user.id } } }, status: "ACTIVE" as const }
+        ? { course: { enrollments: { some: { studentId: user.id } } } }
         : {};
 
-  const whereWithStatus: any = { ...where };
-  if (statusFilter === "ACTIVE" || statusFilter === "CLOSED") {
-    whereWithStatus.status = statusFilter;
+  const where: Record<string, unknown> = { ...whereBase };
+  if (effectiveStatusFilter === "ACTIVE") {
+    where.status = "ACTIVE";
+    where.endsAt = { gt: now };
+  } else if (effectiveStatusFilter === "CLOSED") {
+    where.OR = [{ status: "CLOSED" }, { endsAt: { lte: now } }];
   }
 
   const sessions = await db.attendanceSession.findMany({
-    where: whereWithStatus,
+    where,
     include: {
       course: true,
       _count: { select: { records: true } },
@@ -199,21 +191,44 @@ export async function GET(request: NextRequest) {
   });
 
   if (user.role === "STUDENT") {
+    const phaseCompletionByCourseDay = new Map<string, Promise<any>>();
     const payload = await Promise.all(
-      sessions.map(async (s) => {
-        const { records, ...rest } = s as any;
-        const phaseCompletion = await getStudentPhaseCompletionForCourseDay({
-          studentId: user.id,
-          courseId: s.courseId,
-          lecturerId: s.lecturerId,
-          referenceTime: s.startedAt,
-        });
+      sessions.map(async (sessionRow) => {
+        const { records, ...rest } = sessionRow as any;
+        const derivedPhase = deriveAttendancePhase(
+          {
+            status: sessionRow.status,
+            phase: sessionRow.phase,
+            endsAt: sessionRow.endsAt,
+          },
+          now
+        );
+        const derivedStatus = derivedPhase === "CLOSED" ? "CLOSED" : sessionRow.status;
+        const requestKey = [
+          sessionRow.courseId,
+          sessionRow.lecturerId,
+          sessionRow.startedAt.toISOString().slice(0, 10),
+        ].join(":");
+
+        let phaseCompletionPromise = phaseCompletionByCourseDay.get(requestKey);
+        if (!phaseCompletionPromise) {
+          phaseCompletionPromise = getStudentPhaseCompletionForCourseDay({
+            studentId: user.id,
+            courseId: sessionRow.courseId,
+            lecturerId: sessionRow.lecturerId,
+            referenceTime: sessionRow.startedAt,
+          });
+          phaseCompletionByCourseDay.set(requestKey, phaseCompletionPromise);
+        }
+        const phaseCompletion = await phaseCompletionPromise;
 
         const canMarkPhase =
-          s.phase !== "PHASE_TWO" || phaseCompletion.phaseOneDone;
+          derivedPhase !== "PHASE_TWO" || phaseCompletion.phaseOneDone;
 
         return {
           ...rest,
+          status: derivedStatus,
+          phase: derivedPhase,
           hasMarked: Array.isArray(records) && records.length > 0,
           layers:
             Array.isArray(records) && records.length > 0
@@ -233,10 +248,28 @@ export async function GET(request: NextRequest) {
         };
       })
     );
-    await cacheSet(cacheKey, payload, 2);
+
+    await cacheSet(cacheKey, payload, SESSION_LIST_CACHE_TTL_SECONDS);
     return NextResponse.json(payload);
   }
 
-  await cacheSet(cacheKey, sessions as any, 2);
-  return NextResponse.json(sessions);
+  const normalized = sessions.map((sessionRow) => {
+    const derivedPhase = deriveAttendancePhase(
+      {
+        status: sessionRow.status,
+        phase: sessionRow.phase,
+        endsAt: sessionRow.endsAt,
+      },
+      now
+    );
+
+    return {
+      ...sessionRow,
+      status: derivedPhase === "CLOSED" ? "CLOSED" : sessionRow.status,
+      phase: derivedPhase,
+    };
+  });
+
+  await cacheSet(cacheKey, normalized as any, SESSION_LIST_CACHE_TTL_SECONDS);
+  return NextResponse.json(normalized);
 }

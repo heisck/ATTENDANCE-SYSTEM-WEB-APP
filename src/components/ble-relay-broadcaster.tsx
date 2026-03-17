@@ -29,7 +29,7 @@ interface RelayBroadcasterProps {
  * Enables a verified student to broadcast QR code via Bluetooth
  * to friends who have camera issues
  */
-import { BleClient, dataViewToText } from "@capacitor-community/bluetooth-le";
+import { BleClient } from "@capacitor-community/bluetooth-le";
 
 export function BleRelayBroadcaster({
   sessionId,

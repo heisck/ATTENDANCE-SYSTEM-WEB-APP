@@ -7,6 +7,7 @@ export const PHASE_DURATION_MS = 240_000;
 export const TOTAL_SESSION_MS = PHASE_DURATION_MS;
 export const QR_ROTATION_MS = 5_000;
 export const QR_GRACE_MS = 1_000;
+const SESSION_STATE_CACHE_MAX_TTL_SECONDS = 15;
 
 type SessionStateRow = {
   id: string;
@@ -77,6 +78,19 @@ export function deriveAttendancePhase(
   return session.phase;
 }
 
+export function getBoundedSessionTtlSeconds(
+  endsAt: Date,
+  maxSeconds: number,
+  minSeconds: number = 1,
+  now: Date = new Date()
+) {
+  const remainingSeconds = Math.ceil((endsAt.getTime() - now.getTime()) / 1000);
+  if (remainingSeconds <= minSeconds) {
+    return minSeconds;
+  }
+  return Math.max(minSeconds, Math.min(maxSeconds, remainingSeconds));
+}
+
 export async function syncAttendanceSessionState(
   sessionId: string
 ): Promise<SessionStateRow | null> {
@@ -143,7 +157,11 @@ export async function syncAttendanceSessionState(
     await clearSessionBleBroadcast(session.id);
   }
 
-  await cacheSet(cacheKey, serializeSessionStateRow(session), 2);
+  await cacheSet(
+    cacheKey,
+    serializeSessionStateRow(session),
+    getBoundedSessionTtlSeconds(session.endsAt, SESSION_STATE_CACHE_MAX_TTL_SECONDS, 1, now)
+  );
   return session;
 }
 
