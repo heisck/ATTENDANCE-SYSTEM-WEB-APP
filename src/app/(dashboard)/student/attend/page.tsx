@@ -1122,7 +1122,6 @@ function BleLecturerScanner({
       const device = await bluetooth.requestDevice({
         filters: [
           {
-            namePrefix: ATTENDANCE_BLE.NAME_PREFIX,
             services: [sessionBle.serviceUuid],
           },
         ],

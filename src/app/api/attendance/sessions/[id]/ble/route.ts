@@ -228,12 +228,27 @@ export async function POST(
     phase: syncedSession.phase,
   });
 
-  const broadcast = await setSessionBleBroadcast(id, {
-    lecturerId: user.id,
-    beaconName,
-    startedAt: new Date(),
-    expiresAt: phaseEndsAt,
-  });
+  const existingBroadcast = await getSessionBleBroadcast(id);
+  const shouldRefreshBroadcast =
+    action === "start" ||
+    !existingBroadcast ||
+    existingBroadcast.beaconName !== beaconName;
+  const broadcast = shouldRefreshBroadcast
+    ? await setSessionBleBroadcast(id, {
+        lecturerId: user.id,
+        beaconName,
+        startedAt:
+          action === "heartbeat" && existingBroadcast
+            ? new Date(existingBroadcast.startedAt)
+            : new Date(),
+        expiresAt: phaseEndsAt,
+      })
+    : await setSessionBleBroadcast(id, {
+        lecturerId: user.id,
+        beaconName: existingBroadcast.beaconName,
+        startedAt: new Date(existingBroadcast.startedAt),
+        expiresAt: phaseEndsAt,
+      });
 
   if (!attendanceSession.relayEnabled) {
     await db.attendanceSession.update({

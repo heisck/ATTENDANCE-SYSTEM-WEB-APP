@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { QrDisplay } from "@/components/qr-display";
 import { QrPortApprovalPanel } from "@/components/qr-port-approval-panel";
+import { LecturerBleBroadcasterSync } from "@/components/lecturer-ble-broadcaster-sync";
 import {
   Users,
   Clock,
@@ -223,6 +224,16 @@ export default function SessionMonitorPage() {
 
   return (
     <div className="space-y-6">
+      <LecturerBleBroadcasterSync
+        sessionId={sessionId}
+        sessionActive={isActive}
+        enabled={Boolean(bleStatus?.enabled)}
+        beaconName={bleStatus?.beaconName ?? null}
+        serviceUuid={bleStatus?.serviceUuid ?? ""}
+        currentTokenCharacteristicUuid={bleStatus?.currentTokenCharacteristicUuid ?? ""}
+        sessionMetaCharacteristicUuid={bleStatus?.sessionMetaCharacteristicUuid ?? ""}
+      />
+
       <div className="page-header-block flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-xl font-semibold tracking-tight">
