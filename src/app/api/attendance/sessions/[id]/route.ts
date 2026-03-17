@@ -65,6 +65,11 @@ export async function GET(
 
   const user = session.user as any;
   const isLecturer = attendanceSession.lecturerId === user.id;
+  const isPrivileged = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
+
+  if (!isLecturer && !isPrivileged) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   let qr = null;
   if (isLecturer && syncedSession.status === "ACTIVE") {

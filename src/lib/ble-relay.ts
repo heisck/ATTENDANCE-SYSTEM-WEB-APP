@@ -11,6 +11,8 @@
 
 import { db } from "./db";
 import { v4 as uuid } from "uuid";
+import { deriveAttendancePhase } from "./attendance";
+import { verifyQrTokenStrict } from "./qr";
 
 export interface RelayBroadcastData {
   sessionId: string;
@@ -111,7 +113,8 @@ export async function registerRelayDevice(
 export async function startRelayBroadcast(
   relayDeviceId: string,
   qrToken: string,
-  sessionId: string
+  sessionId: string,
+  studentId: string
 ): Promise<{
   success: boolean;
   broadcastData?: RelayBroadcastData;
@@ -148,17 +151,70 @@ export async function startRelayBroadcast(
       };
     }
 
+    if (relayDevice.studentId !== studentId) {
+      return {
+        success: false,
+        message: "Unauthorized relay device",
+      };
+    }
+
     // Get session info
     const session = await db.attendanceSession.findUnique({
       where: { id: sessionId },
       select: {
         courseId: true,
+        status: true,
+        phase: true,
+        endsAt: true,
+        relayEnabled: true,
+        qrSecret: true,
+        qrRotationMs: true,
+        qrGraceMs: true,
         course: { select: { code: true } },
       },
     });
 
     if (!session) {
       return { success: false, message: "Session not found" };
+    }
+
+    if (!session.relayEnabled) {
+      return {
+        success: false,
+        message: "BLE relay is not enabled for this session",
+      };
+    }
+
+    const activePhase = deriveAttendancePhase(
+      {
+        status: session.status,
+        phase: session.phase,
+        endsAt: session.endsAt,
+      },
+      new Date()
+    );
+
+    if (activePhase === "CLOSED") {
+      return {
+        success: false,
+        message: "Session is no longer active",
+      };
+    }
+
+    const tokenValid = verifyQrTokenStrict(
+      session.qrSecret,
+      qrToken,
+      activePhase,
+      Date.now(),
+      session.qrRotationMs,
+      session.qrGraceMs
+    );
+
+    if (!tokenValid) {
+      return {
+        success: false,
+        message: "QR token is invalid or expired for relay broadcast",
+      };
     }
 
     // Update last broadcast time

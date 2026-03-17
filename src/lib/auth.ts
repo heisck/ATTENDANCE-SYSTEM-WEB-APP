@@ -1,9 +1,53 @@
-import NextAuth from "next-auth";
+import { createHash } from "node:crypto";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { db } from "./db";
+import {
+  CACHE_KEYS,
+  SharedRedisRequiredError,
+  checkRateLimitKey,
+  resetRateLimitKey,
+} from "./cache";
 
 const authSecret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
+const LOGIN_EMAIL_MAX_ATTEMPTS = 8;
+const LOGIN_IP_MAX_ATTEMPTS = 20;
+const LOGIN_WINDOW_SECONDS = 15 * 60;
+
+class LoginRateLimitError extends CredentialsSignin {
+  code = "login_rate_limited";
+}
+
+class LoginUnavailableError extends CredentialsSignin {
+  code = "login_unavailable";
+}
+
+function hashLoginRateLimitValue(value: string) {
+  return createHash("sha256").update(value).digest("base64url").slice(0, 32);
+}
+
+function getClientIpAddress(request: Request) {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    const [first] = forwardedFor.split(",");
+    if (first && first.trim().length > 0) {
+      return first.trim();
+    }
+  }
+
+  const realIp = request.headers.get("x-real-ip");
+  if (realIp && realIp.trim().length > 0) {
+    return realIp.trim();
+  }
+
+  const connectingIp = request.headers.get("cf-connecting-ip");
+  if (connectingIp && connectingIp.trim().length > 0) {
+    return connectingIp.trim();
+  }
+
+  return "unknown";
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: authSecret,
@@ -19,9 +63,43 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         if (!credentials?.email || !credentials?.password) return null;
         const normalizedEmail = String(credentials.email).trim().toLowerCase();
+        const clientIp = getClientIpAddress(request);
+        const emailRateLimitKey = CACHE_KEYS.LOGIN_RATE_LIMIT(
+          `email:${hashLoginRateLimitValue(normalizedEmail)}`
+        );
+        const ipRateLimitKey = CACHE_KEYS.LOGIN_RATE_LIMIT(
+          `ip:${hashLoginRateLimitValue(clientIp)}`
+        );
+
+        try {
+          const [emailLimit, ipLimit] = await Promise.all([
+            checkRateLimitKey(
+              emailRateLimitKey,
+              LOGIN_EMAIL_MAX_ATTEMPTS,
+              LOGIN_WINDOW_SECONDS
+            ),
+            checkRateLimitKey(
+              ipRateLimitKey,
+              LOGIN_IP_MAX_ATTEMPTS,
+              LOGIN_WINDOW_SECONDS
+            ),
+          ]);
+
+          if (!emailLimit.allowed || !ipLimit.allowed) {
+            throw new LoginRateLimitError();
+          }
+        } catch (error) {
+          if (error instanceof LoginRateLimitError) {
+            throw error;
+          }
+          if (error instanceof SharedRedisRequiredError) {
+            throw new LoginUnavailableError();
+          }
+          throw error;
+        }
 
         const user = await db.user.findUnique({
           where: { email: normalizedEmail },
@@ -35,6 +113,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           user.passwordHash
         );
         if (!isValid) return null;
+
+        await Promise.all([
+          resetRateLimitKey(emailRateLimitKey),
+          resetRateLimitKey(ipRateLimitKey),
+        ]);
 
         return {
           id: user.id,

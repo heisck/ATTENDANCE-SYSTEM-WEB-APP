@@ -18,6 +18,7 @@ function LoginForm() {
 
   useEffect(() => {
     const error = searchParams.get("error");
+    const code = searchParams.get("code");
     const registered = searchParams.get("registered");
 
     if (registered === "true") {
@@ -29,7 +30,13 @@ function LoginForm() {
     }
 
     if (error === "CredentialsSignin" || error === "credentials") {
-      toast.error("Invalid email or password. Please try again.");
+      const message =
+        code === "login_rate_limited"
+          ? "Too many sign-in attempts. Please wait a few minutes and try again."
+          : code === "login_unavailable"
+            ? "Sign in is temporarily unavailable. Please try again shortly."
+            : "Invalid email or password. Please try again.";
+      toast.error(message);
       window.history.replaceState(null, "", "/login");
     }
   }, [searchParams]);
@@ -44,10 +51,15 @@ function LoginForm() {
         password,
         redirect: false,
         callbackUrl: "/api/auth/signed-in-redirect",
-      })) as { error?: string } | undefined;
+      })) as { error?: string; code?: string } | undefined;
 
       if (result?.error) {
-        const message = "Invalid email or password";
+        const message =
+          result.code === "login_rate_limited"
+            ? "Too many sign-in attempts. Please wait a few minutes and try again."
+            : result.code === "login_unavailable"
+              ? "Sign in is temporarily unavailable. Please try again shortly."
+              : "Invalid email or password";
         toast.error(message);
         return;
       }

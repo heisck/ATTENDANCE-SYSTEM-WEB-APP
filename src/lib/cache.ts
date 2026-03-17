@@ -112,6 +112,7 @@ export const CACHE_KEYS = {
   STUDENT_ATTENDANCE: (sessionId: string, studentId: string) =>
     `attendance:${sessionId}:${studentId}`,
   RATE_LIMIT: (studentId: string, sessionId: string) => `ratelimit:${studentId}:${sessionId}`,
+  LOGIN_RATE_LIMIT: (identifier: string) => `login-ratelimit:${identifier}`,
   DEVICE_FINGERPRINT: (studentId: string, deviceToken: string) =>
     `device:${studentId}:${deviceToken}`,
   COURSE_ENROLLMENTS: (courseId: string) => `enrollments:${courseId}`,
@@ -252,8 +253,18 @@ export async function checkRateLimit(
   maxAttempts: number = 10,
   windowSeconds: number = 60
 ): Promise<{ allowed: boolean; remaining: number }> {
-  const key = CACHE_KEYS.RATE_LIMIT(studentId, sessionId);
+  return checkRateLimitKey(
+    CACHE_KEYS.RATE_LIMIT(studentId, sessionId),
+    maxAttempts,
+    windowSeconds
+  );
+}
 
+export async function checkRateLimitKey(
+  key: string,
+  maxAttempts: number = 10,
+  windowSeconds: number = 60
+): Promise<{ allowed: boolean; remaining: number }> {
   try {
     const count = await cacheIncrement(key, windowSeconds);
     const allowed = count <= maxAttempts;
@@ -262,6 +273,15 @@ export async function checkRateLimit(
   } catch (error) {
     console.error("[v0] Rate limit check error:", error);
     return { allowed: true, remaining: maxAttempts };
+  }
+}
+
+export async function resetRateLimitKey(key: string): Promise<boolean> {
+  try {
+    return await cacheDel(key);
+  } catch (error) {
+    console.error("[v0] Rate limit reset error:", error);
+    return false;
   }
 }
 

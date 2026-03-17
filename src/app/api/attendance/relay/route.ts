@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
 import {
   registerRelayDevice,
   startRelayBroadcast,
@@ -106,7 +107,12 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const result = await startRelayBroadcast(relayDeviceId, qrToken, sessionId);
+      const result = await startRelayBroadcast(
+        relayDeviceId,
+        qrToken,
+        sessionId,
+        session.user.id
+      );
 
       return NextResponse.json(result);
     }
@@ -240,6 +246,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
-// Import db for authorization checks
-import { db } from "@/lib/db";
