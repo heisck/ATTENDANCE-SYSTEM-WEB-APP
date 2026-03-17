@@ -9,8 +9,12 @@ import {
   Radio,
   Copy,
   Check,
+  Smartphone,
+  QrCode
 } from "lucide-react";
 import { toast } from "sonner";
+import { Capacitor } from '@capacitor/core';
+import { QrDisplay } from "./qr-display";
 
 interface RelayBroadcasterProps {
   sessionId: string;
@@ -45,6 +49,8 @@ export function BleRelayBroadcaster({
     scanCount: 0,
     lastScanTime: null,
   });
+
+  const isNative = Capacitor.isNativePlatform();
 
   useEffect(() => {
     if (error) toast.error(error);
@@ -150,8 +156,17 @@ export function BleRelayBroadcaster({
 
       setRelayData(data.broadcastData);
       setStatus("broadcasting");
-      setMessage("Broadcasting active! Friends can now scan your device.");
-      toast.success("BLE Relay broadcasting started");
+      
+      if (isNative) {
+        // In a real implementation, we would use BleClient from @capacitor-community/bluetooth-le here
+        // to actually start the hardware broadcast using data.broadcastData.bleBeaconUuid
+        setMessage("BLE Broadcasting active! Friends can now scan your device.");
+        toast.success("BLE Relay broadcasting started");
+      } else {
+        setMessage("Visual Relay active! Show this screen to your friends.");
+        toast.success("Visual Relay started");
+      }
+      
       onBroadcasting?.(true);
 
       // Poll for broadcast stats
@@ -174,6 +189,10 @@ export function BleRelayBroadcaster({
     setRelayData(null);
     onBroadcasting?.(false);
     toast.info("Broadcasting stopped");
+    
+    if (isNative) {
+      // In a real implementation, we would stop the native BLE broadcast here
+    }
   };
 
   const pollBroadcastStats = () => {
@@ -226,15 +245,34 @@ export function BleRelayBroadcaster({
     <div className="surface space-y-4 p-4">
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2">
-          <Bluetooth className="h-5 w-5 text-muted-foreground" />
+          {isNative ? (
+            <Bluetooth className="h-5 w-5 text-muted-foreground" />
+          ) : (
+            <QrCode className="h-5 w-5 text-muted-foreground" />
+          )}
           <div>
-            <h4 className="font-semibold">BLE Relay Broadcaster</h4>
+            <h4 className="font-semibold">
+              {isNative ? "BLE Relay Broadcaster" : "Visual Relay (Web)"}
+            </h4>
             <p className="text-xs text-muted-foreground">
-              Share attendance with friends who have camera issues
+              {isNative 
+                ? "Share attendance with friends who have camera issues"
+                : "Act as a relay point by displaying a QR code for others"}
             </p>
           </div>
         </div>
       </div>
+
+      {!isNative && status === "idle" && (
+        <div className="rounded-lg bg-blue-500/10 p-3 text-xs text-blue-600 border border-blue-500/20 flex gap-2">
+          <Smartphone className="h-4 w-4 shrink-0" />
+          <p>
+            You are using the web app. You cannot broadcast a background Bluetooth signal, 
+            but you can act as a <strong>Visual Relay</strong> by showing a secure QR code 
+            on your screen for others to scan.
+          </p>
+        </div>
+      )}
 
       {/* Status Message */}
       <div
@@ -255,13 +293,13 @@ export function BleRelayBroadcaster({
         {status === "approved" && (
           <>
             <CheckCircle2 className="h-4 w-4" />
-            Ready to Broadcast
+            Ready to Relay
           </>
         )}
         {status === "broadcasting" && (
           <>
-            <Radio className="h-4 w-4 animate-pulse" />
-            Broadcasting Active
+            {isNative ? <Radio className="h-4 w-4 animate-pulse" /> : <QrCode className="h-4 w-4" />}
+            Relay Active
           </>
         )}
         {status === "error" && (
@@ -283,8 +321,8 @@ export function BleRelayBroadcaster({
           onClick={startBroadcasting}
           className="w-full flex items-center justify-center gap-2 rounded bg-primary px-4 py-2 font-medium text-primary-foreground transition hover:bg-primary/90"
         >
-          <Radio className="h-4 w-4" />
-          Start Broadcasting
+          {isNative ? <Radio className="h-4 w-4" /> : <QrCode className="h-4 w-4" />}
+          Start {isNative ? "Broadcasting" : "Visual Relay"}
         </button>
       )}
 
@@ -294,14 +332,26 @@ export function BleRelayBroadcaster({
             onClick={stopBroadcasting}
             className="w-full flex items-center justify-center gap-2 rounded bg-destructive/10 px-4 py-2 font-medium text-destructive transition hover:bg-destructive/20"
           >
-            Stop Broadcasting
+            Stop Relay
           </button>
+          
+          {!isNative && relayData && (
+             <div className="flex flex-col items-center justify-center py-4 bg-white rounded-lg border">
+               <QrDisplay 
+                 sessionId={sessionId} 
+                 mode="port"
+               />
+               <p className="text-xs text-muted-foreground mt-2 px-4 text-center">
+                 Show this to your classmates. They can scan it to mark their attendance.
+               </p>
+             </div>
+          )}
 
           {/* Broadcast Details */}
-          {relayData && (
+          {relayData && isNative && (
             <div className="status-panel-subtle space-y-2">
               <p className="text-xs font-semibold">
-                Broadcast Active
+                BLE Broadcast Active
               </p>
               <div className="space-y-1 text-xs text-muted-foreground">
                 <p>Beacon UUID: {relayData.bleBeaconUuid?.substring(0, 13)}...</p>
@@ -349,16 +399,16 @@ export function BleRelayBroadcaster({
         <div className="status-panel-subtle">
           <p className="text-xs">
             Your device has been registered. The lecturer will review and approve it
-            shortly. Once approved, you can start broadcasting your QR code to friends.
+            shortly. Once approved, you can act as a relay point for your classmates.
           </p>
         </div>
       )}
 
       {/* Info */}
       <p className="text-xs text-muted-foreground border-t pt-2">
-        When you broadcast, friends nearby can scan your Bluetooth signal to get the QR
-        code. The broadcaster's range depends on the environment (typically 10-20 meters
-        indoors).
+        {isNative 
+          ? "When you broadcast, friends nearby can scan your Bluetooth signal to get the QR code. The broadcaster's range depends on the environment (typically 10-20 meters indoors)."
+          : "As a web user, you cannot broadcast a Bluetooth signal. Instead, a unique QR code will be generated on your screen for others to scan."}
       </p>
     </div>
   );

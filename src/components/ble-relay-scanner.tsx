@@ -106,11 +106,10 @@ export function BleRelayScanner({
             name: `attendance-relay-${relay.id.substring(0, 8)}`,
           },
         ],
-        optionalServices: ["generic_access"],
+        optionalServices: ["generic_access", "b9f2c841-8e2f-4f96-9167-8fdf4564a001"],
       };
 
-      // @ts-expect-error Web Bluetooth request options vary by lib.dom typings.
-      const device = await navigator.bluetooth.requestDevice(options);
+      const device = await (navigator as any).bluetooth.requestDevice(options);
 
       if (!device) {
         setError("No device selected");
@@ -139,8 +138,8 @@ export function BleRelayScanner({
         const value = await characteristic.readValue();
         const decoder = new TextDecoder("utf-8");
         realQrToken = decoder.decode(value);
-      } catch (e) {
-        console.warn("Could not read QR characteristic, falling back to basic connection validation", e);
+      } catch {
+        console.warn("Could not read QR characteristic, falling back to basic connection validation");
         throw new Error("Could not read attendance token from this device.");
       }
 
@@ -150,16 +149,18 @@ export function BleRelayScanner({
       
       if ('watchAdvertisements' in device) {
         const abortController = new AbortController();
-        device.addEventListener('advertisementreceived', (event: any) => {
+        const handler = (event: any) => {
           if (event.rssi) actualRssi = event.rssi;
           abortController.abort();
-        }, { once: true });
+          device.removeEventListener('advertisementreceived', handler);
+        };
+        device.addEventListener('advertisementreceived', handler);
         
         try {
           await (device as any).watchAdvertisements({ signal: abortController.signal });
           // Wait briefly for an advertisement
           await new Promise(resolve => setTimeout(resolve, 2000));
-        } catch (e) {
+        } catch {
           // Ignore
         }
       }
