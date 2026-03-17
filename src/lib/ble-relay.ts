@@ -259,6 +259,7 @@ export async function getSessionRelayDevices(sessionId: string): Promise<{
     deviceName: string;
     broadcastRangeMeters: number;
     scansAvailable: boolean;
+    scanCount: number;
   }>;
   totalApproved: number;
   relayEnabled: boolean;
@@ -292,6 +293,7 @@ export async function getSessionRelayDevices(sessionId: string): Promise<{
         deviceName: relay.userDevice.deviceName,
         broadcastRangeMeters: relay.broadcastRangeMeters || 15,
         scansAvailable: true, // Can implement scan limits if needed
+        scanCount: relay.relayScansCount,
       })),
       totalApproved: relays.length,
       relayEnabled: session?.relayEnabled || false,

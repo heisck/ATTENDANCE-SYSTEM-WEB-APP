@@ -144,6 +144,7 @@ export default function AdminManageStaffPage() {
 
   useEffect(() => {
     void loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organizationId, role, session?.user, querySuffix]);
 
   function withOrg(payload: Record<string, unknown>) {

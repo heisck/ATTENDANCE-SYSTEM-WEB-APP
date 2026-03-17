@@ -388,6 +388,7 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
       >
         {qrDataUrl && (
           <div className="relative mx-auto aspect-square w-full">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={qrDataUrl}
               alt={`Attendance QR Code ${sequenceId}`}

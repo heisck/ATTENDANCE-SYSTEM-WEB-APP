@@ -118,24 +118,64 @@ export function BleRelayScanner({
         return;
       }
 
-      // Simulate getting RSSI in real app
-      // In production, you'd get this from the BLE advertisement or connection
-      const simulatedRssi = Math.random() * -30 - 50; // -80 to -50 dBm
-      const distance = calculateDistance(simulatedRssi);
+      // Connect to GATT Server to read the token
+      const server = await device.gatt?.connect();
+      if (!server) {
+        throw new Error("Failed to connect to GATT server");
+      }
 
-      setRssi(Math.round(simulatedRssi));
+      // We'll use a standard service UUID for attendance relay if defined,
+      // but assuming generic access or a specific attendance service here.
+      // Since the app didn't define a specific relay service UUID, we attempt
+      // to read from the established ATTENDANCE_BLE.SERVICE_UUID
+      const serviceUuid = "b9f2c841-8e2f-4f96-9167-8fdf4564a001";
+      const charUuid = "b9f2c841-8e2f-4f96-9167-8fdf4564a002";
+      
+      let realQrToken = "";
+      
+      try {
+        const service = await server.getPrimaryService(serviceUuid);
+        const characteristic = await service.getCharacteristic(charUuid);
+        const value = await characteristic.readValue();
+        const decoder = new TextDecoder("utf-8");
+        realQrToken = decoder.decode(value);
+      } catch (e) {
+        console.warn("Could not read QR characteristic, falling back to basic connection validation", e);
+        throw new Error("Could not read attendance token from this device.");
+      }
+
+      // In a pure web environment, getting actual RSSI is tricky without watchAdvertisements()
+      // We estimate a conservative default if it's not supported
+      let actualRssi = -65;
+      
+      if ('watchAdvertisements' in device) {
+        const abortController = new AbortController();
+        device.addEventListener('advertisementreceived', (event: any) => {
+          if (event.rssi) actualRssi = event.rssi;
+          abortController.abort();
+        }, { once: true });
+        
+        try {
+          await (device as any).watchAdvertisements({ signal: abortController.signal });
+          // Wait briefly for an advertisement
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        } catch (e) {
+          // Ignore
+        }
+      }
+
+      const distance = calculateDistance(actualRssi);
+
+      setRssi(actualRssi);
       setDistance(Math.round(distance * 10) / 10);
 
       // Verify proximity is acceptable (within relay range)
       if (distance > relay.broadcastRangeMeters + 5) {
         setError(`Too far away. Device broadcast range: ${relay.broadcastRangeMeters}m`);
         setScanning(false);
+        if (device.gatt?.connected) device.gatt.disconnect();
         return;
       }
-
-      // Record scan and trigger callback
-      // In production, actual QR data would come from BLE characteristic
-      const mockQrToken = `relay-${relay.id}-${Date.now()}`;
 
       // Record relay attendance on backend
       const recordResponse = await fetch("/api/attendance/relay", {
@@ -144,8 +184,8 @@ export function BleRelayScanner({
         body: JSON.stringify({
           action: "record_scan",
           relayDeviceId: relay.id,
-          attendanceRecordId: sessionId, // This would be actual record ID
-          bleRssi: simulatedRssi,
+          attendanceRecordId: sessionId, // Used as context mapping in backend
+          bleRssi: actualRssi,
           bleDistance: distance,
         }),
       });
@@ -154,8 +194,10 @@ export function BleRelayScanner({
         throw new Error("Failed to record relay scan");
       }
 
+      if (device.gatt?.connected) device.gatt.disconnect();
+
       toast.success(`Successfully scanned ${relay.studentName}'s device!`);
-      onQrScanned(mockQrToken, relay.id, Math.round(simulatedRssi));
+      onQrScanned(realQrToken, relay.id, actualRssi);
 
       setScanning(false);
     } catch (err: any) {

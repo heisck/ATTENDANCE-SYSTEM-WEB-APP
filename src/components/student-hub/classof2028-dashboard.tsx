@@ -380,6 +380,7 @@ function ExpandableCards({ cards }: { cards: Card[] }) {
             style={{ scrollSnapAlign: "start" }}
           >
             <div className="relative h-full w-[200px]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 alt={card.title}
                 className="h-full w-full object-cover"
@@ -423,6 +424,7 @@ function ExpandableCards({ cards }: { cards: Card[] }) {
                     {card.author ? (
                       <div className="mt-4 flex items-center gap-3">
                         <div className="h-12 w-12 overflow-hidden rounded-full border bg-primary">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             alt={card.author.name}
                             className="h-full w-full object-cover"

@@ -50,7 +50,7 @@ export async function runReminderEngine() {
   const thirtyDaysAgo = new Date(now.getTime() - 1000 * 60 * 60 * 24 * 30);
   const sixHoursAhead = new Date(now.getTime() + 1000 * 60 * 60 * 6);
   const oneDayAgo = new Date(now.getTime() - 1000 * 60 * 60 * 24);
-  const twelveHoursAgo = new Date(now.getTime() - 1000 * 60 * 60 * 12);
+  const _twelveHoursAgo = new Date(now.getTime() - 1000 * 60 * 60 * 12);
 
   let notificationsCreated = 0;
 

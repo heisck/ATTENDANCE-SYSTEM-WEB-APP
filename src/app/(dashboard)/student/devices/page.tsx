@@ -27,6 +27,7 @@ export default function DevicesPage() {
 
   useEffect(() => {
     fetchDevices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchDevices() {

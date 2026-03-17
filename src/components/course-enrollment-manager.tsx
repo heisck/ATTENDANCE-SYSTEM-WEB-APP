@@ -29,6 +29,7 @@ export function CourseEnrollmentManager({
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
 
   async function loadData() {

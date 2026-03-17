@@ -33,7 +33,7 @@ interface AdminRelayDashboardProps {
  */
 export function RelayAdminDashboard({
   sessionId,
-  lecturerId,
+  lecturerId: _lecturerId,
 }: AdminRelayDashboardProps) {
   const [stats, setStats] = useState<RelayStats>({
     totalRelays: 0,

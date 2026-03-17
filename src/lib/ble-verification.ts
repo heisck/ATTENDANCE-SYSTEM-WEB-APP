@@ -76,7 +76,7 @@ export async function registerBleSignature(
 export async function verifyBleProximity(
   sourceDeviceId: string, // The device showing QR
   verifyingDeviceIds: string[], // Devices scanning the QR
-  maxDistanceMeters: number = 10 // Max distance for verification
+  _maxDistanceMeters: number = 10 // Max distance for verification
 ): Promise<{
   proximityVerified: boolean;
   verifiedDevices: string[];
@@ -86,12 +86,11 @@ export async function verifyBleProximity(
   try {
     const verifiedDevices: string[] = [];
     const failedDevices: string[] = [];
-    const rssiValues: number[] = [];
 
     // Get source device's BLE signature
     const sourceSignature = await db.bleDeviceSignature.findFirst({
       where: { userDeviceId: sourceDeviceId },
-      select: { bleAddress: true, txPower: true },
+      select: { bleAddress: true, txPower: true, userDevice: { select: { deviceToken: true } } },
     });
 
     if (!sourceSignature) {
@@ -103,26 +102,44 @@ export async function verifyBleProximity(
       };
     }
 
-    // In a real implementation, this would communicate with mobile app
-    // to get actual RSSI measurements from nearby devices
-    // For now, we'll store the intent to verify
-    for (const deviceId of verifyingDeviceIds) {
-      try {
-        // In production, this would:
-        // 1. Ask device to scan for BLE signals
-        // 2. Measure RSSI of source device
-        // 3. Calculate distance and verify it's within threshold
-        // For now, assume verification (would be handled by client SDK)
+    // Look for recent relay attendance records matching the source device
+    const recentScans = await db.relayAttendanceRecord.findMany({
+      where: {
+        relayDeviceId: sourceDeviceId,
+        createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) } // Last 5 minutes
+      },
+      select: {
+        bleSignalRssi: true,
+        attendanceRecord: {
+          select: { deviceToken: true }
+        }
+      }
+    });
 
+    const rssiValues: number[] = [];
+
+    // Check which verifying devices actually recorded a scan
+    for (const deviceId of verifyingDeviceIds) {
+      const verifyingDevice = await db.userDevice.findUnique({
+        where: { id: deviceId },
+        select: { deviceToken: true }
+      });
+      
+      const scan = recentScans.find(
+        s => s.attendanceRecord.deviceToken === verifyingDevice?.deviceToken
+      );
+
+      if (scan && scan.bleSignalRssi !== null) {
         verifiedDevices.push(deviceId);
-      } catch {
+        rssiValues.push(scan.bleSignalRssi);
+      } else {
         failedDevices.push(deviceId);
       }
     }
 
     const averageRssi = rssiValues.length > 0
       ? rssiValues.reduce((a, b) => a + b) / rssiValues.length
-      : -70;
+      : 0;
 
     return {
       proximityVerified: verifiedDevices.length > 0,
@@ -147,11 +164,11 @@ export async function verifyBleProximity(
 export async function recordBleSignalMeasurement(
   attendanceRecordId: string,
   rssi: number,
-  distance: number
+  _distance: number
 ): Promise<boolean> {
   try {
     const txPower = -59; // Standard TX power
-    const calculatedDistance = estimateDistanceFromRSSI(rssi, txPower);
+    const _calculatedDistance = estimateDistanceFromRSSI(rssi, txPower);
 
     // Update attendance record with BLE data
     await db.attendanceRecord.update({
@@ -172,7 +189,7 @@ export async function recordBleSignalMeasurement(
  * Get BLE statistics for a device
  */
 export async function getDeviceBleStats(userDeviceId: string): Promise<{
-  averageRssi: number;
+  averageRssi: number | null;
   verificationCount: number;
   lastVerified: Date | null;
   distanceMeters: number;
@@ -192,21 +209,37 @@ export async function getDeviceBleStats(userDeviceId: string): Promise<{
         txPower: true,
         verificationCount: true,
         lastVerified: true,
+        userDevice: { select: { deviceToken: true } }
       },
     });
 
     if (!signature) {
       return {
-        averageRssi: 0,
+        averageRssi: null,
         verificationCount: 0,
         lastVerified: null,
         distanceMeters: 0,
       };
     }
 
-    // In real implementation, would aggregate measurements
-    const averageRssi = -70; // Default
-    const distance = estimateDistanceFromRSSI(averageRssi, signature.txPower || -59);
+    // Get average RSSI from historical attendance records
+    const recentRecords = await db.attendanceRecord.findMany({
+      where: {
+        deviceToken: signature.userDevice?.deviceToken,
+        bleSignalStrength: { not: null }
+      },
+      select: { bleSignalStrength: true },
+      take: 10,
+      orderBy: { markedAt: 'desc' }
+    });
+
+    let averageRssi: number | null = null;
+    if (recentRecords.length > 0) {
+      const sum = recentRecords.reduce((acc, rec) => acc + (rec.bleSignalStrength || 0), 0);
+      averageRssi = sum / recentRecords.length;
+    }
+
+    const distance = averageRssi !== null ? estimateDistanceFromRSSI(averageRssi, signature.txPower || -59) : 0;
 
     const stats = {
       averageRssi,
@@ -222,7 +255,7 @@ export async function getDeviceBleStats(userDeviceId: string): Promise<{
   } catch (error) {
     console.error("[v0] Get BLE stats error:", error);
     return {
-      averageRssi: 0,
+      averageRssi: null,
       verificationCount: 0,
       lastVerified: null,
       distanceMeters: 0,

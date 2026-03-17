@@ -25,13 +25,13 @@ interface RelayApprovalPanelProps {
 
 export function RelayApprovalPanel({
   sessionId,
-  lecturerId,
+  lecturerId: _lecturerId,
   isLive = true,
 }: RelayApprovalPanelProps) {
   const router = useRouter();
-  const [devices, setDevices] = useState<RelayDevice[]>([]);
+  const [devices, _setDevices] = useState<RelayDevice[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
+  const [stats, _setStats] = useState({
     totalRelays: 0,
     pendingApprovals: 0,
     approvedRelays: 0,

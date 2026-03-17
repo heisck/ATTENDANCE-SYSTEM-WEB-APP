@@ -97,6 +97,7 @@ export function WebAuthnPrompt({
 
     if (status === "loading" || status === "success") return;
     void handleVerify();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, triggerSignal]);
 
   return (

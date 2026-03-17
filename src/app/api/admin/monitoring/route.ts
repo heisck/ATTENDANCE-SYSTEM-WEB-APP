@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { cacheGetOrCompute, CACHE_KEYS, CACHE_TTL } from "@/lib/cache";
+import { cacheGetOrCompute, CACHE_TTL } from "@/lib/cache";
 
 /**
  * GET /api/admin/monitoring

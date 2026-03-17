@@ -1,5 +1,5 @@
 declare module "web-push" {
-  type PushSubscription = {
+  export type PushSubscription = {
     endpoint: string;
     keys: {
       p256dh: string;
@@ -7,22 +7,9 @@ declare module "web-push" {
     };
   };
 
-  type VapidDetails = {
-    subject: string;
-    publicKey: string;
-    privateKey: string;
-  };
-
-  function setVapidDetails(subject: string, publicKey: string, privateKey: string): void;
-
-  function sendNotification(
-    subscription: PushSubscription,
-    payload?: string
-  ): Promise<unknown>;
-
   const webpush: {
-    setVapidDetails: typeof setVapidDetails;
-    sendNotification: typeof sendNotification;
+    setVapidDetails: (subject: string, publicKey: string, privateKey: string) => void;
+    sendNotification: (subscription: PushSubscription, payload?: string | Buffer) => Promise<unknown>;
   };
 
   export default webpush;

@@ -18,6 +18,7 @@ export default function SetupDevicePage() {
 
   useEffect(() => {
     checkStudentGateAndPasskeyState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function checkStudentGateAndPasskeyState() {

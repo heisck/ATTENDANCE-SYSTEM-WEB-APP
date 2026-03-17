@@ -27,7 +27,7 @@ interface RelayBroadcasterProps {
  */
 export function BleRelayBroadcaster({
   sessionId,
-  studentId,
+  studentId: _studentId,
   qrToken,
   userDeviceId,
   onBroadcasting,
@@ -41,9 +41,9 @@ export function BleRelayBroadcaster({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [relayData, setRelayData] = useState<any>(null);
-  const [broadcastStats, setBroadcastStats] = useState({
+  const [broadcastStats, setBroadcastStats] = useState<{ scanCount: number; lastScanTime: Date | null }>({
     scanCount: 0,
-    lastScanTime: null as Date | null,
+    lastScanTime: null,
   });
 
   useEffect(() => {
@@ -91,6 +91,7 @@ export function BleRelayBroadcaster({
     };
 
     registerDevice();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, userDeviceId]);
 
   const pollApprovalStatus = (deviceId: string) => {
@@ -176,10 +177,26 @@ export function BleRelayBroadcaster({
   };
 
   const pollBroadcastStats = () => {
-    const interval = setInterval(() => {
-      // In production, fetch actual stats from backend
-      // For now, show placeholder
-    }, 2000);
+    const interval = setInterval(async () => {
+      try {
+        if (!relayDeviceId) return;
+        const response = await fetch(`/api/attendance/relay?sessionId=${sessionId}`);
+        const data = await response.json();
+        
+        if (data.success) {
+          const myDevice = data.data.approvedRelays?.find((d: any) => d.id === relayDeviceId);
+          if (myDevice) {
+            setBroadcastStats(prev => ({
+              ...prev,
+              scanCount: myDevice.scanCount || 0,
+              lastScanTime: myDevice.scanCount > prev.scanCount ? new Date() : prev.lastScanTime
+            }));
+          }
+        }
+      } catch (err) {
+        console.error("[v0] Poll broadcast stats error:", err);
+      }
+    }, 5000); // Check every 5 seconds to reduce load
 
     return () => clearInterval(interval);
   };

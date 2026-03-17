@@ -230,7 +230,7 @@ export default function StudentHubGroupsPage() {
 
               <div className="grid gap-3">
                 {session.groups.map((group) => {
-                  const inGroup = Boolean(group.memberships[0]);
+                  const _inGroup = Boolean(group.memberships[0]);
                   const ownGroup = ownMembership?.groupId === group.id;
                   return (
                     <article key={group.id} className="rounded-lg border border-border/70 bg-background/40 p-3">

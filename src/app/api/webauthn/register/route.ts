@@ -4,7 +4,7 @@ import {
   getRegistrationOptions,
   verifyRegistration,
 } from "@/lib/webauthn";
-import { handleApiError, ApiErrorMessages, logError } from "@/lib/api-error";
+import { ApiErrorMessages, logError } from "@/lib/api-error";
 
 export async function GET() {
   const session = await auth();

@@ -46,9 +46,9 @@ export default function Stepper({
   footerInnerClassName = "mt-10",
   backButtonProps = {},
   nextButtonProps = {},
-  backButtonText = "Back",
-  nextButtonText = "Continue",
-  completeButtonText = "Complete",
+  backButtonText: _backButtonText = "Back",
+  nextButtonText: _nextButtonText = "Continue",
+  completeButtonText: _completeButtonText = "Complete",
   disableStepIndicators = false,
   renderStepIndicator,
   ...rest

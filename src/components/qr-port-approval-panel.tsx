@@ -61,6 +61,7 @@ export function QrPortApprovalPanel({
     return () => {
       if (interval) clearInterval(interval);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, isLive]);
 
   const handleApprove = async (qrPortRequestId: string) => {

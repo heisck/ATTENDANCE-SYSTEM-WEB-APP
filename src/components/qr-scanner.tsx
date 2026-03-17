@@ -272,6 +272,7 @@ export function QrScanner({
   useEffect(() => {
     if (!autoOpen || overlayOpen || cameraActive) return;
     void startCamera();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoOpen, overlayOpen, cameraActive]);
 
   useEffect(() => {
@@ -281,6 +282,7 @@ export function QrScanner({
 
     if (overlayOpen || cameraActive) return;
     void startCamera();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cameraActive, openSignal, overlayOpen]);
 
   useEffect(() => {
@@ -377,6 +379,7 @@ export function QrScanner({
 
     frame = requestAnimationFrame(scan);
     return () => cancelAnimationFrame(frame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cameraActive, onScan, zoomSupported, zoomValue]);
 
   useEffect(() => {
@@ -393,6 +396,7 @@ export function QrScanner({
 
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [overlayOpen]);
 
   const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
