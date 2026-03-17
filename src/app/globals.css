@@ -41,6 +41,13 @@
 }
 
 :root {
+  --font-sans:
+    "Segoe UI", "Aptos", -apple-system, BlinkMacSystemFont, "Helvetica Neue",
+    Arial, sans-serif;
+  --font-brand:
+    "Arial Black", "Segoe UI", "Aptos", "Trebuchet MS", sans-serif;
+  --font-silkscreen:
+    "Courier New", "Lucida Console", Monaco, monospace;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -129,6 +136,7 @@
   }
   body {
     @apply bg-background text-foreground overflow-x-hidden;
+    font-family: var(--font-sans);
     overscroll-behavior-y: none;
     background-image:
       radial-gradient(circle at 20% -10%, oklch(0.96 0.01 255 / 0.8), transparent 42%),

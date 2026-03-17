@@ -11,6 +11,7 @@ export default defineConfig([
     "out/**",
     "coverage/**",
     "docs/**",
+    "android/**",
     "prisma/**/*.cjs",
     "**/*.md",
   ]),
