@@ -288,7 +288,9 @@ export async function verifyAuthentication(
   let resolvedCredential = credential;
 
   if (!resolvedCredential) {
-    const legacyCredentialId = Buffer.from(response.id).toString("base64url");
+    // Older records may have stored the already-base64url credential ID as text
+    // and then base64url-encoded that text again.
+    const legacyCredentialId = Buffer.from(response.id, "utf8").toString("base64url");
     resolvedCredential = await db.webAuthnCredential.findUnique({
       where: { credentialId: legacyCredentialId },
     });
@@ -331,9 +333,9 @@ export async function verifyAuthentication(
     expectedChallenge,
     expectedOrigin: origin!,
     expectedRPID: rpID!,
-    authenticator: {
-      credentialID: resolvedCredential.credentialId,
-      credentialPublicKey: resolvedCredential.publicKey,
+    credential: {
+      id: resolvedCredential.credentialId,
+      publicKey: resolvedCredential.publicKey,
       counter: Number(resolvedCredential.counter),
       transports: resolvedCredential.transports as AuthenticatorTransportFuture[],
     },
