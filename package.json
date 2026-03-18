@@ -4,8 +4,8 @@
   "description": "",
   "scripts": {
     "dev": "npx next dev",
-    "postinstall": "npx prisma generate --no-hints",
-    "build": "npx next build",
+    "postinstall": "cross-env PRISMA_HIDE_UPDATE_MESSAGE=1 npx prisma generate --no-hints",
+    "build": "cross-env NEXT_TELEMETRY_DISABLED=1 npx next build",
     "start": "npx next start",
     "lint": "npx eslint .",
     "test:unit": "vitest run",
@@ -26,7 +26,7 @@
   "author": "",
   "license": "ISC",
   "engines": {
-    "node": "22.x"
+    "node": "24.x"
   },
   "packageManager": "npm@11.6.4",
   "dependencies": {
@@ -61,6 +61,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.2.0",
+    "cross-env": "^10.1.0",
     "@eslint/eslintrc": "^3.3.5",
     "@tailwindcss/postcss": "^4.2.1",
     "@types/bcryptjs": "^2.4.6",
