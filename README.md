@@ -150,6 +150,16 @@ Notes:
 - Use a Gmail App Password (Google Account with 2FA enabled), not your normal Gmail password.
 - For Docker/production, set the same keys in your deployment environment (for this repo, `docker-compose.prod.yml` already passes them into the app container).
 
+### Redis / Upstash Production Notes
+
+For production rate limiting and shared cache behavior, configure one of these:
+
+- `REDIS_URL`
+- `UPSTASH_REDIS_URL`
+- `KV_URL`
+- `UPSTASH_REDIS_REST_URL` together with `UPSTASH_REDIS_REST_TOKEN`
+- `KV_REST_API_URL` together with `KV_REST_API_TOKEN`
+
 ### Supabase Production Notes
 
 This app uses Prisma with PostgreSQL (`DATABASE_URL`/`DIRECT_URL`), not the Supabase JS client (`NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`) for database reads/writes.

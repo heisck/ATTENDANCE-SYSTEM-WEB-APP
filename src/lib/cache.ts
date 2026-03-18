@@ -5,18 +5,169 @@ type MemoryCacheEntry = {
   expiresAt: number;
 };
 
-const redisUrl = process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL;
+type RedisCommandArgument = string | number;
+
+type UpstashPipelineResponse<T = unknown> = {
+  result?: T;
+  error?: string;
+};
+
+type UpstashRestConfig = {
+  url: string;
+  token: string;
+};
+
+const SHARED_REDIS_REQUIRED_MESSAGE =
+  "Shared Redis is required in production. Set REDIS_URL, UPSTASH_REDIS_URL, KV_URL, or Upstash REST credentials.";
+
 const memoryCache = new Map<string, MemoryCacheEntry>();
 let redis: Redis | null = null;
+let upstashRestClient: UpstashRestClient | null = null;
 let memoryCleanupStarted = false;
 
 const MEMORY_CACHE_CLEANUP_INTERVAL_MS = 60_000;
 
 export class SharedRedisRequiredError extends Error {
-  constructor(message: string = "Redis is required for this operation in production") {
+  constructor(message: string = SHARED_REDIS_REQUIRED_MESSAGE) {
     super(message);
     this.name = "SharedRedisRequiredError";
   }
+}
+
+class UpstashRestClient {
+  constructor(private readonly config: UpstashRestConfig) {}
+
+  matches(config: UpstashRestConfig) {
+    return this.config.url === config.url && this.config.token === config.token;
+  }
+
+  private async pipeline(
+    commands: RedisCommandArgument[][]
+  ): Promise<UpstashPipelineResponse[]> {
+    const response = await fetch(`${this.config.url}/pipeline`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.config.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(commands),
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      const details = await response.text().catch(() => "");
+      throw new Error(
+        `Upstash REST request failed with status ${response.status}${
+          details ? `: ${details.slice(0, 200)}` : ""
+        }`
+      );
+    }
+
+    const payload = (await response.json()) as unknown;
+    if (!Array.isArray(payload)) {
+      throw new Error("Unexpected Upstash REST pipeline response");
+    }
+
+    return payload as UpstashPipelineResponse[];
+  }
+
+  private async command<T>(
+    command: string,
+    ...args: RedisCommandArgument[]
+  ): Promise<T> {
+    const [entry] = await this.pipeline([[command, ...args]]);
+    if (!entry) {
+      throw new Error(`Empty Upstash REST response for ${command}`);
+    }
+    if (entry.error) {
+      throw new Error(entry.error);
+    }
+    return entry.result as T;
+  }
+
+  async get(key: string) {
+    return this.command<string | null>("GET", key);
+  }
+
+  async setex(key: string, ttlSeconds: number, value: string) {
+    await this.command("SETEX", key, ttlSeconds, value);
+  }
+
+  async del(key: string) {
+    return this.command<number>("DEL", key);
+  }
+
+  async exists(key: string) {
+    return this.command<number>("EXISTS", key);
+  }
+
+  async incr(key: string) {
+    return this.command<number>("INCR", key);
+  }
+
+  async expire(key: string, ttlSeconds: number) {
+    return this.command<number>("EXPIRE", key, ttlSeconds);
+  }
+
+  async mget(...keys: string[]) {
+    if (keys.length === 0) {
+      return [] as (string | null)[];
+    }
+    return this.command<(string | null)[]>("MGET", ...keys);
+  }
+
+  async ping() {
+    return this.command<string>("PING");
+  }
+
+  async setexMany(items: Array<{ key: string; value: string; ttl: number }>) {
+    if (items.length === 0) {
+      return 0;
+    }
+
+    const responses = await this.pipeline(
+      items.map(({ key, value, ttl }) => ["SETEX", key, ttl, value])
+    );
+
+    for (const response of responses) {
+      if (response.error) {
+        throw new Error(response.error);
+      }
+    }
+
+    return items.length;
+  }
+}
+
+type CacheClient = Redis | UpstashRestClient;
+
+function getRedisConnectionUrl() {
+  return (
+    process.env.REDIS_URL ||
+    process.env.UPSTASH_REDIS_URL ||
+    process.env.KV_URL ||
+    null
+  );
+}
+
+function getUpstashRestConfig(): UpstashRestConfig | null {
+  const url =
+    process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || null;
+  const token =
+    process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || null;
+
+  if (!url || !token) {
+    return null;
+  }
+
+  return {
+    url: url.replace(/\/+$/, ""),
+    token,
+  };
+}
+
+function hasSharedCacheConfig() {
+  return Boolean(getRedisConnectionUrl() || getUpstashRestConfig());
 }
 
 function nowMs() {
@@ -76,35 +227,50 @@ function memoryIncrement(key: string, ttlSeconds: number): number {
 }
 
 function shouldUseMemoryFallback() {
-  return canUseMemoryFallback() && !redisUrl;
+  return canUseMemoryFallback() && !hasSharedCacheConfig();
 }
 
-export function getRedis(): Redis | null {
-  if (!redisUrl) {
+export function getRedis(): CacheClient | null {
+  const redisUrl = getRedisConnectionUrl();
+  if (redisUrl) {
+    if (!redis) {
+      try {
+        redis = new Redis(redisUrl, {
+          maxRetriesPerRequest: null,
+          enableReadyCheck: false,
+          enableOfflineQueue: true,
+          lazyConnect: false,
+          retryStrategy: (times) => Math.min(times * 50, 2000),
+        });
+
+        redis.on("error", (err) => {
+          console.error("[v0] Redis connection error:", err);
+          redis = null;
+        });
+      } catch (error) {
+        console.error("[v0] Failed to initialize Redis:", error);
+        return null;
+      }
+    }
+
+    return redis;
+  }
+
+  const restConfig = getUpstashRestConfig();
+  if (!restConfig) {
     return null;
   }
 
-  if (!redis) {
+  if (!upstashRestClient || !upstashRestClient.matches(restConfig)) {
     try {
-      redis = new Redis(redisUrl, {
-        maxRetriesPerRequest: null,
-        enableReadyCheck: false,
-        enableOfflineQueue: true,
-        lazyConnect: false,
-        retryStrategy: (times) => Math.min(times * 50, 2000),
-      });
-
-      redis.on("error", (err) => {
-        console.error("[v0] Redis connection error:", err);
-        redis = null;
-      });
+      upstashRestClient = new UpstashRestClient(restConfig);
     } catch (error) {
-      console.error("[v0] Failed to initialize Redis:", error);
+      console.error("[v0] Failed to initialize Upstash REST client:", error);
       return null;
     }
   }
 
-  return redis;
+  return upstashRestClient;
 }
 
 export const CACHE_KEYS = {
@@ -277,9 +443,7 @@ export async function checkRateLimitKey(
     }
 
     if (process.env.NODE_ENV === "production") {
-      throw new SharedRedisRequiredError(
-        "Redis-backed rate limiting is unavailable in production"
-      );
+      throw new SharedRedisRequiredError();
     }
 
     return { allowed: true, remaining: maxAttempts };
@@ -360,6 +524,17 @@ export async function cacheSetBatch<T>(
 
   try {
     if (items.length === 0) return 0;
+    if (client instanceof UpstashRestClient) {
+      await client.setexMany(
+        items.map(({ key, value, ttl }) => ({
+          key,
+          ttl,
+          value: JSON.stringify(value),
+        }))
+      );
+      return items.length;
+    }
+
     const pipeline = client.pipeline();
     items.forEach(({ key, value, ttl }) => {
       pipeline.setex(key, ttl, JSON.stringify(value));

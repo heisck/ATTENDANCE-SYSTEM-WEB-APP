@@ -31,9 +31,14 @@ Set these in Vercel Project -> Settings -> Environment Variables:
 - `WEBAUTHN_ORIGIN` (full origin, for example `https://your-app.vercel.app`)
 - `REMINDER_CRON_SECRET` (long random secret)
 
-Optional but recommended if used:
+Required for production rate limiting and shared cache behavior:
 
-- `REDIS_URL` or `UPSTASH_REDIS_URL`
+- `REDIS_URL`, `UPSTASH_REDIS_URL`, or `KV_URL`
+- `UPSTASH_REDIS_REST_URL` together with `UPSTASH_REDIS_REST_TOKEN`
+- `KV_REST_API_URL` together with `KV_REST_API_TOKEN`
+
+Optional if used:
+
 - `GMAIL_SMTP_USER`
 - `GMAIL_SMTP_APP_PASSWORD`
 - `GMAIL_FROM_EMAIL`

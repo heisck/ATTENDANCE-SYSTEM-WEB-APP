@@ -28,8 +28,12 @@ export REDIS_URL=redis://localhost:6379
 
 **Option B: Upstash Redis (Recommended for Production)**
 ```bash
-# Get URL from https://upstash.com
+# TCP connection string
 export UPSTASH_REDIS_URL=redis://default:xxx@xxx.upstash.io:xxx
+
+# Or use the REST credentials directly
+export UPSTASH_REDIS_REST_URL=https://xxx.upstash.io
+export UPSTASH_REDIS_REST_TOKEN=your-token
 ```
 
 **Option C: Disable Redis (Development Only)**
@@ -96,6 +100,11 @@ DIRECT_URL=postgresql://user:pass@host/db  # Direct connection for migration
 REDIS_URL=redis://localhost:6379
 # OR
 UPSTASH_REDIS_URL=redis://default:token@host:port
+# OR
+KV_URL=redis://default:token@host:port
+# OR
+UPSTASH_REDIS_REST_URL=https://host.upstash.io
+UPSTASH_REDIS_REST_TOKEN=your-token
 
 # Optional (for email):
 SMTP_FROM=noreply@example.com
