@@ -10,6 +10,8 @@ const calculateConfidenceMock = vi.fn();
 const isFlaggedMock = vi.fn();
 const invalidateStudentPhaseCompletionForCourseDayMock = vi.fn();
 const getStudentPhaseCompletionForCourseDayMock = vi.fn();
+const createBrowserFingerprintHashMock = vi.fn();
+const hasValidBrowserDeviceProofMock = vi.fn();
 
 vi.mock("@/lib/db", () => ({
   db: {
@@ -42,6 +44,11 @@ vi.mock("@/lib/attendance", () => ({
 
 vi.mock("@/lib/attendance-proof", () => ({
   requireAttendanceProof: vi.fn(),
+}));
+
+vi.mock("@/lib/browser-device-proof", () => ({
+  createBrowserFingerprintHash: createBrowserFingerprintHashMock,
+  hasValidBrowserDeviceProof: hasValidBrowserDeviceProofMock,
 }));
 
 vi.mock("@/lib/device-linking", () => ({
@@ -97,6 +104,8 @@ describe("executeAttendanceMark", () => {
       overallPresent: false,
       pendingPhase: "PHASE_TWO",
     });
+    createBrowserFingerprintHashMock.mockReturnValue("browser-fingerprint-hash");
+    hasValidBrowserDeviceProofMock.mockReturnValue(false);
   });
 
   function buildInput() {
@@ -186,5 +195,44 @@ describe("executeAttendanceMark", () => {
       lecturerId: "lecturer-1",
       referenceTime: new Date("2026-03-17T10:00:00.000Z"),
     });
+  });
+
+  it("returns browser device binding details for browser-based attendance", async () => {
+    const result = await executeAttendanceMark({
+      ...buildInput(),
+      body: {
+        deviceToken: "device-token-1",
+        deviceName: "Test Device",
+        deviceType: "Web",
+        deviceFingerprint: JSON.stringify({
+          platform: "Win32",
+          language: "en-US",
+          languages: ["en-US", "en"],
+          timezone: "Africa/Accra",
+          screen: "1920x1080x24",
+          hardwareConcurrency: 8,
+          deviceMemory: 8,
+          touchPoints: 0,
+          vendor: "Google Inc.",
+          cookieEnabled: true,
+          colorScheme: "light",
+        }),
+        appVersion: "web",
+      },
+    });
+
+    expect(createBrowserFingerprintHashMock).toHaveBeenCalled();
+    expect(result.browserDeviceBinding).toEqual({
+      deviceToken: "device-token-1",
+      fingerprintHash: "browser-fingerprint-hash",
+    });
+    expect(linkDeviceMock).toHaveBeenCalledWith(
+      "student-1",
+      "device-token-1",
+      expect.objectContaining({
+        fingerprint: "browser-fingerprint-hash",
+        browserProofValid: false,
+      })
+    );
   });
 });

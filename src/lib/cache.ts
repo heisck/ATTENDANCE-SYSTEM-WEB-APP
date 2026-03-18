@@ -272,6 +272,16 @@ export async function checkRateLimitKey(
     return { allowed, remaining };
   } catch (error) {
     console.error("[v0] Rate limit check error:", error);
+    if (error instanceof SharedRedisRequiredError) {
+      throw error;
+    }
+
+    if (process.env.NODE_ENV === "production") {
+      throw new SharedRedisRequiredError(
+        "Redis-backed rate limiting is unavailable in production"
+      );
+    }
+
     return { allowed: true, remaining: maxAttempts };
   }
 }

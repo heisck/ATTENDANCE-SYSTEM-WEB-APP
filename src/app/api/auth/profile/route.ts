@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { compare } from "bcryptjs";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { hashPassword, verifyPassword } from "@/lib/passwords";
 import { buildAppUrl, sendEmail } from "@/lib/email";
 import { verificationEmailHtml } from "@/lib/email-templates";
 import { createExpiryDate, createRawToken, hashToken } from "@/lib/tokens";
@@ -114,9 +114,21 @@ export async function PATCH(request: NextRequest) {
     let personalEmailChanged = false;
 
     if (nextSignInEmail && nextSignInEmail !== currentSignInEmail) {
-      const passwordMatches = await compare(parsed.currentPassword || "", user.passwordHash);
-      if (!passwordMatches) {
+      const passwordCheck = await verifyPassword(parsed.currentPassword || "", user.passwordHash);
+      if (!passwordCheck.valid) {
         return NextResponse.json({ error: "Current password is incorrect." }, { status: 400 });
+      }
+
+      if (passwordCheck.needsRehash) {
+        try {
+          const upgradedHash = await hashPassword(parsed.currentPassword || "");
+          await db.user.update({
+            where: { id: user.id },
+            data: { passwordHash: upgradedHash },
+          });
+        } catch (error) {
+          console.warn("[profile] password hash upgrade failed:", error);
+        }
       }
 
       const existingUser = await db.user.findUnique({

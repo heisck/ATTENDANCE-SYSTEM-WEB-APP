@@ -9,12 +9,16 @@ import {
 import {
   buildDefaultBeaconName,
   clearBleBroadcasterPresence,
+  clearBleRelayLease,
   clearSessionBleBroadcast,
   getBleBroadcasterPresence,
+  getFreshBleRelayLease,
   getSessionBleBroadcast,
+  setBleRelayLease,
   setBleBroadcasterPresence,
   setSessionBleBroadcast,
 } from "@/lib/lecturer-ble";
+import { updateRelayBroadcastState } from "@/lib/ble-relay";
 
 type BleAction = "start" | "stop" | "heartbeat";
 
@@ -109,6 +113,7 @@ export async function GET(
   }
 
   const heartbeat = await getBleBroadcasterPresence(id);
+  const relayLease = await getFreshBleRelayLease(id);
   const manufacturerDataHex = buildAttendanceManufacturerDataHex({
     courseCode: attendanceSession.course.code,
     sessionId: attendanceSession.id,
@@ -116,12 +121,13 @@ export async function GET(
   });
   return NextResponse.json({
     enabled: Boolean(broadcast),
-    active: Boolean(heartbeat),
+    active: Boolean(heartbeat && relayLease),
     beaconName: broadcast?.beaconName ?? null,
     startedAt: broadcast?.startedAt ?? null,
     expiresAt: broadcast?.expiresAt ?? null,
     lastHeartbeatAt: heartbeat?.lastHeartbeatAt ?? null,
     broadcasterDeviceName: heartbeat?.deviceName ?? null,
+    relayLeaseActive: Boolean(relayLease),
     serviceUuid: ATTENDANCE_BLE.SERVICE_UUID,
     currentTokenCharacteristicUuid: ATTENDANCE_BLE.CURRENT_TOKEN_CHAR_UUID,
     sessionMetaCharacteristicUuid: ATTENDANCE_BLE.SESSION_META_CHAR_UUID,
@@ -185,6 +191,8 @@ export async function POST(
 
   if (action === "stop") {
     await clearSessionBleBroadcast(id);
+    await clearBleRelayLease(id);
+    await updateRelayBroadcastState(id);
     await db.attendanceSession.update({
       where: { id },
       data: {
@@ -279,6 +287,18 @@ export async function POST(
           ? body.appVersion
           : null,
     });
+    const relayLease = await setBleRelayLease(id, {
+      lecturerId: user.id,
+      deviceId: heartbeat.deviceId,
+      deviceName: heartbeat.deviceName,
+      platform: heartbeat.platform,
+      appVersion: heartbeat.appVersion,
+      beaconName: broadcast.beaconName,
+      phase: syncedSession.phase,
+      lastHeartbeatAt: heartbeat.lastHeartbeatAt,
+      expiresAt: phaseEndsAt,
+    });
+    await updateRelayBroadcastState(id);
 
     return NextResponse.json({
       success: true,
@@ -288,6 +308,8 @@ export async function POST(
       startedAt: broadcast.startedAt,
       expiresAt: broadcast.expiresAt,
       lastHeartbeatAt: heartbeat.lastHeartbeatAt,
+      relayLeaseActive: true,
+      relayLeaseExpiresAt: relayLease.expiresAt,
       serviceUuid: ATTENDANCE_BLE.SERVICE_UUID,
       currentTokenCharacteristicUuid: ATTENDANCE_BLE.CURRENT_TOKEN_CHAR_UUID,
       sessionMetaCharacteristicUuid: ATTENDANCE_BLE.SESSION_META_CHAR_UUID,
@@ -299,6 +321,8 @@ export async function POST(
   }
 
   await clearBleBroadcasterPresence(id);
+  await clearBleRelayLease(id);
+  await updateRelayBroadcastState(id);
   return NextResponse.json({
     success: true,
     enabled: true,
@@ -307,6 +331,7 @@ export async function POST(
     startedAt: broadcast.startedAt,
     expiresAt: broadcast.expiresAt,
     lastHeartbeatAt: null,
+    relayLeaseActive: false,
     serviceUuid: ATTENDANCE_BLE.SERVICE_UUID,
     currentTokenCharacteristicUuid: ATTENDANCE_BLE.CURRENT_TOKEN_CHAR_UUID,
     sessionMetaCharacteristicUuid: ATTENDANCE_BLE.SESSION_META_CHAR_UUID,

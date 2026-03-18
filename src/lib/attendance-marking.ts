@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import {
@@ -14,8 +13,13 @@ import {
   syncAttendanceSessionState,
 } from "@/lib/attendance";
 import { requireAttendanceProof } from "@/lib/attendance-proof";
+import {
+  createBrowserFingerprintHash,
+  hasValidBrowserDeviceProof,
+} from "@/lib/browser-device-proof";
 import { calculateConfidence, isFlagged } from "@/lib/confidence";
 import {
+  BrowserDeviceVerificationError,
   DeviceTokenConflictError,
   getDeviceConsistencyScore,
   linkDevice,
@@ -91,6 +95,19 @@ type SecurityBuildOutput = {
   };
   recordBleSignalStrength?: number | null;
   anomalyDetails?: Record<string, unknown>;
+};
+
+type ResolvedDeviceContext = {
+  rawDeviceToken: string;
+  deviceToken: string;
+  deviceName: string;
+  deviceType: "iOS" | "Android" | "Web";
+  osVersion?: string;
+  appVersion?: string;
+  fingerprint?: string;
+  bleSignature?: string;
+  isBrowserClient: boolean;
+  browserProofValid: boolean;
 };
 
 export class AttendanceRequestError extends Error {
@@ -183,15 +200,10 @@ function resolveDeviceContext(
   request: NextRequest,
   studentId: string,
   body: DevicePayload
-) {
+): ResolvedDeviceContext {
   const userAgent = request.headers.get("user-agent") ?? "";
   const rawDeviceToken =
-    typeof body.deviceToken === "string" ? body.deviceToken.trim() : "";
-  const fallbackTokenSource = `${studentId}:${userAgent || "unknown-user-agent"}`;
-  const fallbackDeviceToken = `web-${createHash("sha256")
-    .update(fallbackTokenSource)
-    .digest("hex")
-    .slice(0, 40)}`;
+    typeof body.deviceToken === "string" ? body.deviceToken.trim().slice(0, 160) : "";
 
   const resolvedDeviceType: "iOS" | "Android" | "Web" =
     body.deviceType === "iOS" || body.deviceType === "Android" || body.deviceType === "Web"
@@ -209,19 +221,53 @@ function resolveDeviceContext(
         ? userAgent.slice(0, 120)
         : "Unknown Device";
 
+  if (!rawDeviceToken) {
+    throw new AttendanceRequestError(
+      "Device verification is missing. Refresh the page and try again.",
+      400
+    );
+  }
+
+  const appVersion =
+    typeof body.appVersion === "string" ? body.appVersion.trim().slice(0, 80) : undefined;
+  const isBrowserClient = appVersion === "web";
+  const fingerprint = isBrowserClient
+    ? createBrowserFingerprintHash(
+        request,
+        typeof body.deviceFingerprint === "string" ? body.deviceFingerprint : undefined
+      )
+    : typeof body.deviceFingerprint === "string"
+      ? body.deviceFingerprint.trim().slice(0, 255)
+      : undefined;
+
+  if (isBrowserClient && !fingerprint) {
+    throw new AttendanceRequestError(
+      "Browser device verification failed. Refresh the page and try again.",
+      400
+    );
+  }
+
+  const browserProofValid =
+    isBrowserClient && fingerprint
+      ? hasValidBrowserDeviceProof(request, {
+          userId: studentId,
+          deviceToken: rawDeviceToken,
+          fingerprintHash: fingerprint,
+        })
+      : false;
+
   return {
     rawDeviceToken,
-    deviceToken: rawDeviceToken || fallbackDeviceToken,
+    deviceToken: rawDeviceToken,
     deviceName: resolvedDeviceName,
     deviceType: resolvedDeviceType,
     osVersion: typeof body.osVersion === "string" ? body.osVersion : undefined,
-    appVersion: typeof body.appVersion === "string" ? body.appVersion : undefined,
-    fingerprint:
-      typeof body.deviceFingerprint === "string"
-        ? body.deviceFingerprint
-        : undefined,
+    appVersion,
+    fingerprint: fingerprint ?? undefined,
     bleSignature:
       typeof body.bleSignature === "string" ? body.bleSignature : undefined,
+    isBrowserClient,
+    browserProofValid,
   };
 }
 
@@ -357,6 +403,7 @@ export async function executeAttendanceMark(input: {
     appVersion: deviceContext.appVersion,
     fingerprint: deviceContext.fingerprint,
     bleSignature: deviceContext.bleSignature,
+    browserProofValid: deviceContext.browserProofValid,
   });
 
   const deviceConsistency = await getDeviceConsistencyScore(
@@ -488,6 +535,13 @@ export async function executeAttendanceMark(input: {
     flagged,
     confidence,
     deviceMismatch,
+    browserDeviceBinding:
+      deviceContext.isBrowserClient && deviceContext.fingerprint
+        ? {
+            deviceToken: deviceContext.deviceToken,
+            fingerprintHash: deviceContext.fingerprint,
+          }
+        : null,
     responseLayers: {
       webauthn: true,
       ...security.responseLayers,
@@ -496,4 +550,4 @@ export async function executeAttendanceMark(input: {
   };
 }
 
-export { DeviceTokenConflictError };
+export { BrowserDeviceVerificationError, DeviceTokenConflictError };

@@ -3,9 +3,11 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { verifyQrTokenStrict } from "@/lib/qr";
 import { logError, ApiErrorMessages } from "@/lib/api-error";
+import { setBrowserDeviceProofCookie } from "@/lib/browser-device-proof";
 import { SharedRedisRequiredError } from "@/lib/cache";
 import {
   AttendanceRequestError,
+  BrowserDeviceVerificationError,
   DeviceTokenConflictError,
   executeAttendanceMark,
   prepareAttendanceMarkContext,
@@ -96,7 +98,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       record: {
         id: result.record.id,
@@ -109,6 +111,16 @@ export async function POST(request: NextRequest) {
       },
       phaseCompletion: result.phaseCompletion,
     });
+
+    if (result.browserDeviceBinding) {
+      setBrowserDeviceProofCookie(response, {
+        userId: session.user.id,
+        deviceToken: result.browserDeviceBinding.deviceToken,
+        fingerprintHash: result.browserDeviceBinding.fingerprintHash,
+      });
+    }
+
+    return response;
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -127,6 +139,9 @@ export async function POST(request: NextRequest) {
         },
         { status: 409 }
       );
+    }
+    if (error instanceof BrowserDeviceVerificationError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
     }
     if (error instanceof SharedRedisRequiredError) {
       return NextResponse.json(

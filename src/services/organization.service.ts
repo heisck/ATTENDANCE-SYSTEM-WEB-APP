@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { hash } from "bcryptjs";
 import { SubscriptionPlan, Role } from "@prisma/client";
+import { hashPassword } from "@/lib/passwords";
 
 export async function onboardOrganization(input: {
   orgName: string;
@@ -24,7 +24,7 @@ export async function onboardOrganization(input: {
     throw new Error("Admin email already in use");
   }
 
-  const passwordHash = await hash(input.adminPassword, 10);
+  const passwordHash = await hashPassword(input.adminPassword);
 
   const org = await db.organization.create({
     data: {

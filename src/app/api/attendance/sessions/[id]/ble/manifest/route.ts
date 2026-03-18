@@ -9,6 +9,7 @@ import {
 import {
   buildDefaultBeaconName,
   clearSessionBleBroadcast,
+  getFreshBleRelayLease,
   getBleBroadcasterPresence,
   getSessionBleBroadcast,
   setSessionBleBroadcast,
@@ -99,13 +100,14 @@ export async function GET(
   }
 
   const heartbeat = await getBleBroadcasterPresence(id);
+  const relayLease = await getFreshBleRelayLease(id);
   const manufacturerDataHex = buildAttendanceManufacturerDataHex({
     courseCode: attendanceSession.course.code,
     sessionId: attendanceSession.id,
     phase: syncedSession.phase,
   });
   return NextResponse.json({
-    active: Boolean(heartbeat),
+    active: Boolean(heartbeat && relayLease),
     enabled: Boolean(broadcast),
     expectedBeaconName: broadcast?.beaconName ?? null,
     namePrefix: ATTENDANCE_BLE.NAME_PREFIX,
@@ -118,5 +120,6 @@ export async function GET(
     phaseEndsAt: getPhaseEndsAt(syncedSession),
     rotationMs: syncedSession.qrRotationMs,
     lastHeartbeatAt: heartbeat?.lastHeartbeatAt ?? null,
+    relayLeaseActive: Boolean(relayLease),
   });
 }

@@ -22,6 +22,17 @@ export class DeviceTokenConflictError extends Error {
   }
 }
 
+export class BrowserDeviceVerificationError extends Error {
+  constructor() {
+    super(
+      "This account is already bound to another active browser. Use your verified browser or remove the old browser from your devices page before trying again."
+    );
+    this.name = "BrowserDeviceVerificationError";
+  }
+}
+
+const RECENT_WEB_DEVICE_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
 export function generateDeviceFingerprint(
   userAgent: string,
   platform: string,
@@ -70,6 +81,7 @@ export async function linkDevice(
     appVersion?: string;
     fingerprint?: string;
     bleSignature?: string;
+    browserProofValid?: boolean;
   }
 ): Promise<{ id: string; isNewDevice: boolean; trustedAt: Date | null }> {
   try {
@@ -80,12 +92,23 @@ export async function linkDevice(
         userId: true,
         trustedAt: true,
         revokedAt: true,
+        fingerprint: true,
       },
     });
 
     if (existingByToken) {
       if (existingByToken.userId !== userId) {
         throw new DeviceTokenConflictError();
+      }
+
+      if (
+        deviceInfo.appVersion === "web" &&
+        deviceInfo.fingerprint &&
+        existingByToken.fingerprint &&
+        existingByToken.fingerprint !== deviceInfo.fingerprint &&
+        !deviceInfo.browserProofValid
+      ) {
+        throw new BrowserDeviceVerificationError();
       }
 
       const updated = await db.userDevice.update({
@@ -113,6 +136,69 @@ export async function linkDevice(
         isNewDevice: false,
         trustedAt: updated.trustedAt,
       };
+    }
+
+    if (deviceInfo.appVersion === "web" && deviceInfo.fingerprint) {
+      const activeWebDevices = await db.userDevice.findMany({
+        where: {
+          userId,
+          revokedAt: null,
+          appVersion: "web",
+        },
+        select: {
+          id: true,
+          deviceToken: true,
+          fingerprint: true,
+          trustedAt: true,
+          lastUsedAt: true,
+        },
+        orderBy: { lastUsedAt: "desc" },
+      });
+
+      const sameFingerprintDevice = activeWebDevices.find(
+        (device) => device.fingerprint === deviceInfo.fingerprint
+      );
+
+      if (sameFingerprintDevice) {
+        const updated = await db.userDevice.update({
+          where: { id: sameFingerprintDevice.id },
+          data: {
+            deviceToken,
+            deviceName: deviceInfo.deviceName,
+            deviceType: deviceInfo.deviceType,
+            osVersion: deviceInfo.osVersion,
+            appVersion: deviceInfo.appVersion,
+            fingerprint: deviceInfo.fingerprint,
+            bleSignature: deviceInfo.bleSignature,
+            revokedAt: null,
+            lastUsedAt: new Date(),
+          },
+          select: {
+            id: true,
+            trustedAt: true,
+          },
+        });
+
+        await cacheDel(CACHE_KEYS.USER_CREDENTIALS(userId));
+
+        return {
+          id: updated.id,
+          isNewDevice: false,
+          trustedAt: updated.trustedAt,
+        };
+      }
+
+      const recentCutoff = new Date(Date.now() - RECENT_WEB_DEVICE_WINDOW_MS);
+      const conflictingRecentBrowser = activeWebDevices.find(
+        (device) =>
+          device.lastUsedAt >= recentCutoff &&
+          device.fingerprint &&
+          device.fingerprint !== deviceInfo.fingerprint
+      );
+
+      if (conflictingRecentBrowser && !deviceInfo.browserProofValid) {
+        throw new BrowserDeviceVerificationError();
+      }
     }
 
     const newDevice = await db.userDevice.create({
@@ -154,12 +240,23 @@ export async function linkDevice(
           userId: true,
           trustedAt: true,
           revokedAt: true,
+          fingerprint: true,
         },
       });
 
       if (conflicting) {
         if (conflicting.userId !== userId) {
           throw new DeviceTokenConflictError();
+        }
+
+        if (
+          deviceInfo.appVersion === "web" &&
+          deviceInfo.fingerprint &&
+          conflicting.fingerprint &&
+          conflicting.fingerprint !== deviceInfo.fingerprint &&
+          !deviceInfo.browserProofValid
+        ) {
+          throw new BrowserDeviceVerificationError();
         }
 
         const updated = await db.userDevice.update({

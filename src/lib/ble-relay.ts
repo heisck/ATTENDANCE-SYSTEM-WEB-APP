@@ -13,6 +13,7 @@ import { db } from "./db";
 import { v4 as uuid } from "uuid";
 import { deriveAttendancePhase } from "./attendance";
 import { verifyQrTokenStrict } from "./qr";
+import { getFreshBleRelayLease } from "./lecturer-ble";
 
 export interface RelayBroadcastData {
   sessionId: string;
@@ -185,6 +186,15 @@ export async function startRelayBroadcast(
       };
     }
 
+    const relayLease = await getFreshBleRelayLease(sessionId);
+    if (!relayLease) {
+      return {
+        success: false,
+        message:
+          "Lecturer BLE heartbeat is required before relay broadcast can start",
+      };
+    }
+
     const activePhase = deriveAttendancePhase(
       {
         status: session.status,
@@ -261,6 +271,18 @@ export async function recordRelayAttendance(
   message: string;
 }> {
   try {
+    const relayDevice = await db.bleRelayDevice.findUnique({
+      where: { id: relayDeviceId },
+      select: { id: true, sessionId: true },
+    });
+
+    if (!relayDevice) {
+      return {
+        success: false,
+        message: "Relay device not found",
+      };
+    }
+
     // Check if relay record already exists
     const existing = await db.relayAttendanceRecord.findUnique({
       where: { attendanceRecordId },
@@ -270,6 +292,15 @@ export async function recordRelayAttendance(
       return {
         success: true,
         message: "Relay attendance already recorded",
+      };
+    }
+
+    const relayLease = await getFreshBleRelayLease(relayDevice.sessionId);
+    if (!relayLease) {
+      return {
+        success: false,
+        message:
+          "Lecturer BLE heartbeat is required before relay attendance can be recorded",
       };
     }
 
@@ -319,6 +350,8 @@ export async function getSessionRelayDevices(sessionId: string): Promise<{
   }>;
   totalApproved: number;
   relayEnabled: boolean;
+  relayLeaseActive: boolean;
+  relayLeaseExpiresAt: string | null;
 }> {
   try {
     const relays = await db.bleRelayDevice.findMany({
@@ -341,6 +374,7 @@ export async function getSessionRelayDevices(sessionId: string): Promise<{
       where: { id: sessionId },
       select: { relayEnabled: true },
     });
+    const relayLease = await getFreshBleRelayLease(sessionId);
 
     return {
       approvedRelays: relays.map((relay) => ({
@@ -353,6 +387,8 @@ export async function getSessionRelayDevices(sessionId: string): Promise<{
       })),
       totalApproved: relays.length,
       relayEnabled: session?.relayEnabled || false,
+      relayLeaseActive: Boolean(relayLease),
+      relayLeaseExpiresAt: relayLease?.expiresAt ?? null,
     };
   } catch (error) {
     console.error("[v0] Get relay devices error:", error);
@@ -360,6 +396,8 @@ export async function getSessionRelayDevices(sessionId: string): Promise<{
       approvedRelays: [],
       totalApproved: 0,
       relayEnabled: false,
+      relayLeaseActive: false,
+      relayLeaseExpiresAt: null,
     };
   }
 }
@@ -466,16 +504,18 @@ export async function updateRelayBroadcastState(
         revokedAt: null,
       },
     });
+    const relayLease = await getFreshBleRelayLease(sessionId);
 
     // Find or create broadcast state
     await db.relayBroadcastState.upsert({
       where: { sessionId },
       create: {
         sessionId,
-        activeRelays: approvedCount,
+        activeRelays: relayLease ? approvedCount : 0,
         totalApproved: approvedCount,
       },
       update: {
+        activeRelays: relayLease ? approvedCount : 0,
         totalApproved: approvedCount,
         lastUpdated: new Date(),
       },
@@ -498,7 +538,7 @@ export async function getRelayStatistics(sessionId: string): Promise<{
   activeRelays: number;
 }> {
   try {
-    const [stats, broadcastState] = await Promise.all([
+    const [stats, broadcastState, relayLease] = await Promise.all([
       db.bleRelayDevice.groupBy({
         by: ["status"],
         where: { sessionId },
@@ -508,6 +548,7 @@ export async function getRelayStatistics(sessionId: string): Promise<{
         where: { sessionId },
         select: { activeRelays: true },
       }),
+      getFreshBleRelayLease(sessionId),
     ]);
 
     const totalScans = await db.relayAttendanceRecord.count({
@@ -517,15 +558,16 @@ export async function getRelayStatistics(sessionId: string): Promise<{
     });
 
     const statusMap = new Map(stats.map((s) => [s.status, s._count]));
+    const approvedCount = statusMap.get("APPROVED") || 0;
 
     return {
       totalRelays: stats.reduce((sum, s) => sum + s._count, 0),
       pendingApprovals: statusMap.get("PENDING") || 0,
-      approvedRelays: statusMap.get("APPROVED") || 0,
+      approvedRelays: approvedCount,
       rejectedRelays: statusMap.get("REJECTED") || 0,
       revokedRelays: statusMap.get("REVOKED") || 0,
       totalRelayScans: totalScans,
-      activeRelays: broadcastState?.activeRelays || 0,
+      activeRelays: relayLease ? broadcastState?.activeRelays || approvedCount : 0,
     };
   } catch (error) {
     console.error("[v0] Get relay statistics error:", error);

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hash } from "bcryptjs";
 import { db } from "@/lib/db";
+import { hashPassword } from "@/lib/passwords";
 import { resetPasswordSchema } from "@/lib/validators";
 import { hashToken } from "@/lib/tokens";
 
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const passwordHash = await hash(parsed.password, 10);
+    const passwordHash = await hashPassword(parsed.password);
     await db.$transaction([
       db.user.update({
         where: { id: resetToken.userId },

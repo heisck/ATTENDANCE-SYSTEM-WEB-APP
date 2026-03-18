@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { compare, hash } from "bcryptjs";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { hashPassword, verifyPassword } from "@/lib/passwords";
 
 const changePasswordSchema = z
   .object({
@@ -46,12 +46,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const passwordMatches = await compare(parsed.currentPassword, user.passwordHash);
-    if (!passwordMatches) {
+    const passwordCheck = await verifyPassword(parsed.currentPassword, user.passwordHash);
+    if (!passwordCheck.valid) {
       return NextResponse.json({ error: "Current password is incorrect" }, { status: 400 });
     }
 
-    const newPasswordHash = await hash(parsed.newPassword, 10);
+    const newPasswordHash = await hashPassword(parsed.newPassword);
     await db.user.update({
       where: { id: user.id },
       data: { passwordHash: newPasswordHash },

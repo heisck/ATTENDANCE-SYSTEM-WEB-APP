@@ -8,40 +8,41 @@ interface ConfidenceInput {
 }
 
 const WEIGHTS = {
-  webauthn: 50,
+  webauthn: 45,
   qr: 30,
-  bleProximity: 20,
+  bleProximity: 25,
 } as const;
 
 const PENALTIES = {
-  deviceMismatch: -15,
-  bleSignalWeak: -10, // RSSI < -80
-  lowDeviceConsistency: -15, // < 50%
+  deviceMismatch: -20,
+  bleSignalWeak: -12, // RSSI < -80
+  veryWeakBleSignal: -20, // RSSI < -90
+  mediumDeviceConsistency: -10, // < 70%
+  lowDeviceConsistency: -20, // < 50%
+  veryLowDeviceConsistency: -30, // < 35%
+  qrOnlySuspicion: -10,
+} as const;
+
+const BONUSES = {
+  familiarDevice: 5,
+  strongBleSignal: 5,
 } as const;
 
 export function calculateConfidence(input: ConfidenceInput): number {
-  const layers = [
-    { weight: WEIGHTS.webauthn, value: input.webauthnVerified },
-    { weight: WEIGHTS.qr, value: input.qrTokenValid },
-    { weight: WEIGHTS.bleProximity, value: input.bleProximityVerified },
-  ] as const;
+  let score = 0;
 
-  let earnedBaseScore = 0;
-  let maxBaseScore = 0;
-  for (const layer of layers) {
-    if (layer.value === null || layer.value === undefined) {
-      continue;
-    }
-    maxBaseScore += layer.weight;
-    if (layer.value) {
-      earnedBaseScore += layer.weight;
-    }
+  if (input.webauthnVerified) {
+    score += WEIGHTS.webauthn;
+  }
+  if (input.qrTokenValid === true) {
+    score += WEIGHTS.qr;
+  }
+  if (input.bleProximityVerified === true) {
+    score += WEIGHTS.bleProximity;
   }
 
-  let score = maxBaseScore > 0 ? (earnedBaseScore / maxBaseScore) * 100 : 0;
-
-  if (input.deviceConsistency !== undefined && input.deviceConsistency > 80) {
-    score += 5;
+  if (input.deviceConsistency !== undefined && input.deviceConsistency >= 95) {
+    score += BONUSES.familiarDevice;
   }
   if (input.deviceMismatch) {
     score += PENALTIES.deviceMismatch;
@@ -49,13 +50,34 @@ export function calculateConfidence(input: ConfidenceInput): number {
   if (
     input.bleSignalStrength !== undefined &&
     input.bleSignalStrength !== null &&
-    input.bleSignalStrength < -80 &&
     input.bleProximityVerified
   ) {
-    score += PENALTIES.bleSignalWeak;
+    if (input.bleSignalStrength < -90) {
+      score += PENALTIES.veryWeakBleSignal;
+    } else if (input.bleSignalStrength < -80) {
+      score += PENALTIES.bleSignalWeak;
+    } else if (input.bleSignalStrength >= -65) {
+      score += BONUSES.strongBleSignal;
+    }
   }
-  if (input.deviceConsistency !== undefined && input.deviceConsistency < 50) {
-    score += PENALTIES.lowDeviceConsistency;
+
+  if (input.deviceConsistency !== undefined) {
+    if (input.deviceConsistency < 35) {
+      score += PENALTIES.veryLowDeviceConsistency;
+    } else if (input.deviceConsistency < 50) {
+      score += PENALTIES.lowDeviceConsistency;
+    } else if (input.deviceConsistency < 70) {
+      score += PENALTIES.mediumDeviceConsistency;
+    }
+  }
+
+  if (
+    input.qrTokenValid === true &&
+    input.bleProximityVerified !== true &&
+    input.deviceConsistency !== undefined &&
+    input.deviceConsistency < 60
+  ) {
+    score += PENALTIES.qrOnlySuspicion;
   }
 
   return Math.max(0, Math.min(100, score));
@@ -66,11 +88,22 @@ export function isFlagged(
   baseThreshold: number = 70,
   hasAnomalies: boolean = false
 ): boolean {
-  const threshold = hasAnomalies ? Math.min(baseThreshold, 65) : baseThreshold;
+  const threshold = hasAnomalies
+    ? Math.min(100, Math.max(baseThreshold, 80))
+    : baseThreshold;
   return confidence < threshold;
 }
 
 export function getConfidenceBreakdown(input: ConfidenceInput) {
+  const hasBleSignal =
+    input.bleProximityVerified &&
+    input.bleSignalStrength !== undefined &&
+    input.bleSignalStrength !== null;
+  const bleSignalStrength =
+    hasBleSignal && typeof input.bleSignalStrength === "number"
+      ? input.bleSignalStrength
+      : null;
+
   return {
     layers: {
       webauthn: input.webauthnVerified ? WEIGHTS.webauthn : 0,
@@ -79,13 +112,13 @@ export function getConfidenceBreakdown(input: ConfidenceInput) {
     },
     anomalies: {
       deviceMismatch: input.deviceMismatch ? PENALTIES.deviceMismatch : 0,
-      bleSignalWeak:
-        input.bleProximityVerified &&
-        input.bleSignalStrength !== undefined &&
-        input.bleSignalStrength !== null &&
-        input.bleSignalStrength < -80
-          ? PENALTIES.bleSignalWeak
-          : 0,
+      bleSignalWeak: bleSignalStrength !== null
+        ? bleSignalStrength < -90
+          ? PENALTIES.veryWeakBleSignal
+          : bleSignalStrength < -80
+            ? PENALTIES.bleSignalWeak
+            : 0
+        : 0,
     },
     deviceConsistency: input.deviceConsistency ?? 0,
   };

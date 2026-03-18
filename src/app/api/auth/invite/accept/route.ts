@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hash } from "bcryptjs";
 import { Role } from "@prisma/client";
 import { db } from "@/lib/db";
+import { hashPassword } from "@/lib/passwords";
 import { acceptLecturerInviteSchema } from "@/lib/validators";
 import { hashToken } from "@/lib/tokens";
 
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const passwordHash = await hash(parsed.password, 10);
+    const passwordHash = await hashPassword(parsed.password);
     const createdUser = await db.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {

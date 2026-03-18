@@ -3,15 +3,18 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { getQrSequence, verifyQrTokenForSequence } from "@/lib/qr";
 import { logError, ApiErrorMessages } from "@/lib/api-error";
+import { setBrowserDeviceProofCookie } from "@/lib/browser-device-proof";
 import { SharedRedisRequiredError } from "@/lib/cache";
 import {
   AttendanceRequestError,
+  BrowserDeviceVerificationError,
   DeviceTokenConflictError,
   executeAttendanceMark,
   prepareAttendanceMarkContext,
 } from "@/lib/attendance-marking";
 import {
   getBleBroadcasterPresence,
+  getFreshBleRelayLease,
   getSessionBleBroadcast,
 } from "@/lib/lecturer-ble";
 
@@ -56,7 +59,17 @@ export async function POST(request: NextRequest) {
     }
 
     const broadcasterPresence = await getBleBroadcasterPresence(parsed.sessionId);
-    const broadcasterOnline = Boolean(broadcasterPresence);
+    const broadcasterLease = await getFreshBleRelayLease(parsed.sessionId);
+    const broadcasterOnline = Boolean(broadcasterPresence && broadcasterLease);
+    if (!broadcasterLease) {
+      return NextResponse.json(
+        {
+          error:
+            "Lecturer BLE heartbeat is required before relay attendance can be marked.",
+        },
+        { status: 403 }
+      );
+    }
 
     const serverNowTs = Date.now();
     const maxScanAgeMs =
@@ -137,12 +150,13 @@ export async function POST(request: NextRequest) {
             source: "BLE_TOKEN_ATTENDANCE",
             beaconName: parsed.beaconName ?? null,
             broadcasterOnline,
+            relayLeaseActive: true,
           },
         };
       },
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       record: {
         id: result.record.id,
@@ -155,6 +169,16 @@ export async function POST(request: NextRequest) {
       },
       phaseCompletion: result.phaseCompletion,
     });
+
+    if (result.browserDeviceBinding) {
+      setBrowserDeviceProofCookie(response, {
+        userId: session.user.id,
+        deviceToken: result.browserDeviceBinding.deviceToken,
+        fingerprintHash: result.browserDeviceBinding.fingerprintHash,
+      });
+    }
+
+    return response;
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -173,6 +197,9 @@ export async function POST(request: NextRequest) {
         },
         { status: 409 }
       );
+    }
+    if (error instanceof BrowserDeviceVerificationError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
     }
     if (error instanceof SharedRedisRequiredError) {
       return NextResponse.json(

@@ -19,6 +19,20 @@ export type BleBroadcasterPresence = {
   lastHeartbeatAt: string;
 };
 
+export type BleRelayLease = {
+  sessionId: string;
+  lecturerId: string;
+  deviceId: string;
+  deviceName: string;
+  platform: string;
+  appVersion: string | null;
+  beaconName: string;
+  phase: string;
+  lastHeartbeatAt: string;
+  issuedAt: string;
+  expiresAt: string;
+};
+
 function normalizeBeaconName(input: string): string {
   return input.trim().replace(/\s+/g, " ").slice(0, 48);
 }
@@ -37,6 +51,10 @@ function key(sessionId: string) {
 
 function heartbeatKey(sessionId: string) {
   return `attendance:lecturer-ble-heartbeat:${sessionId}`;
+}
+
+function leaseKey(sessionId: string) {
+  return `attendance:lecturer-ble-lease:${sessionId}`;
 }
 
 export async function getSessionBleBroadcast(
@@ -82,6 +100,7 @@ export async function clearSessionBleBroadcast(sessionId: string): Promise<void>
   await Promise.all([
     cacheDel(key(sessionId)),
     cacheDel(heartbeatKey(sessionId)),
+    cacheDel(leaseKey(sessionId)),
   ]);
 }
 
@@ -119,4 +138,83 @@ export async function setBleBroadcasterPresence(
 
 export async function clearBleBroadcasterPresence(sessionId: string): Promise<void> {
   await cacheDel(heartbeatKey(sessionId));
+}
+
+export async function getBleRelayLease(
+  sessionId: string
+): Promise<BleRelayLease | null> {
+  const payload = await cacheGet<BleRelayLease>(leaseKey(sessionId));
+  if (!payload) {
+    return null;
+  }
+
+  const expiresAtMs = new Date(payload.expiresAt).getTime();
+  if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
+    await cacheDel(leaseKey(sessionId));
+    return null;
+  }
+
+  return payload;
+}
+
+export async function setBleRelayLease(
+  sessionId: string,
+  input: {
+    lecturerId: string;
+    deviceId: string;
+    deviceName: string;
+    platform: string;
+    appVersion?: string | null;
+    beaconName: string;
+    phase: string;
+    lastHeartbeatAt: string;
+    expiresAt: Date;
+  }
+): Promise<BleRelayLease> {
+  const leaseExpiresAtMs = Math.min(
+    input.expiresAt.getTime(),
+    Date.now() + ATTENDANCE_BLE.BROADCASTER_HEARTBEAT_TTL_SECONDS * 1000
+  );
+  const leaseExpiresAt = new Date(leaseExpiresAtMs);
+  const payload: BleRelayLease = {
+    sessionId,
+    lecturerId: input.lecturerId,
+    deviceId: input.deviceId.trim().slice(0, 120),
+    deviceName: input.deviceName.trim().slice(0, 120) || "Unknown Broadcaster",
+    platform: input.platform.trim().slice(0, 40) || "android",
+    appVersion: input.appVersion?.trim().slice(0, 40) ?? null,
+    beaconName: normalizeBeaconName(input.beaconName),
+    phase: input.phase,
+    lastHeartbeatAt: input.lastHeartbeatAt,
+    issuedAt: new Date().toISOString(),
+    expiresAt: leaseExpiresAt.toISOString(),
+  };
+
+  const ttlSeconds = Math.max(5, Math.ceil((leaseExpiresAtMs - Date.now()) / 1000));
+  await cacheSet(leaseKey(sessionId), payload, ttlSeconds);
+  return payload;
+}
+
+export async function clearBleRelayLease(sessionId: string): Promise<void> {
+  await cacheDel(leaseKey(sessionId));
+}
+
+export async function getFreshBleRelayLease(
+  sessionId: string
+): Promise<BleRelayLease | null> {
+  const [lease, presence] = await Promise.all([
+    getBleRelayLease(sessionId),
+    getBleBroadcasterPresence(sessionId),
+  ]);
+
+  if (!lease) {
+    return null;
+  }
+
+  if (!presence || presence.lastHeartbeatAt !== lease.lastHeartbeatAt) {
+    await clearBleRelayLease(sessionId);
+    return null;
+  }
+
+  return lease;
 }

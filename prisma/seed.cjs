@@ -13,8 +13,15 @@ const {
   JobType,
   JobStatus,
 } = require("@prisma/client");
-const { hashSync } = require("bcryptjs");
+const argon2 = require("argon2");
 const { randomUUID } = require("crypto");
+
+const ARGON2_HASH_OPTIONS = {
+  type: argon2.argon2id,
+  memoryCost: 4096,
+  timeCost: 3,
+  parallelism: 1,
+};
 
 const prisma = new PrismaClient();
 
@@ -261,7 +268,7 @@ function makeProgramSettings(now) {
 
 async function seedOrganization() {
   const now = new Date();
-  const passwordHash = hashSync("password123", 10);
+  const passwordHash = await argon2.hash("password123", ARGON2_HASH_OPTIONS);
   const orgSettings = makeProgramSettings(now);
 
   const org = await prisma.organization.upsert({

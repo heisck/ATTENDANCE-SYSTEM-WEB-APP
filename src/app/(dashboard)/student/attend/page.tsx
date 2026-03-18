@@ -105,6 +105,14 @@ interface BleScanTokenResult {
 
 const DEVICE_TOKEN_STORAGE_KEY = "attendanceiq:web-device-token:v1";
 
+type NavigatorWithUserAgentData = Navigator & {
+  userAgentData?: {
+    platform?: string;
+    mobile?: boolean;
+    brands?: Array<{ brand: string; version: string }>;
+  };
+};
+
 function getOrCreateBrowserDeviceToken() {
   if (typeof window === "undefined") return "";
   const existing = window.localStorage.getItem(DEVICE_TOKEN_STORAGE_KEY);
@@ -124,6 +132,42 @@ function detectDeviceTypeFromUserAgent(userAgent: string): "iOS" | "Android" | "
   if (/android/i.test(userAgent)) return "Android";
   if (/(iphone|ipad|ipod)/i.test(userAgent)) return "iOS";
   return "Web";
+}
+
+function buildBrowserDeviceFingerprint() {
+  if (typeof window === "undefined" || typeof navigator === "undefined") {
+    return "";
+  }
+
+  const nav = navigator as NavigatorWithUserAgentData;
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const colorScheme = window.matchMedia?.("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : window.matchMedia?.("(prefers-color-scheme: light)").matches
+      ? "light"
+      : "no-preference";
+
+  return JSON.stringify({
+    version: 1,
+    platform: nav.userAgentData?.platform || nav.platform || "unknown",
+    language: nav.language || "en-US",
+    languages: Array.isArray(nav.languages) ? nav.languages.slice(0, 5) : [],
+    timezone,
+    screen:
+      typeof window.screen !== "undefined"
+        ? `${window.screen.width}x${window.screen.height}x${window.screen.colorDepth}`
+        : "unknown",
+    hardwareConcurrency:
+      typeof nav.hardwareConcurrency === "number" ? nav.hardwareConcurrency : null,
+    deviceMemory:
+      typeof (nav as Navigator & { deviceMemory?: number }).deviceMemory === "number"
+        ? (nav as Navigator & { deviceMemory?: number }).deviceMemory
+        : null,
+    touchPoints: typeof nav.maxTouchPoints === "number" ? nav.maxTouchPoints : 0,
+    vendor: nav.vendor || "unknown",
+    cookieEnabled: nav.cookieEnabled ?? false,
+    colorScheme,
+  });
 }
 
 function phaseLabel(phase: ActiveSession["phase"]) {
@@ -445,10 +489,8 @@ export default function AttendPage() {
           typeof navigator !== "undefined" && typeof navigator.platform === "string"
             ? navigator.platform
             : "Web";
-        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-        const language =
-          typeof navigator !== "undefined" ? navigator.language || "en-US" : "en-US";
         const deviceToken = getOrCreateBrowserDeviceToken();
+        const deviceFingerprint = buildBrowserDeviceFingerprint();
 
         const res = await fetch("/api/attendance/mark", {
           method: "POST",
@@ -463,7 +505,7 @@ export default function AttendPage() {
             deviceType: detectDeviceTypeFromUserAgent(userAgent),
             osVersion: userAgent,
             appVersion: "web",
-            deviceFingerprint: `${platform}|${language}|${timezone}`,
+            deviceFingerprint,
           }),
         });
 
@@ -526,10 +568,8 @@ export default function AttendPage() {
         typeof navigator !== "undefined" && typeof navigator.platform === "string"
           ? navigator.platform
           : "Web";
-      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-      const language =
-        typeof navigator !== "undefined" ? navigator.language || "en-US" : "en-US";
       const deviceToken = getOrCreateBrowserDeviceToken();
+      const deviceFingerprint = buildBrowserDeviceFingerprint();
 
       const res = await fetch("/api/attendance/ble-mark", {
         method: "POST",
@@ -542,7 +582,7 @@ export default function AttendPage() {
           deviceType: detectDeviceTypeFromUserAgent(userAgent),
           osVersion: userAgent,
           appVersion: "web",
-          deviceFingerprint: `${platform}|${language}|${timezone}`,
+          deviceFingerprint,
         }),
       });
       const body = await res.json();

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hash } from "bcryptjs";
 import { Role } from "@prisma/client";
 import { db } from "@/lib/db";
+import { hashPassword } from "@/lib/passwords";
 import { registerSchema } from "@/lib/validators";
 import { createExpiryDate, createRawToken, hashToken } from "@/lib/tokens";
 import { buildAppUrl, sendEmail } from "@/lib/email";
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const passwordHash = await hash(parsed.password, 10);
+    const passwordHash = await hashPassword(parsed.password);
 
     const cohort = await db.cohort.upsert({
       where: {

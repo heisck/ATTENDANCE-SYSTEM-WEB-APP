@@ -5,7 +5,7 @@ import { getPhaseEndsAt, syncAttendanceSessionState } from "@/lib/attendance";
 import { generateQrPayloadForSequence, getQrSequence } from "@/lib/qr";
 import { cacheGet, cacheSet } from "@/lib/cache";
 import type { BleTokenPayload } from "@/lib/ble-spec";
-import { getSessionBleBroadcast } from "@/lib/lecturer-ble";
+import { getFreshBleRelayLease, getSessionBleBroadcast } from "@/lib/lecturer-ble";
 
 type TokenResponse = {
   sessionId: string;
@@ -98,6 +98,13 @@ export async function GET(
   if (!bleBroadcast) {
     return NextResponse.json(
       { error: "BLE beacon is not enabled for this session." },
+      { status: 403 }
+    );
+  }
+  const relayLease = await getFreshBleRelayLease(id);
+  if (!relayLease) {
+    return NextResponse.json(
+      { error: "Lecturer BLE heartbeat is required to fetch relay tokens." },
       { status: 403 }
     );
   }

@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { compare } from "bcryptjs";
 import { db } from "./db";
+import { hashPassword, verifyPassword } from "./passwords";
 import {
   CACHE_KEYS,
   SharedRedisRequiredError,
@@ -108,11 +108,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (!user) return null;
 
-        const isValid = await compare(
+        const passwordCheck = await verifyPassword(
           credentials.password as string,
           user.passwordHash
         );
-        if (!isValid) return null;
+        if (!passwordCheck.valid) return null;
+
+        if (passwordCheck.needsRehash) {
+          try {
+            const upgradedHash = await hashPassword(credentials.password as string);
+            await db.user.update({
+              where: { id: user.id },
+              data: { passwordHash: upgradedHash },
+            });
+          } catch (error) {
+            console.warn("[auth] password hash upgrade failed:", error);
+          }
+        }
 
         await Promise.all([
           resetRateLimitKey(emailRateLimitKey),
