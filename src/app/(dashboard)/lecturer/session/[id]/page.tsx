@@ -14,6 +14,8 @@ import {
   Bluetooth,
   RefreshCw,
   Radio,
+  FileSpreadsheet,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -261,16 +263,43 @@ export default function SessionMonitorPage() {
           </div>
         </div>
 
-        {isActive && (
-          <button
-            onClick={handleClose}
-            disabled={closing}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-destructive px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-destructive/90 disabled:opacity-50 sm:w-auto"
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+          <a
+            href={`/api/reports/export?sessionId=${sessionId}&format=csv`}
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
           >
-            {closing ? <Loader2 className="h-4 w-4 animate-spin" /> : <StopCircle className="h-4 w-4" />}
-            End Session
-          </button>
-        )}
+            <FileText className="h-4 w-4" />
+            Export CSV
+          </a>
+          <a
+            href={`/api/reports/export?sessionId=${sessionId}&format=xlsx`}
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Export Excel
+          </a>
+          <a
+            href={`/api/reports/export?sessionId=${sessionId}&format=pdf`}
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
+          >
+            <FileText className="h-4 w-4" />
+            Export PDF
+          </a>
+          {isActive && (
+            <button
+              onClick={handleClose}
+              disabled={closing}
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-destructive px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-destructive/90 disabled:opacity-50"
+            >
+              {closing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <StopCircle className="h-4 w-4" />
+              )}
+              End Session
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">

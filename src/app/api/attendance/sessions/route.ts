@@ -18,6 +18,79 @@ import { getStudentPhaseCompletionForCourseDay } from "@/lib/phase-completion";
 
 const SESSION_LIST_CACHE_TTL_SECONDS = 10;
 
+function getUtcDayRange(reference: Date) {
+  const start = new Date(
+    Date.UTC(
+      reference.getUTCFullYear(),
+      reference.getUTCMonth(),
+      reference.getUTCDate(),
+      0,
+      0,
+      0,
+      0
+    )
+  );
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return { start, end };
+}
+
+type SameDaySessionSummary = {
+  totalSessionsToday: number;
+  phaseOneSessionsToday: number;
+  phaseTwoSessionsToday: number;
+};
+
+function buildPhaseStartConfirmation(
+  phase: "PHASE_ONE" | "PHASE_TWO",
+  summary: SameDaySessionSummary
+) {
+  if (phase === "PHASE_ONE") {
+    if (summary.phaseOneSessionsToday > 0) {
+      return {
+        message:
+          summary.phaseOneSessionsToday === 1
+            ? "Phase 1 has already been opened once for this class today. Start a Phase 1 extension for students who missed it?"
+            : `Phase 1 has already been opened ${summary.phaseOneSessionsToday} times for this class today. Start another Phase 1 extension?`,
+        kind: "PHASE_ONE_EXTENSION" as const,
+      };
+    }
+
+    if (summary.phaseTwoSessionsToday > 0) {
+      return {
+        message:
+          "Phase 2 has already been used for this class today. Start another Phase 1 session anyway?",
+        kind: "PHASE_ONE_AFTER_PHASE_TWO" as const,
+      };
+    }
+
+    return null;
+  }
+
+  if (summary.phaseTwoSessionsToday > 0) {
+    return {
+      message:
+        summary.phaseTwoSessionsToday === 1
+          ? "Phase 2 has already been opened once for this class today. Start a Phase 2 extension for students who still need the closing mark?"
+          : `Phase 2 has already been opened ${summary.phaseTwoSessionsToday} times for this class today. Start another Phase 2 extension?`,
+      kind: "PHASE_TWO_EXTENSION" as const,
+    };
+  }
+
+  if (summary.phaseOneSessionsToday > 0) {
+    return {
+      message:
+        "Phase 1 already exists for this class today. Start Phase 2 now as the closing session for this class?",
+      kind: "PHASE_TWO_CLOSING" as const,
+    };
+  }
+
+  return {
+    message:
+      "No Phase 1 session has been recorded for this class today. Start Phase 2 anyway?",
+    kind: "PHASE_TWO_WITHOUT_PHASE_ONE" as const,
+  };
+}
+
 async function invalidateStudentSessionKeys(studentIds: string[]) {
   await Promise.all(
     studentIds.map((studentId) =>
@@ -81,6 +154,44 @@ export async function POST(request: NextRequest) {
     }
 
     const startedAt = new Date();
+    const { start, end } = getUtcDayRange(startedAt);
+    const sameDaySessions = await db.attendanceSession.findMany({
+      where: {
+        courseId: course.id,
+        startedAt: {
+          gte: start,
+          lt: end,
+        },
+      },
+      select: {
+        id: true,
+        phase: true,
+        startedAt: true,
+      },
+      orderBy: { startedAt: "asc" },
+    });
+
+    const sameDaySummary: SameDaySessionSummary = {
+      totalSessionsToday: sameDaySessions.length,
+      phaseOneSessionsToday: sameDaySessions.filter((row) => row.phase === "PHASE_ONE")
+        .length,
+      phaseTwoSessionsToday: sameDaySessions.filter((row) => row.phase === "PHASE_TWO")
+        .length,
+    };
+
+    const confirmation = buildPhaseStartConfirmation(parsed.phase, sameDaySummary);
+    if (confirmation && !parsed.confirmStart) {
+      return NextResponse.json(
+        {
+          error: confirmation.message,
+          needsConfirmation: true,
+          confirmationKind: confirmation.kind,
+          summary: sameDaySummary,
+        },
+        { status: 409 }
+      );
+    }
+
     const attendanceSession = await db.attendanceSession.create({
       data: {
         courseId: course.id,
@@ -221,9 +332,22 @@ export async function GET(request: NextRequest) {
           phaseCompletionByCourseDay.set(requestKey, phaseCompletionPromise);
         }
         const phaseCompletion = await phaseCompletionPromise;
+        let canMarkPhase = true;
+        let blockReason: string | null = null;
 
-        const canMarkPhase =
-          derivedPhase !== "PHASE_TWO" || phaseCompletion.phaseOneDone;
+        if (derivedPhase === "PHASE_ONE" && phaseCompletion.phaseOneDone) {
+          canMarkPhase = false;
+          blockReason =
+            "You already completed Phase 1 for this class. Wait for Phase 2.";
+        } else if (derivedPhase === "PHASE_TWO" && !phaseCompletion.phaseOneDone) {
+          canMarkPhase = false;
+          blockReason =
+            "Complete Phase 1 for this class before marking Phase 2.";
+        } else if (derivedPhase === "PHASE_TWO" && phaseCompletion.phaseTwoDone) {
+          canMarkPhase = false;
+          blockReason =
+            "You already completed Phase 2 for this class.";
+        }
 
         return {
           ...rest,
@@ -241,9 +365,7 @@ export async function GET(request: NextRequest) {
                 }
               : undefined,
           canMarkPhase,
-          blockReason: canMarkPhase
-            ? null
-            : "Complete Phase 1 for this class before marking Phase 2.",
+          blockReason,
           phaseCompletion,
         };
       })

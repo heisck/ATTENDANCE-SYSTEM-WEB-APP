@@ -39,6 +39,7 @@ export const createSessionSchema = z.object({
     return normalized;
   }, z.enum(["PHASE_ONE", "PHASE_TWO"]).default("PHASE_ONE")),
   enableBle: z.boolean().optional().default(false),
+  confirmStart: z.boolean().optional().default(false),
 });
 
 export const markAttendanceSchema = z.object({

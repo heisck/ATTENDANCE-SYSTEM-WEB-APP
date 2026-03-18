@@ -49,28 +49,45 @@ export default function NewSessionPage() {
 
     setLoading(true);
     try {
-      const payload: Record<string, unknown> = {
-        courseCode: courseCode.trim().toUpperCase(),
-        phase,
-        enableBle: bleEnabled,
+      const attemptStart = async (confirmStart: boolean) => {
+        const payload: Record<string, unknown> = {
+          courseCode: courseCode.trim().toUpperCase(),
+          phase,
+          enableBle: bleEnabled,
+          confirmStart,
+        };
+
+        const res = await fetch("/api/attendance/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          if (res.status === 409 && data.sessionId) {
+            router.push(`/lecturer/session/${data.sessionId}`);
+            return true;
+          }
+
+          if (res.status === 409 && data.needsConfirmation && !confirmStart) {
+            const confirmed = window.confirm(
+              data.error || "This class already has phase activity today. Continue?"
+            );
+            if (!confirmed) {
+              return true;
+            }
+            return attemptStart(true);
+          }
+
+          throw new Error(data.error || "Failed to create session");
+        }
+
+        router.push(`/lecturer/session/${data.id}`);
+        return true;
       };
 
-      const res = await fetch("/api/attendance/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        if (res.status === 409 && data.sessionId) {
-          router.push(`/lecturer/session/${data.sessionId}`);
-          return;
-        }
-        throw new Error(data.error || "Failed to create session");
-      }
-
-      router.push(`/lecturer/session/${data.id}`);
+      await attemptStart(false);
     } catch (err: any) {
       toast.error(err?.message || "Failed to create session");
     } finally {
@@ -210,6 +227,7 @@ export default function NewSessionPage() {
               <li>Keep this tab open so students can scan the rotating QR code.</li>
               <li>Select the correct phase before you launch.</li>
               <li>Use Phase 1 at class start and Phase 2 near class end.</li>
+              <li>Phase extensions only accept students who missed that phase earlier.</li>
             </ul>
           </section>
         </aside>

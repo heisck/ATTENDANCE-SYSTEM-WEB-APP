@@ -362,18 +362,32 @@ export async function prepareAttendanceMarkContext(input: {
     throw new AttendanceRequestError("You are not enrolled in this course", 403);
   }
 
-  if (syncedSession.phase === "PHASE_TWO") {
-    const phaseCompletionGate = await getStudentPhaseCompletionForCourseDay({
-      studentId: input.studentId,
-      courseId: attendanceSession.courseId,
-      lecturerId: attendanceSession.lecturerId,
-      referenceTime: attendanceSession.startedAt,
-    });
+  const phaseCompletionGate = await getStudentPhaseCompletionForCourseDay({
+    studentId: input.studentId,
+    courseId: attendanceSession.courseId,
+    lecturerId: attendanceSession.lecturerId,
+    referenceTime: attendanceSession.startedAt,
+  });
 
+  if (syncedSession.phase === "PHASE_ONE" && phaseCompletionGate.phaseOneDone) {
+    throw new AttendanceRequestError(
+      "You already completed Phase 1 for this class. Wait for Phase 2 or ask your lecturer for guidance.",
+      409
+    );
+  }
+
+  if (syncedSession.phase === "PHASE_TWO") {
     if (!phaseCompletionGate.phaseOneDone) {
       throw new AttendanceRequestError(
         "Phase 1 attendance is required before you can mark Phase 2 for this class.",
         403
+      );
+    }
+
+    if (phaseCompletionGate.phaseTwoDone) {
+      throw new AttendanceRequestError(
+        "You already completed Phase 2 for this class.",
+        409
       );
     }
   }
