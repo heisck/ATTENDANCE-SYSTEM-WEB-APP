@@ -20,6 +20,38 @@ function getUtcDayKey(reference: Date) {
   return getUtcDayRange(reference).start.toISOString().slice(0, 10);
 }
 
+function formatCohortLabel(input: {
+  displayName: string;
+  department: string;
+  level: number;
+  groupCode: string;
+} | null) {
+  if (!input) {
+    return null;
+  }
+
+  return (
+    input.displayName ||
+    `${input.department} Level ${input.level} ${input.groupCode}`
+  );
+}
+
+function compareStudentRows<
+  T extends {
+    name: string;
+    studentId: string | null;
+    indexNumber: string | null;
+    email?: string | null;
+  },
+>(a: T, b: T) {
+  return (
+    a.name.localeCompare(b.name) ||
+    (a.studentId || "").localeCompare(b.studentId || "") ||
+    (a.indexNumber || "").localeCompare(b.indexNumber || "") ||
+    (a.email || "").localeCompare(b.email || "")
+  );
+}
+
 export async function getAttendanceReport(courseId: string) {
   const course = await db.course.findUnique({
     where: { id: courseId },
@@ -47,8 +79,17 @@ export async function getAttendanceReport(courseId: string) {
             select: {
               id: true,
               name: true,
+              email: true,
               studentId: true,
               indexNumber: true,
+              cohort: {
+                select: {
+                  displayName: true,
+                  department: true,
+                  level: true,
+                  groupCode: true,
+                },
+              },
             },
           },
         },
@@ -141,9 +182,11 @@ export async function getAttendanceReport(courseId: string) {
         : 0;
 
     return {
+      email: student.email,
       studentId: student.studentId,
       indexNumber: student.indexNumber,
       name: student.name,
+      cohort: formatCohortLabel(student.cohort),
       phaseOneDays,
       phaseTwoDays,
       fullyPresentDays,
@@ -186,7 +229,7 @@ export async function getAttendanceReport(courseId: string) {
         fullyPresent,
       };
     }),
-    report: report.sort((a, b) => a.name.localeCompare(b.name)),
+    report: report.sort(compareStudentRows),
   };
 }
 
@@ -201,8 +244,17 @@ export async function getAttendanceSessionReport(sessionId: string) {
             select: {
               id: true,
               name: true,
+              email: true,
               studentId: true,
               indexNumber: true,
+              cohort: {
+                select: {
+                  displayName: true,
+                  department: true,
+                  level: true,
+                  groupCode: true,
+                },
+              },
             },
           },
         },
@@ -220,8 +272,8 @@ export async function getAttendanceSessionReport(sessionId: string) {
     return null;
   }
 
-  const [{ start, end }, totalEnrolled, sameDaySessions] = await Promise.all([
-    Promise.resolve(getUtcDayRange(attendanceSession.startedAt)),
+  const dayRange = getUtcDayRange(attendanceSession.startedAt);
+  const [totalEnrolled, sameDaySessions] = await Promise.all([
     db.enrollment.count({
       where: { courseId: attendanceSession.courseId },
     }),
@@ -229,8 +281,8 @@ export async function getAttendanceSessionReport(sessionId: string) {
       where: {
         courseId: attendanceSession.courseId,
         startedAt: {
-          gte: getUtcDayRange(attendanceSession.startedAt).start,
-          lt: getUtcDayRange(attendanceSession.startedAt).end,
+          gte: dayRange.start,
+          lt: dayRange.end,
         },
       },
       select: {
@@ -273,7 +325,7 @@ export async function getAttendanceSessionReport(sessionId: string) {
       courseId: attendanceSession.courseId,
       courseCode: attendanceSession.course.code,
       courseName: attendanceSession.course.name,
-      date: start.toISOString().slice(0, 10),
+      date: dayRange.start.toISOString().slice(0, 10),
       startedAt: attendanceSession.startedAt.toISOString(),
       status: attendanceSession.status,
       phase: attendanceSession.phase,
@@ -283,14 +335,18 @@ export async function getAttendanceSessionReport(sessionId: string) {
       totalEnrolled,
       totalStudentsMarked: attendanceSession._count.records,
     },
-    records: attendanceSession.records.map((record) => ({
-      studentId: record.student.studentId,
-      indexNumber: record.student.indexNumber,
-      name: record.student.name,
-      markedAt: record.markedAt.toISOString(),
-      confidence: record.confidence,
-      flagged: record.flagged,
-    })),
+    records: attendanceSession.records
+      .map((record) => ({
+        email: record.student.email,
+        studentId: record.student.studentId,
+        indexNumber: record.student.indexNumber,
+        name: record.student.name,
+        cohort: formatCohortLabel(record.student.cohort),
+        markedAt: record.markedAt.toISOString(),
+        confidence: record.confidence,
+        flagged: record.flagged,
+      }))
+      .sort(compareStudentRows),
   };
 }
 

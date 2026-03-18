@@ -31,6 +31,15 @@ export async function GET() {
       email: true,
       studentId: true,
       indexNumber: true,
+      cohort: {
+        select: {
+          id: true,
+          department: true,
+          level: true,
+          groupCode: true,
+          displayName: true,
+        },
+      },
     },
     orderBy: [{ name: "asc" }],
   });

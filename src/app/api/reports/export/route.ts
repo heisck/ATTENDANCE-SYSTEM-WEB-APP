@@ -22,6 +22,10 @@ function sanitizeFilePart(value: string) {
   return value.replace(/[^a-z0-9_-]+/gi, "_").replace(/^_+|_+$/g, "");
 }
 
+function formatExportTimestamp(value: string) {
+  return value.replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
+}
+
 function canAccessCourse(user: StaffUser, input: {
   lecturerId: string;
   organizationId: string;
@@ -92,10 +96,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
-    const columns: ExportColumn<(typeof report.records)[number]>[] = [
-      { key: "studentId", label: "Student ID" },
-      { key: "indexNumber", label: "Index Number" },
+    const sessionRows = report.records.map((row) => ({
+      name: row.name,
+      email: row.email,
+      studentId: row.studentId,
+      indexNumber: row.indexNumber,
+      cohort: row.cohort,
+      markedAt: formatExportTimestamp(row.markedAt),
+      confidence: `${row.confidence}%`,
+      flagged: row.flagged ? "Yes" : "No",
+    }));
+    const columns: ExportColumn<(typeof sessionRows)[number]>[] = [
       { key: "name", label: "Name" },
+      { key: "email", label: "Email" },
+      { key: "studentId", label: "Student Number" },
+      { key: "indexNumber", label: "Index Number" },
+      { key: "cohort", label: "Cohort" },
       { key: "markedAt", label: "Marked At" },
       { key: "confidence", label: "Confidence" },
       { key: "flagged", label: "Flagged" },
@@ -116,7 +132,7 @@ export async function GET(request: NextRequest) {
           `Students Marked: ${report.session.totalStudentsMarked} / ${report.session.totalEnrolled}`,
         ],
         columns,
-        rows: report.records,
+        rows: sessionRows,
       });
 
       return new NextResponse(buffer, {
@@ -131,7 +147,7 @@ export async function GET(request: NextRequest) {
       const buffer = buildXlsxBuffer({
         sheetName: `${report.session.courseCode} Session`,
         columns,
-        rows: report.records,
+        rows: sessionRows,
       });
 
       return new NextResponse(buffer, {
@@ -144,7 +160,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (format === "csv") {
-      const csv = buildCsv(columns, report.records);
+      const csv = buildCsv(columns, sessionRows);
       return new NextResponse(csv, {
         headers: {
           "Content-Type": "text/csv",
@@ -182,10 +198,24 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Course not found" }, { status: 404 });
   }
 
-  const columns: ExportColumn<(typeof report.report)[number]>[] = [
-    { key: "studentId", label: "Student ID" },
-    { key: "indexNumber", label: "Index Number" },
+  const courseRows = report.report.map((row) => ({
+    name: row.name,
+    email: row.email,
+    studentId: row.studentId,
+    indexNumber: row.indexNumber,
+    cohort: row.cohort,
+    phaseOneDays: row.phaseOneDays,
+    phaseTwoDays: row.phaseTwoDays,
+    fullyPresentDays: row.fullyPresentDays,
+    totalClassDays: row.totalClassDays,
+    percentage: `${row.percentage}%`,
+  }));
+  const columns: ExportColumn<(typeof courseRows)[number]>[] = [
     { key: "name", label: "Name" },
+    { key: "email", label: "Email" },
+    { key: "studentId", label: "Student Number" },
+    { key: "indexNumber", label: "Index Number" },
+    { key: "cohort", label: "Cohort" },
     { key: "phaseOneDays", label: "Phase 1 Days" },
     { key: "phaseTwoDays", label: "Phase 2 Days" },
     { key: "fullyPresentDays", label: "Fully Present Days" },
@@ -207,7 +237,7 @@ export async function GET(request: NextRequest) {
         `Phase Rule: Full attendance requires both Phase 1 and Phase 2 on the same class day.`,
       ],
       columns,
-      rows: report.report,
+      rows: courseRows,
     });
 
     return new NextResponse(buffer, {
@@ -222,7 +252,7 @@ export async function GET(request: NextRequest) {
     const buffer = buildXlsxBuffer({
       sheetName: `${report.course.code} Summary`,
       columns,
-      rows: report.report,
+      rows: courseRows,
     });
 
     return new NextResponse(buffer, {
@@ -235,7 +265,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (format === "csv") {
-    const csv = buildCsv(columns, report.report);
+    const csv = buildCsv(columns, courseRows);
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv",

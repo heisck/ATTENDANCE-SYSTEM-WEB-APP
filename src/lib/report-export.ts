@@ -149,11 +149,12 @@ export async function buildPdfBuffer<T extends ExportRow>(input: {
   const pdf = await PDFDocument.create();
   const titleFont = await pdf.embedFont(StandardFonts.CourierBold);
   const bodyFont = await pdf.embedFont(StandardFonts.Courier);
-  const pageSize: [number, number] = [595.28, 841.89];
-  const margin = 40;
+  const landscape = columns.length >= 8;
+  const pageSize: [number, number] = landscape ? [841.89, 595.28] : [595.28, 841.89];
+  const margin = landscape ? 30 : 40;
   const fontSize = 9;
   const lineHeight = 12;
-  const maxChars = 92;
+  const maxChars = landscape ? 132 : 92;
   const widths = computeColumnWidths(columns, rows, maxChars);
   const headerRow = columns
     .map((column, index) => truncateText(column.label, widths[index]))
@@ -166,7 +167,6 @@ export async function buildPdfBuffer<T extends ExportRow>(input: {
 
   let page = pdf.addPage(pageSize);
   let y = pageSize[1] - margin;
-  let pageIndex = 0;
 
   const drawLine = (
     line: string,
@@ -175,7 +175,6 @@ export async function buildPdfBuffer<T extends ExportRow>(input: {
     if (y < margin) {
       page = pdf.addPage(pageSize);
       y = pageSize[1] - margin;
-      pageIndex += 1;
       page.drawText(`${title} (continued)`, {
         x: margin,
         y,

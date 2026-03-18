@@ -79,7 +79,22 @@ export async function GET(request: NextRequest) {
     where: { courseId },
     include: {
       student: {
-        select: { id: true, name: true, email: true, studentId: true, indexNumber: true },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          studentId: true,
+          indexNumber: true,
+          cohort: {
+            select: {
+              id: true,
+              department: true,
+              level: true,
+              groupCode: true,
+              displayName: true,
+            },
+          },
+        },
       },
     },
     orderBy: { enrolledAt: "desc" },
