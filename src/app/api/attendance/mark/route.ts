@@ -76,24 +76,18 @@ export async function POST(request: NextRequest) {
       context,
       body,
       recordQrToken: parsed.qrToken,
-      buildSecurity: ({ bleStats }) => {
-        const requestBleSignalStrength =
-          typeof (body as { bleSignalStrength?: unknown }).bleSignalStrength === "number"
-            ? (body as { bleSignalStrength: number }).bleSignalStrength
-            : null;
-        const bleVerified = bleStats.verificationCount > 0;
-
+      buildSecurity: () => {
         return {
           confidenceInput: {
             qrTokenValid: true,
-            bleProximityVerified: bleVerified,
-            bleSignalStrength: requestBleSignalStrength,
+            bleProximityVerified: null,
+            bleSignalStrength: null,
           },
           responseLayers: {
             qr: true,
-            ble: bleVerified,
+            ble: null,
           },
-          recordBleSignalStrength: requestBleSignalStrength,
+          recordBleSignalStrength: null,
         };
       },
     });

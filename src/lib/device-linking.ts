@@ -102,7 +102,6 @@ export async function linkDevice(
       }
 
       if (
-        deviceInfo.appVersion === "web" &&
         deviceInfo.fingerprint &&
         existingByToken.fingerprint &&
         existingByToken.fingerprint !== deviceInfo.fingerprint &&
@@ -138,12 +137,12 @@ export async function linkDevice(
       };
     }
 
-    if (deviceInfo.appVersion === "web" && deviceInfo.fingerprint) {
+    if (deviceInfo.fingerprint) {
       const activeWebDevices = await db.userDevice.findMany({
         where: {
           userId,
           revokedAt: null,
-          appVersion: "web",
+          fingerprint: { not: null },
         },
         select: {
           id: true,
@@ -250,7 +249,6 @@ export async function linkDevice(
         }
 
         if (
-          deviceInfo.appVersion === "web" &&
           deviceInfo.fingerprint &&
           conflicting.fingerprint &&
           conflicting.fingerprint !== deviceInfo.fingerprint &&

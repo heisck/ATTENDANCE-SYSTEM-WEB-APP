@@ -128,12 +128,6 @@ function getOrCreateBrowserDeviceToken() {
   return generated;
 }
 
-function detectDeviceTypeFromUserAgent(userAgent: string): "iOS" | "Android" | "Web" {
-  if (/android/i.test(userAgent)) return "Android";
-  if (/(iphone|ipad|ipod)/i.test(userAgent)) return "iOS";
-  return "Web";
-}
-
 function buildBrowserDeviceFingerprint() {
   if (typeof window === "undefined" || typeof navigator === "undefined") {
     return "";
@@ -170,6 +164,45 @@ function buildBrowserDeviceFingerprint() {
   });
 }
 
+function detectBrowserFamily() {
+  if (typeof navigator === "undefined") {
+    return "Web";
+  }
+
+  const nav = navigator as NavigatorWithUserAgentData;
+  const platform =
+    nav.userAgentData?.platform ||
+    (typeof navigator.platform === "string" ? navigator.platform : "") ||
+    navigator.userAgent ||
+    "";
+
+  if (/android/i.test(platform)) return "Android";
+  if (/(iphone|ipad|ipod)/i.test(platform)) return "iOS";
+  return "Web";
+}
+
+function checkBleSupport() {
+  if (typeof window === "undefined") {
+    return { supported: false, reason: "Not in browser context" };
+  }
+
+  const hasWebBluetooth = (navigator as any).bluetooth !== undefined;
+  const isSecureContext = window.isSecureContext;
+
+  if (!isSecureContext) {
+    return { supported: false, reason: "HTTPS required" };
+  }
+
+  if (!hasWebBluetooth) {
+    return {
+      supported: false,
+      reason: "Web Bluetooth not available on this device/browser",
+    };
+  }
+
+  return { supported: true };
+}
+
 function phaseLabel(phase: ActiveSession["phase"]) {
   if (phase === "PHASE_ONE") return "Phase 1";
   if (phase === "PHASE_TWO") return "Phase 2";
@@ -195,6 +228,9 @@ export default function AttendPage() {
   const [sessionBle, setSessionBle] = useState<SessionBleState | null>(null);
   const [scanMode, setScanMode] = useState<ScanMode>("QR");
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [bleSupport, setBleSupport] = useState<{ supported: boolean; reason?: string }>({
+    supported: false,
+  });
 
   const [requestingQrPort, setRequestingQrPort] = useState(false);
   const [qrPortStatusLocal, setQrPortStatusLocal] = useState<QrPortStatus>(null);
@@ -349,6 +385,10 @@ export default function AttendPage() {
   }, [syncError]);
 
   useEffect(() => {
+    setBleSupport(checkBleSupport());
+  }, []);
+
+  useEffect(() => {
     const mode = searchParams.get("mode");
     if (!mode) return;
 
@@ -439,9 +479,7 @@ export default function AttendPage() {
       }
 
       if (synced.bleState?.enabled && synced.bleState.active) {
-        const isAndroidDevice =
-          typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
-        setScanMode(isAndroidDevice ? "BLE" : "QR");
+        setScanMode(detectBrowserFamily() === "Android" && bleSupport.supported ? "BLE" : "QR");
       }
 
       if (session.hasMarked || synced.body.attendance) {
@@ -468,7 +506,7 @@ export default function AttendPage() {
       setResult(null);
       setStep("qr");
     },
-    [syncActiveSession]
+    [bleSupport.supported, syncActiveSession]
   );
 
   const handleInitialQrScan = useCallback(
@@ -484,11 +522,7 @@ export default function AttendPage() {
       }
 
       try {
-        const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
-        const platform =
-          typeof navigator !== "undefined" && typeof navigator.platform === "string"
-            ? navigator.platform
-            : "Web";
+        const browserFamily = detectBrowserFamily();
         const deviceToken = getOrCreateBrowserDeviceToken();
         const deviceFingerprint = buildBrowserDeviceFingerprint();
 
@@ -501,9 +535,9 @@ export default function AttendPage() {
             qrTimestamp: data.ts,
             webauthnVerified,
             deviceToken,
-            deviceName: `${platform} Browser`,
-            deviceType: detectDeviceTypeFromUserAgent(userAgent),
-            osVersion: userAgent,
+            deviceName: `${browserFamily} Browser`,
+            deviceType: "Web",
+            osVersion: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
             appVersion: "web",
             deviceFingerprint,
           }),
@@ -563,11 +597,7 @@ export default function AttendPage() {
       beaconName?: string;
       bleSignalStrength?: number;
     }) => {
-      const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
-      const platform =
-        typeof navigator !== "undefined" && typeof navigator.platform === "string"
-          ? navigator.platform
-          : "Web";
+      const browserFamily = detectBrowserFamily();
       const deviceToken = getOrCreateBrowserDeviceToken();
       const deviceFingerprint = buildBrowserDeviceFingerprint();
 
@@ -578,9 +608,9 @@ export default function AttendPage() {
           ...payload,
           webauthnVerified,
           deviceToken,
-          deviceName: `${platform} Browser`,
-          deviceType: detectDeviceTypeFromUserAgent(userAgent),
-          osVersion: userAgent,
+          deviceName: `${browserFamily} Browser`,
+          deviceType: "Web",
+          osVersion: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
           appVersion: "web",
           deviceFingerprint,
         }),
@@ -815,10 +845,11 @@ export default function AttendPage() {
                   onClick={() => {
                     setScanMode((current) => {
                       if (!sessionBle?.enabled) return "QR";
+                      if (!bleSupport.supported) return "QR";
                       return current === "QR" ? "BLE" : "QR";
                     });
                   }}
-                  disabled={!sessionBle?.enabled}
+                  disabled={!sessionBle?.enabled || !bleSupport.supported}
                   className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
@@ -1242,7 +1273,7 @@ function BleLecturerScanner({
       </div>
       {!sessionBle.active ? (
         <div className="status-panel-subtle p-3 text-xs">
-          Broadcaster heartbeat not seen yet. If lecturer uses external broadcaster, continue scanning anyway.
+          BLE needs a fresh lecturer heartbeat and lease. QR remains available while the broadcaster is starting or unavailable.
         </div>
       ) : null}
       <button

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { getQrSequence, verifyQrTokenForSequence } from "@/lib/qr";
+import { getQrSequence, verifyBleTokenForSequence } from "@/lib/qr";
 import { logError, ApiErrorMessages } from "@/lib/api-error";
 import { setBrowserDeviceProofCookie } from "@/lib/browser-device-proof";
 import { SharedRedisRequiredError } from "@/lib/cache";
@@ -12,11 +12,7 @@ import {
   executeAttendanceMark,
   prepareAttendanceMarkContext,
 } from "@/lib/attendance-marking";
-import {
-  getBleBroadcasterPresence,
-  getFreshBleRelayLease,
-  getSessionBleBroadcast,
-} from "@/lib/lecturer-ble";
+import { getFreshBleRelayLease, getSessionBleBroadcast } from "@/lib/lecturer-ble";
 
 const markAttendanceBleSchema = z.object({
   sessionId: z.string().min(1),
@@ -58,9 +54,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const broadcasterPresence = await getBleBroadcasterPresence(parsed.sessionId);
     const broadcasterLease = await getFreshBleRelayLease(parsed.sessionId);
-    const broadcasterOnline = Boolean(broadcasterPresence && broadcasterLease);
     if (!broadcasterLease) {
       return NextResponse.json(
         {
@@ -106,7 +100,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const tokenValid = verifyQrTokenForSequence(
+    const tokenValid = verifyBleTokenForSequence(
       context.attendanceSession.qrSecret,
       parsed.token,
       parsed.phase,
@@ -125,35 +119,23 @@ export async function POST(request: NextRequest) {
       context,
       body,
       recordQrToken: parsed.token,
-      buildSecurity: ({ bleStats }) => {
-        const resolvedBleSignalStrength =
-          parsed.bleSignalStrength !== undefined && parsed.bleSignalStrength !== 0
-            ? parsed.bleSignalStrength
-            : bleStats.averageRssi !== null &&
-                bleStats.averageRssi !== undefined &&
-                bleStats.averageRssi !== 0
-              ? bleStats.averageRssi
-              : -65;
-
-        return {
-          confidenceInput: {
-            qrTokenValid: null,
-            bleProximityVerified: true,
-            bleSignalStrength: resolvedBleSignalStrength,
-          },
-          responseLayers: {
-            qr: tokenValid,
-            ble: true,
-          },
-          recordBleSignalStrength: resolvedBleSignalStrength,
-          anomalyDetails: {
-            source: "BLE_TOKEN_ATTENDANCE",
-            beaconName: parsed.beaconName ?? null,
-            broadcasterOnline,
-            relayLeaseActive: true,
-          },
-        };
-      },
+      buildSecurity: () => ({
+        confidenceInput: {
+          qrTokenValid: null,
+          bleProximityVerified: true,
+          bleSignalStrength: null,
+        },
+        responseLayers: {
+          qr: null,
+          ble: true,
+        },
+        recordBleSignalStrength: null,
+        anomalyDetails: {
+          source: "BLE_TOKEN_ATTENDANCE",
+          beaconName: parsed.beaconName ?? null,
+          relayLeaseActive: true,
+        },
+      }),
     });
 
     const response = NextResponse.json({

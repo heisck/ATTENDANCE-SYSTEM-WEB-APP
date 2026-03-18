@@ -104,8 +104,8 @@ describe("executeAttendanceMark", () => {
       overallPresent: false,
       pendingPhase: "PHASE_TWO",
     });
-    createBrowserFingerprintHashMock.mockReturnValue("browser-fingerprint-hash");
-    hasValidBrowserDeviceProofMock.mockReturnValue(false);
+    createBrowserFingerprintHashMock.mockImplementation(() => "browser-fingerprint-hash");
+    hasValidBrowserDeviceProofMock.mockImplementation(() => true);
   });
 
   function buildInput() {
@@ -148,7 +148,20 @@ describe("executeAttendanceMark", () => {
         deviceToken: "device-token-1",
         deviceName: "Test Device",
         deviceType: "Web",
-        deviceFingerprint: "fingerprint-1",
+        deviceFingerprint: JSON.stringify({
+          platform: "Win32",
+          language: "en-US",
+          languages: ["en-US", "en"],
+          timezone: "Africa/Accra",
+          screen: "1920x1080x24",
+          hardwareConcurrency: 8,
+          deviceMemory: 8,
+          touchPoints: 0,
+          vendor: "Google Inc.",
+          cookieEnabled: true,
+          colorScheme: "light",
+        }),
+        appVersion: "web",
       },
       recordQrToken: "qr-token-1",
       buildSecurity: () => ({
@@ -231,8 +244,17 @@ describe("executeAttendanceMark", () => {
       "device-token-1",
       expect.objectContaining({
         fingerprint: "browser-fingerprint-hash",
-        browserProofValid: false,
+        browserProofValid: true,
       })
     );
+  });
+
+  it("rejects attendance when the browser device proof cookie is missing or stale", async () => {
+    hasValidBrowserDeviceProofMock.mockImplementation(() => false);
+
+    await expect(executeAttendanceMark(buildInput())).rejects.toMatchObject({
+      message: "Verify your passkey again on this device before marking attendance.",
+      status: 403,
+    });
   });
 });

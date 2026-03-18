@@ -1,5 +1,10 @@
 export type BleAttendancePhase = "PHASE_ONE" | "PHASE_TWO" | "CLOSED";
 
+export const ATTENDANCE_TOKEN_DOMAINS = {
+  QR: "QR",
+  BLE: "BLE",
+} as const;
+
 export const ATTENDANCE_BLE = {
   NAME_PREFIX: "ATD-",
   SERVICE_UUID: "b9f2c841-8e2f-4f96-9167-8fdf4564a001",

@@ -188,6 +188,27 @@ export function createBrowserFingerprintHash(
     .digest("base64url");
 }
 
+export function extractBrowserDeviceBinding(
+  request: NextRequest,
+  body: Record<string, unknown> | null | undefined
+) {
+  const deviceToken =
+    typeof body?.deviceToken === "string" ? body.deviceToken.trim().slice(0, 160) : "";
+  const fingerprintHash = createBrowserFingerprintHash(
+    request,
+    typeof body?.deviceFingerprint === "string" ? body.deviceFingerprint : undefined
+  );
+
+  if (!deviceToken || !fingerprintHash) {
+    return null;
+  }
+
+  return {
+    deviceToken,
+    fingerprintHash,
+  };
+}
+
 export function createBrowserDeviceProofToken(
   userId: string,
   deviceToken: string,

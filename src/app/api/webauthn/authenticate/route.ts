@@ -9,6 +9,11 @@ import {
   clearAttendanceProofCookie,
   setAttendanceProofCookie,
 } from "@/lib/attendance-proof";
+import {
+  clearBrowserDeviceProofCookie,
+  extractBrowserDeviceBinding,
+  setBrowserDeviceProofCookie,
+} from "@/lib/browser-device-proof";
 
 export async function GET() {
   const session = await auth();
@@ -36,14 +41,32 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const verification = await verifyAuthentication(session.user.id, body);
+    const verificationBody =
+      body && typeof body === "object" && "authentication" in body
+        ? (body.authentication as Record<string, unknown>)
+        : body;
+    const deviceBinding =
+      body && typeof body === "object"
+        ? extractBrowserDeviceBinding(request, body as Record<string, unknown>)
+        : null;
+    const verification = await verifyAuthentication(session.user.id, verificationBody);
     const response = NextResponse.json({
       verified: verification.verified,
     });
     if (verification.verified) {
       setAttendanceProofCookie(response, session.user.id);
+      if (deviceBinding) {
+        setBrowserDeviceProofCookie(response, {
+          userId: session.user.id,
+          deviceToken: deviceBinding.deviceToken,
+          fingerprintHash: deviceBinding.fingerprintHash,
+        });
+      } else {
+        clearBrowserDeviceProofCookie(response);
+      }
     } else {
       clearAttendanceProofCookie(response);
+      clearBrowserDeviceProofCookie(response);
     }
     return response;
   } catch (error: unknown) {
@@ -53,6 +76,7 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
     clearAttendanceProofCookie(response);
+    clearBrowserDeviceProofCookie(response);
     return response;
   }
 }

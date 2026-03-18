@@ -11,6 +11,62 @@ interface WebAuthnPromptProps {
   hideActionButton?: boolean;
 }
 
+const DEVICE_TOKEN_STORAGE_KEY = "attendanceiq:web-device-token:v1";
+
+function getOrCreateBrowserDeviceToken() {
+  if (typeof window === "undefined") return "";
+  const existing = window.localStorage.getItem(DEVICE_TOKEN_STORAGE_KEY);
+  if (existing && existing.trim().length > 0) {
+    return existing.trim();
+  }
+
+  const generated =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? `web-${crypto.randomUUID()}`
+      : `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  window.localStorage.setItem(DEVICE_TOKEN_STORAGE_KEY, generated);
+  return generated;
+}
+
+function buildBrowserDeviceFingerprint() {
+  if (typeof window === "undefined" || typeof navigator === "undefined") {
+    return "";
+  }
+
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const colorScheme = window.matchMedia?.("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : window.matchMedia?.("(prefers-color-scheme: light)").matches
+      ? "light"
+      : "no-preference";
+
+  return JSON.stringify({
+    version: 1,
+    platform: navigator.platform || "unknown",
+    language: navigator.language || "en-US",
+    languages: Array.isArray(navigator.languages)
+      ? navigator.languages.slice(0, 5)
+      : [],
+    timezone,
+    screen:
+      typeof window.screen !== "undefined"
+        ? `${window.screen.width}x${window.screen.height}x${window.screen.colorDepth}`
+        : "unknown",
+    hardwareConcurrency:
+      typeof navigator.hardwareConcurrency === "number"
+        ? navigator.hardwareConcurrency
+        : null,
+    deviceMemory:
+      typeof (navigator as Navigator & { deviceMemory?: number }).deviceMemory === "number"
+        ? (navigator as Navigator & { deviceMemory?: number }).deviceMemory
+        : null,
+    touchPoints: typeof navigator.maxTouchPoints === "number" ? navigator.maxTouchPoints : 0,
+    vendor: navigator.vendor || "unknown",
+    cookieEnabled: navigator.cookieEnabled ?? false,
+    colorScheme,
+  });
+}
+
 export function WebAuthnPrompt({
   onVerified,
   triggerSignal,
@@ -69,11 +125,17 @@ export function WebAuthnPrompt({
 
       const options = await optionsRes.json();
       const authentication = await startAuthentication(options);
+      const deviceToken = getOrCreateBrowserDeviceToken();
+      const deviceFingerprint = buildBrowserDeviceFingerprint();
 
       const verifyRes = await fetch("/api/webauthn/authenticate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(authentication),
+        body: JSON.stringify({
+          authentication,
+          deviceToken,
+          deviceFingerprint,
+        }),
       });
 
       const result = await verifyRes.json();

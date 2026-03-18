@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getPhaseEndsAt, syncAttendanceSessionState } from "@/lib/attendance";
-import { generateQrPayloadForSequence, getQrSequence } from "@/lib/qr";
+import { generatePhaseBoundBleToken, getQrSequence } from "@/lib/qr";
 import { cacheGet, cacheSet } from "@/lib/cache";
 import type { BleTokenPayload } from "@/lib/ble-spec";
 import { getFreshBleRelayLease, getSessionBleBroadcast } from "@/lib/lecturer-ble";
@@ -27,22 +27,15 @@ function buildTokenPayload(input: {
   phaseEndsAt: Date;
   ts: number;
 }): BleTokenPayload {
-  const qr = generateQrPayloadForSequence(
-    input.sessionId,
-    input.qrSecret,
-    input.phase,
-    input.sequence,
-    input.rotationMs,
-    input.ts
-  );
+  const token = generatePhaseBoundBleToken(input.qrSecret, input.phase, input.sequence);
 
   return {
     sessionId: input.sessionId,
     phase: input.phase,
     sequence: input.sequence,
-    token: qr.token,
-    ts: qr.ts,
-    tokenTimestamp: qr.ts,
+    token,
+    ts: input.ts,
+    tokenTimestamp: input.ts,
     rotationMs: input.rotationMs,
     phaseEndsAt: input.phaseEndsAt.toISOString(),
   };

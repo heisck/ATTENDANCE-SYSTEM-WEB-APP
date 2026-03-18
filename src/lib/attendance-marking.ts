@@ -230,31 +230,29 @@ function resolveDeviceContext(
 
   const appVersion =
     typeof body.appVersion === "string" ? body.appVersion.trim().slice(0, 80) : undefined;
-  const isBrowserClient = appVersion === "web";
-  const fingerprint = isBrowserClient
-    ? createBrowserFingerprintHash(
-        request,
-        typeof body.deviceFingerprint === "string" ? body.deviceFingerprint : undefined
-      )
-    : typeof body.deviceFingerprint === "string"
-      ? body.deviceFingerprint.trim().slice(0, 255)
-      : undefined;
+  const fingerprint = createBrowserFingerprintHash(
+    request,
+    typeof body.deviceFingerprint === "string" ? body.deviceFingerprint : undefined
+  );
 
-  if (isBrowserClient && !fingerprint) {
+  if (!fingerprint) {
     throw new AttendanceRequestError(
-      "Browser device verification failed. Refresh the page and try again.",
+      "Device verification failed on this browser. Verify your passkey again and try once more.",
       400
     );
   }
 
-  const browserProofValid =
-    isBrowserClient && fingerprint
-      ? hasValidBrowserDeviceProof(request, {
-          userId: studentId,
-          deviceToken: rawDeviceToken,
-          fingerprintHash: fingerprint,
-        })
-      : false;
+  const browserProofValid = hasValidBrowserDeviceProof(request, {
+    userId: studentId,
+    deviceToken: rawDeviceToken,
+    fingerprintHash: fingerprint,
+  });
+  if (!browserProofValid) {
+    throw new AttendanceRequestError(
+      "Verify your passkey again on this device before marking attendance.",
+      403
+    );
+  }
 
   return {
     rawDeviceToken,
@@ -266,8 +264,8 @@ function resolveDeviceContext(
     fingerprint: fingerprint ?? undefined,
     bleSignature:
       typeof body.bleSignature === "string" ? body.bleSignature : undefined,
-    isBrowserClient,
-    browserProofValid,
+    isBrowserClient: true,
+    browserProofValid: true,
   };
 }
 
@@ -392,6 +390,7 @@ export async function executeAttendanceMark(input: {
   context: PreparedAttendanceMarkContext;
   body: DevicePayload;
   recordQrToken: string;
+  loadBleStats?: boolean;
   buildSecurity: (input: SecurityBuildInput) => SecurityBuildOutput;
 }) {
   const deviceContext = resolveDeviceContext(input.request, input.studentId, input.body);
@@ -412,7 +411,7 @@ export async function executeAttendanceMark(input: {
   );
   const deviceMismatch = deviceConsistency < 50 && !deviceLinkResult.trustedAt;
 
-  const bleStats = deviceContext.rawDeviceToken
+  const bleStats = input.loadBleStats
     ? await getDeviceBleStats(deviceLinkResult.id)
     : {
         averageRssi: null,

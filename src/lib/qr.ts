@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { AttendancePhase } from "@prisma/client";
+import { ATTENDANCE_TOKEN_DOMAINS } from "./ble-spec";
 import type { QRPayload } from "@/types";
 
 const DEFAULT_BUCKET_INTERVAL_MS = 5000;
@@ -23,16 +24,43 @@ export function formatQrSequenceId(sequence: number): string {
   return `E${String(sequence).padStart(3, "0")}`;
 }
 
-export function generatePhaseBoundQrToken(
+function generateDomainBoundToken(
   secret: string,
+  domain: string,
   phase: AttendancePhase,
   sequence: number
 ): string {
   return crypto
     .createHmac("sha256", secret)
-    .update(`${phase}:${sequence}`)
+    .update(`${domain}:${phase}:${sequence}`)
     .digest("hex")
     .slice(0, 16);
+}
+
+export function generatePhaseBoundQrToken(
+  secret: string,
+  phase: AttendancePhase,
+  sequence: number
+): string {
+  return generateDomainBoundToken(
+    secret,
+    ATTENDANCE_TOKEN_DOMAINS.QR,
+    phase,
+    sequence
+  );
+}
+
+export function generatePhaseBoundBleToken(
+  secret: string,
+  phase: AttendancePhase,
+  sequence: number
+): string {
+  return generateDomainBoundToken(
+    secret,
+    ATTENDANCE_TOKEN_DOMAINS.BLE,
+    phase,
+    sequence
+  );
 }
 
 export function generateQrPayload(
@@ -104,6 +132,42 @@ export function verifyQrTokenForSequence(
 ): boolean {
   const expected = generatePhaseBoundQrToken(secret, phase, sequence);
   return safeEqual(token, expected);
+}
+
+export function verifyBleTokenForSequence(
+  secret: string,
+  token: string,
+  phase: AttendancePhase,
+  sequence: number
+): boolean {
+  const expected = generatePhaseBoundBleToken(secret, phase, sequence);
+  return safeEqual(token, expected);
+}
+
+export function verifyBleTokenStrict(
+  secret: string,
+  token: string,
+  phase: AttendancePhase,
+  nowTs: number,
+  rotationMs: number = DEFAULT_BUCKET_INTERVAL_MS,
+  graceMs: number = 1000
+): boolean {
+  const currentSequence = getQrSequence(nowTs, rotationMs);
+  const expectedCurrent = generatePhaseBoundBleToken(secret, phase, currentSequence);
+  if (safeEqual(token, expectedCurrent)) {
+    return true;
+  }
+
+  const elapsedInCurrentBucket = nowTs - currentSequence * rotationMs;
+  if (elapsedInCurrentBucket <= graceMs) {
+    const previousSequence = currentSequence - 1;
+    const expectedPrevious = generatePhaseBoundBleToken(secret, phase, previousSequence);
+    if (safeEqual(token, expectedPrevious)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export function getNextRotationMs(rotationMs: number = DEFAULT_BUCKET_INTERVAL_MS): number {
