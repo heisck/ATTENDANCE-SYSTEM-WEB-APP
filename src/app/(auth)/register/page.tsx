@@ -222,7 +222,7 @@ export default function RegisterPage() {
                   <p className="mb-2 text-sm font-semibold text-foreground">Do</p>
                   <ul className="space-y-1.5 text-sm text-muted-foreground">
                     <li>Use your own verified institutional account.</li>
-                    <li>Enable location and follow lecturer session rules.</li>
+                    <li>Use your own device and follow lecturer session rules.</li>
                     <li>Complete passkey setup on your own device only.</li>
                   </ul>
                 </div>
@@ -231,7 +231,7 @@ export default function RegisterPage() {
                   <ul className="space-y-1.5 text-sm text-muted-foreground">
                     <li>Share credentials, QR tokens, or passkey device access.</li>
                     <li>Attempt proxy attendance for another student.</li>
-                    <li>Use fake location tools or modified browser environments.</li>
+                    <li>Use spoofing tools or modified browser environments.</li>
                   </ul>
                 </div>
               </div>
@@ -419,7 +419,7 @@ export default function RegisterPage() {
                 />
                 <span className="text-sm text-muted-foreground">
                   I understand the onboarding guidance and I will not attempt proxy attendance,
-                  account sharing, or any location/identity spoofing.
+                  account sharing, or any identity spoofing.
                 </span>
               </label>
             </div>

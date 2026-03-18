@@ -32,9 +32,9 @@ This policy defines a clear, enforceable classroom standard for QR visibility an
 ## Security and anti-sharing rule
 - QR sharing/redistribution between students is not allowed.
 - Browser-based screenshot/screen-record blocking is not reliable across devices.
-- Security relies on short QR rotation, passkey, GPS, and IP confidence checks.
+- Security relies on short QR rotation, passkey, and network/device confidence checks.
 
 ## BLE/Web proximity note
 - Web Bluetooth support is inconsistent across browsers and iOS workflows.
 - BLE is treated as experimental capability only, not a primary attendance proof.
-- Attendance integrity remains anchored to passkey + GPS + rotating QR + network context.
+- Attendance integrity remains anchored to passkey + rotating QR + network/device context.

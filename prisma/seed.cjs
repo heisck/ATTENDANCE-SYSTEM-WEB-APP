@@ -209,9 +209,6 @@ function addMinutes(base, minutes) {
 
 function makeProgramSettings(now) {
   return {
-    campusLat: 6.6745,
-    campusLng: -1.5716,
-    defaultRadiusMeters: 350,
     confidenceThreshold: 72,
     studentEmailDomains: ["st.knust.edu.gh", "knust.edu.gh"],
     timezone: "Africa/Accra",

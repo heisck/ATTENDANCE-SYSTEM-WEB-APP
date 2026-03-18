@@ -1,15 +1,14 @@
 # AttendanceIQ
 
-Smart university attendance system with 4-layer security verification. Built for multi-tenant deployment across universities.
+Smart university attendance system with layered attendance verification. Built for multi-tenant deployment across universities.
 
 ## Security Layers
 
 | Layer | Method | Points | Purpose |
 |-------|--------|--------|---------|
-| 1 | WebAuthn Biometrics | +40 | One device per student, cryptographic identity |
-| 2 | GPS Proximity | +30 | Haversine distance check within campus radius |
-| 3 | Rotating QR Code | +20 | HMAC-signed tokens, 5-second rotation |
-| 4 | IP Validation | +10 | Campus network CIDR range check |
+| 1 | WebAuthn Biometrics | +50 | One device per student, cryptographic identity |
+| 2 | Rotating QR Code | +30 | HMAC-signed tokens, 5-second rotation |
+| 3 | BLE / Device Context | +20 | Optional proximity and device consistency signal |
 
 Confidence score (0-100) determines if attendance is flagged for review.
 
@@ -86,7 +85,6 @@ src/
 │   ├── auth.ts           # NextAuth configuration
 │   ├── webauthn.ts       # WebAuthn registration/verification
 │   ├── qr.ts             # HMAC token generation
-│   ├── gps.ts            # Haversine distance formula
 │   ├── ip.ts             # CIDR range checking
 │   └── confidence.ts     # Score calculation
 ├── services/             # Business logic layer
