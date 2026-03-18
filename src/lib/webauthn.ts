@@ -87,7 +87,7 @@ export async function getRegistrationOptions(userId: string, userName: string) {
   const options = await generateRegistrationOptions({
     rpName,
     rpID: rpID!,
-    userID: userId,
+    userID: Buffer.from(userId, "utf8"),
     userName,
     attestationType: "none",
     excludeCredentials: excludeCredentials as any,
@@ -204,9 +204,9 @@ export async function verifyRegistration(
       await tx.webAuthnCredential.create({
         data: {
           userId,
-          credentialId: toBase64UrlCredentialId(info.credentialID),
-          publicKey: Buffer.from(info.credentialPublicKey),
-          counter: BigInt(info.counter),
+          credentialId: toBase64UrlCredentialId(info.credential.id),
+          publicKey: Buffer.from(info.credential.publicKey),
+          counter: BigInt(info.credential.counter),
           transports: response.response?.transports || [],
           deviceType: info.credentialDeviceType,
           backedUp: info.credentialBackedUp,
