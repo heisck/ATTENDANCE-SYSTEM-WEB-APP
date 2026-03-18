@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { CACHE_KEYS, cacheDel } from "@/lib/cache";
 
 async function assertCourseAccess(
   userId: string,
@@ -21,6 +22,35 @@ async function assertCourseAccess(
     return { error: "Course not in your organization" as const, status: 403 as const };
   }
   return null;
+}
+
+async function invalidateEnrollmentCaches(courseId: string, studentIds: string[]) {
+  if (studentIds.length === 0) {
+    return;
+  }
+
+  const activeSessions = await db.attendanceSession.findMany({
+    where: {
+      courseId,
+      status: "ACTIVE",
+      endsAt: { gt: new Date() },
+    },
+    select: { id: true },
+  });
+
+  await Promise.all([
+    cacheDel(CACHE_KEYS.COURSE_ENROLLMENTS(courseId)),
+    ...studentIds.flatMap((studentId) => [
+      cacheDel(`attendance:sessions:list:STUDENT:${studentId}:ACTIVE`),
+      cacheDel(`attendance:sessions:list:STUDENT:${studentId}:ALL`),
+      cacheDel(`attendance:sessions:list:STUDENT:${studentId}:CLOSED`),
+      cacheDel(`student:live-sessions:${studentId}`),
+      ...activeSessions.flatMap((sessionRow) => [
+        cacheDel(`attendance:enrollment:${sessionRow.id}:${studentId}`),
+        cacheDel(`attendance:session-me:${sessionRow.id}:${studentId}`),
+      ]),
+    ]),
+  ]);
 }
 
 export async function GET(request: NextRequest) {
@@ -71,8 +101,18 @@ export async function POST(request: NextRequest) {
 
   try {
     const { courseId, studentIds } = await request.json();
+    const uniqueStudentIds = Array.from(
+      new Set(
+        Array.isArray(studentIds)
+          ? studentIds
+              .filter((studentId) => typeof studentId === "string")
+              .map((studentId) => studentId.trim())
+              .filter((studentId) => studentId.length > 0)
+          : []
+      )
+    );
 
-    if (!courseId || !Array.isArray(studentIds) || studentIds.length === 0) {
+    if (!courseId || uniqueStudentIds.length === 0) {
       return NextResponse.json(
         { error: "courseId and studentIds[] are required" },
         { status: 400 }
@@ -84,8 +124,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
 
+    const course = await db.course.findUnique({
+      where: { id: courseId },
+      select: { organizationId: true },
+    });
+
+    if (!course) {
+      return NextResponse.json({ error: "Course not found" }, { status: 404 });
+    }
+
+    const validStudents = await db.user.findMany({
+      where: {
+        id: { in: uniqueStudentIds },
+        role: "STUDENT",
+        organizationId: course.organizationId,
+      },
+      select: { id: true },
+    });
+
+    if (validStudents.length !== uniqueStudentIds.length) {
+      return NextResponse.json(
+        { error: "One or more selected students are invalid for this course" },
+        { status: 400 }
+      );
+    }
+
     const results = await Promise.allSettled(
-      studentIds.map((studentId: string) =>
+      uniqueStudentIds.map((studentId) =>
         db.enrollment.upsert({
           where: { courseId_studentId: { courseId, studentId } },
           create: { courseId, studentId },
@@ -96,6 +161,8 @@ export async function POST(request: NextRequest) {
 
     const created = results.filter((r) => r.status === "fulfilled").length;
     const failed = results.filter((r) => r.status === "rejected").length;
+
+    await invalidateEnrollmentCaches(courseId, uniqueStudentIds);
 
     return NextResponse.json({ created, failed });
   } catch (error: any) {
@@ -134,6 +201,8 @@ export async function DELETE(request: NextRequest) {
   await db.enrollment.delete({
     where: { courseId_studentId: { courseId, studentId } },
   });
+
+  await invalidateEnrollmentCaches(courseId, [studentId]);
 
   return NextResponse.json({ success: true });
 }
