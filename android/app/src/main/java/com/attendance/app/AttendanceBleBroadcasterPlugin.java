@@ -60,6 +60,7 @@ public class AttendanceBleBroadcasterPlugin extends Plugin {
 
     private final BluetoothGattServerCallback gattServerCallback = new BluetoothGattServerCallback() {
         @Override
+        @SuppressLint("MissingPermission")
         public void onCharacteristicReadRequest(
             BluetoothDevice device,
             int requestId,
@@ -94,6 +95,7 @@ public class AttendanceBleBroadcasterPlugin extends Plugin {
         }
 
         @Override
+        @SuppressLint("MissingPermission")
         public void onStartFailure(int errorCode) {
             lastError = "BLE advertising failed to start (code " + errorCode + ").";
             advertising = false;
@@ -201,12 +203,18 @@ public class AttendanceBleBroadcasterPlugin extends Plugin {
         pendingStartCall = call;
         starting = true;
 
-        bluetoothLeAdvertiser.startAdvertising(
-            buildAdvertiseSettings(),
-            buildAdvertiseData(config),
-            buildScanResponse(),
-            advertiseCallback
-        );
+        try {
+            bluetoothLeAdvertiser.startAdvertising(
+                buildAdvertiseSettings(),
+                buildAdvertiseData(config),
+                buildScanResponse(),
+                advertiseCallback
+            );
+        } catch (SecurityException e) {
+            starting = false;
+            lastError = "Permission denied while starting advertising.";
+            call.reject(lastError);
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -371,15 +379,6 @@ public class AttendanceBleBroadcasterPlugin extends Plugin {
         PluginCall call = pendingStartCall;
         pendingStartCall = null;
         call.resolve(buildStatus());
-    }
-
-    private synchronized void rejectPendingStart(String message) {
-        if (pendingStartCall == null) {
-            return;
-        }
-        PluginCall call = pendingStartCall;
-        pendingStartCall = null;
-        call.reject(message);
     }
 
     private JSObject buildStatus() {
