@@ -66,49 +66,68 @@ export async function POST(
       return NextResponse.json({ error: "Candidate is not a member of this group." }, { status: 400 });
     }
 
-    await db.groupLeaderVote.upsert({
-      where: {
-        groupId_voterId: {
+    // SECURITY: Wrap entire read-modify-write operation in a transaction
+    // to prevent race conditions when multiple students vote simultaneously.
+    // Without this, concurrent votes can cause:
+    // - Leader election inconsistencies
+    // - Vote tally mismatches
+    // - Database corruption in downstream notification services
+    const result = await db.$transaction(async (tx) => {
+      // 1. Upsert this student's vote (idempotent - safe to repeat)
+      await tx.groupLeaderVote.upsert({
+        where: {
+          groupId_voterId: {
+            groupId,
+            voterId: context.userId,
+          },
+        },
+        update: {
+          candidateStudentId: parsed.candidateStudentId,
+        },
+        create: {
           groupId,
           voterId: context.userId,
-        },
-      },
-      update: {
-        candidateStudentId: parsed.candidateStudentId,
-      },
-      create: {
-        groupId,
-        voterId: context.userId,
-        candidateStudentId: parsed.candidateStudentId,
-      },
-    });
-
-    const votes = await db.groupLeaderVote.findMany({
-      where: { groupId },
-      select: { candidateStudentId: true },
-    });
-
-    const tally = votes.reduce<Record<string, number>>((acc, vote) => {
-      acc[vote.candidateStudentId] = (acc[vote.candidateStudentId] || 0) + 1;
-      return acc;
-    }, {});
-
-    const majorityThreshold = Math.floor(memberIds.size / 2) + 1;
-    const winner = Object.entries(tally).find(([, count]) => count >= majorityThreshold);
-    if (winner) {
-      await db.studentGroup.update({
-        where: { id: groupId },
-        data: {
-          leaderId: winner[0],
+          candidateStudentId: parsed.candidateStudentId,
         },
       });
-    }
+
+      // 2. Atomically read all votes for this group (within transaction)
+      const votes = await tx.groupLeaderVote.findMany({
+        where: { groupId },
+        select: { candidateStudentId: true },
+      });
+
+      // 3. Tally the votes atomically
+      const tally = votes.reduce<Record<string, number>>((acc, vote) => {
+        acc[vote.candidateStudentId] = (acc[vote.candidateStudentId] || 0) + 1;
+        return acc;
+      }, {});
+
+      // 4. Check for majority and atomically update leader (within same transaction)
+      const majorityThreshold = Math.floor(memberIds.size / 2) + 1;
+      const winner = Object.entries(tally).find(([, count]) => count >= majorityThreshold);
+
+      if (winner) {
+        await tx.studentGroup.update({
+          where: { id: groupId },
+          data: {
+            leaderId: winner[0],
+          },
+        });
+      }
+
+      return {
+        tally,
+        electedLeaderId: winner?.[0] || null,
+        majorityThreshold,
+      };
+    });
 
     return NextResponse.json({
       success: true,
-      tally,
-      electedLeaderId: winner?.[0] || null,
-      majorityThreshold,
+      tally: result.tally,
+      electedLeaderId: result.electedLeaderId,
+      majorityThreshold: result.majorityThreshold,
     });
   } catch (error: any) {
     if (error?.name === "ZodError") {
@@ -121,4 +140,3 @@ export async function POST(
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-

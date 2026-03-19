@@ -1,4 +1,7 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
 import { onboardOrganization } from "@/services/organization.service";
 import { createOrganizationSchema } from "@/lib/validators";
 import { z } from "zod";
@@ -9,8 +12,53 @@ const onboardSchema = createOrganizationSchema.extend({
   adminPassword: z.string().min(8),
 });
 
+function hasValidBootstrapSecret(request: NextRequest) {
+  const configuredSecret = process.env.ORGANIZATION_ONBOARDING_SECRET?.trim() || "";
+  const providedSecret = request.headers.get("x-onboarding-secret")?.trim() || "";
+
+  if (!configuredSecret || !providedSecret) {
+    return false;
+  }
+
+  const configuredBuffer = Buffer.from(configuredSecret);
+  const providedBuffer = Buffer.from(providedSecret);
+  if (configuredBuffer.length !== providedBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(configuredBuffer, providedBuffer);
+}
+
 export async function POST(request: NextRequest) {
   try {
+    const [session, organizationCount, userCount] = await Promise.all([
+      auth(),
+      db.organization.count(),
+      db.user.count(),
+    ]);
+
+    const isSuperAdmin = session?.user?.role === "SUPER_ADMIN";
+    const isInitialBootstrap = organizationCount === 0 && userCount === 0;
+
+    if (!isSuperAdmin) {
+      if (!isInitialBootstrap) {
+        return NextResponse.json(
+          { error: "Only super admins can onboard organizations." },
+          { status: 403 }
+        );
+      }
+
+      if (!hasValidBootstrapSecret(request)) {
+        return NextResponse.json(
+          {
+            error:
+              "Initial bootstrap requires a valid organization onboarding secret.",
+          },
+          { status: 401 }
+        );
+      }
+    }
+
     const body = await request.json();
     const parsed = onboardSchema.parse(body);
 

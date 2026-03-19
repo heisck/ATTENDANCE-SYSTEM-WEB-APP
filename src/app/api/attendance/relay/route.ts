@@ -11,11 +11,67 @@ import {
   getRelayStatistics,
 } from "@/lib/ble-relay";
 
+type RelaySessionAccessRow = {
+  id: string;
+  lecturerId: string;
+  course: {
+    organizationId: string;
+    enrollments: Array<{ id: string }>;
+  };
+};
+
+async function getRelaySessionAccess(sessionId: string, userId?: string) {
+  return db.attendanceSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      id: true,
+      lecturerId: true,
+      course: {
+        select: {
+          organizationId: true,
+          enrollments: userId
+            ? {
+                where: { studentId: userId },
+                select: { id: true },
+                take: 1,
+              }
+            : false,
+        },
+      },
+    },
+  });
+}
+
+function canAccessRelaySession(user: any, sessionRow: RelaySessionAccessRow) {
+  if (user.role === "LECTURER") {
+    return sessionRow.lecturerId === user.id;
+  }
+
+  if (user.role === "STUDENT") {
+    return sessionRow.course.enrollments.length > 0;
+  }
+
+  if (user.role === "ADMIN") {
+    return (
+      typeof user.organizationId === "string" &&
+      user.organizationId === sessionRow.course.organizationId
+    );
+  }
+
+  return user.role === "SUPER_ADMIN";
+}
+
 /**
  * GET /api/attendance/relay?sessionId=xxx
  * Get list of approved relay devices for a session (for students to scan from)
  */
 export async function GET(request: NextRequest) {
+  const session = await auth();
+
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const sessionId = request.nextUrl.searchParams.get("sessionId");
 
@@ -24,6 +80,11 @@ export async function GET(request: NextRequest) {
         { error: "Session ID required" },
         { status: 400 }
       );
+    }
+
+    const access = await getRelaySessionAccess(sessionId, session.user.id);
+    if (!access || !canAccessRelaySession(session.user, access as RelaySessionAccessRow)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const result = await getSessionRelayDevices(sessionId);
@@ -83,6 +144,27 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      const access = await getRelaySessionAccess(sessionId, session.user.id);
+      if (!access || !canAccessRelaySession(session.user, access as RelaySessionAccessRow)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
+      const userDevice = await db.userDevice.findFirst({
+        where: {
+          id: userDeviceId,
+          userId: session.user.id,
+          revokedAt: null,
+        },
+        select: { id: true },
+      });
+
+      if (!userDevice) {
+        return NextResponse.json(
+          { error: "Device not found or not owned by you" },
+          { status: 403 }
+        );
+      }
+
       const result = await registerRelayDevice(
         sessionId,
         session.user.id,
@@ -107,6 +189,11 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      const access = await getRelaySessionAccess(sessionId, session.user.id);
+      if (!access || !canAccessRelaySession(session.user, access as RelaySessionAccessRow)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
       const result = await startRelayBroadcast(
         relayDeviceId,
         qrToken,
@@ -125,16 +212,75 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const attendanceRecordId = body.attendanceRecordId;
-      if (!attendanceRecordId || !relayDeviceId) {
+      const attendanceRecordId =
+        typeof body.attendanceRecordId === "string" ? body.attendanceRecordId : null;
+      if (!relayDeviceId) {
         return NextResponse.json(
-          { error: "Attendance record ID and relay device ID required" },
+          { error: "Relay device ID required" },
           { status: 400 }
         );
       }
 
+      const relayDevice = await db.bleRelayDevice.findUnique({
+        where: { id: relayDeviceId },
+        select: {
+          id: true,
+          sessionId: true,
+          session: {
+            select: {
+              lecturerId: true,
+              course: {
+                select: {
+                  organizationId: true,
+                  enrollments: {
+                    where: { studentId: session.user.id },
+                    select: { id: true },
+                    take: 1,
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (
+        !relayDevice ||
+        !canAccessRelaySession(session.user, {
+          id: relayDevice.sessionId,
+          lecturerId: relayDevice.session.lecturerId,
+          course: relayDevice.session.course,
+        })
+      ) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
+      const attendanceRecord = attendanceRecordId
+        ? await db.attendanceRecord.findFirst({
+            where: {
+              id: attendanceRecordId,
+              studentId: session.user.id,
+              sessionId: relayDevice.sessionId,
+            },
+            select: { id: true },
+          })
+        : await db.attendanceRecord.findFirst({
+            where: {
+              studentId: session.user.id,
+              sessionId: relayDevice.sessionId,
+            },
+            select: { id: true },
+          });
+
+      if (!attendanceRecord) {
+        return NextResponse.json(
+          { error: "Attendance record not found for this session" },
+          { status: 404 }
+        );
+      }
+
       const result = await recordRelayAttendance(
-        attendanceRecordId,
+        attendanceRecord.id,
         relayDeviceId,
         bleRssi,
         bleDistance
@@ -163,11 +309,16 @@ export async function POST(request: NextRequest) {
       const relayDevice = await db.bleRelayDevice.findUnique({
         where: { id: relayDeviceId },
         select: {
+          sessionId: true,
           session: { select: { lecturerId: true } },
         },
       });
 
-      if (!relayDevice || relayDevice.session.lecturerId !== session.user.id) {
+      if (
+        !relayDevice ||
+        relayDevice.sessionId !== sessionId ||
+        relayDevice.session.lecturerId !== session.user.id
+      ) {
         return NextResponse.json(
           { error: "Unauthorized - not your session" },
           { status: 403 }
@@ -198,6 +349,25 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      const relayDevice = await db.bleRelayDevice.findUnique({
+        where: { id: relayDeviceId },
+        select: {
+          sessionId: true,
+          session: { select: { lecturerId: true } },
+        },
+      });
+
+      if (
+        !relayDevice ||
+        relayDevice.sessionId !== sessionId ||
+        relayDevice.session.lecturerId !== session.user.id
+      ) {
+        return NextResponse.json(
+          { error: "Unauthorized - not your session" },
+          { status: 403 }
+        );
+      }
+
       const result = await revokeRelayDevice(relayDeviceId, body.reason);
 
       return NextResponse.json(result);
@@ -211,19 +381,13 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Only lecturer can view detailed stats
-      if (session.user.role === "LECTURER") {
-        const sessionData = await db.attendanceSession.findUnique({
-          where: { id: sessionId },
-          select: { lecturerId: true },
-        });
+      if (!["LECTURER", "ADMIN", "SUPER_ADMIN"].includes(session.user.role)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
 
-        if (sessionData?.lecturerId !== session.user.id) {
-          return NextResponse.json(
-            { error: "Unauthorized" },
-            { status: 403 }
-          );
-        }
+      const access = await getRelaySessionAccess(sessionId, session.user.id);
+      if (!access || !canAccessRelaySession(session.user, access as RelaySessionAccessRow)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
 
       const stats = await getRelayStatistics(sessionId);

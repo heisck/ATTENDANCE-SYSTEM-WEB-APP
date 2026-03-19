@@ -148,6 +148,7 @@ describe("executeAttendanceMark", () => {
           id: "session-1",
           courseId: "course-1",
           lecturerId: "lecturer-1",
+          sessionFamilyId: null,
           qrSecret: "secret",
           startedAt: new Date("2026-03-17T10:00:00.000Z"),
           endsAt: new Date("2026-03-17T10:04:00.000Z"),
@@ -220,7 +221,7 @@ describe("executeAttendanceMark", () => {
     expect(deletedKeys).not.toContain("student:live-sessions:student-1");
     expect(invalidateStudentPhaseCompletionForCourseDayMock).toHaveBeenCalledWith({
       studentId: "student-1",
-      sessionFamilyId: undefined,
+      sessionFamilyId: null,
       courseId: "course-1",
       lecturerId: "lecturer-1",
       referenceTime: new Date("2026-03-17T10:00:00.000Z"),

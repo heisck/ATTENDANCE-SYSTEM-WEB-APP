@@ -13,12 +13,25 @@ const schema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const parsed = schema.parse(body);
+
+    // SECURITY: Verify the enrollment token belongs to the authenticated user BEFORE enrollment
+    // This prevents biometric outsourcing attacks where attacker enrolls own face for victim's account
     const result = await finalizeEnrollmentLivenessCapture({
       rawToken: parsed.token,
       livenessSessionId: parsed.livenessSessionId,
+      enforcedUserId: session.user.id, // Enforce token must match authenticated user
     });
+
+    // This secondary check is now redundant but kept for defense-in-depth
+    if (session.user.id !== result.userId) {
+      return NextResponse.json({ error: "Unauthorized. You cannot enroll a face for another user." }, { status: 403 });
+    }
 
     const credentialCount = await db.webAuthnCredential.count({
       where: { userId: result.userId },
@@ -27,12 +40,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       profileImageUrl: result.profileImageUrl,
-      continueUrl:
-        session?.user?.id === result.userId
-          ? credentialCount > 0
-            ? "/student"
-            : "/setup-device"
-          : null,
+      continueUrl: credentialCount > 0 ? "/student" : "/setup-device",
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

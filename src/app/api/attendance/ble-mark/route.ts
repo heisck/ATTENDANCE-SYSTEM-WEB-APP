@@ -24,7 +24,10 @@ const markAttendanceBleSchema = z.object({
   phase: z.enum(["PHASE_ONE", "PHASE_TWO"]),
   tokenTimestamp: z.number(),
   beaconName: z.string().min(1).optional(),
-  bleSignalStrength: z.number().int().min(-110).max(-20).optional(),
+  // SECURITY: DO NOT ACCEPT bleSignalStrength FROM CLIENT
+  // The client cannot be trusted to report accurate RSSI (signal strength).
+  // A malicious client can hardcode -30 dBm from anywhere on Earth.
+  // Proximity verification must use cryptographic methods, not client-reported signal strength.
 });
 
 export async function POST(request: NextRequest) {
@@ -43,6 +46,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const parsed = markAttendanceBleSchema.parse(body);
+
+    // SECURITY: Strip any client-provided proximity data from request body
+    // We do NOT record bleSignalStrength or bleDistance from client
+    // These are easily spoofed and cannot be used for security decisions
+
     const context = await prepareAttendanceMarkContext({
       request,
       studentId: session.user.id,

@@ -77,9 +77,13 @@ export async function GET(
 
   const user = session.user as any;
   const isLecturer = attendanceSession.lecturerId === user.id;
-  const isPrivileged = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
+  const isAdminInOrganization =
+    user.role === "ADMIN" &&
+    Boolean(user.organizationId) &&
+    user.organizationId === attendanceSession.course.organizationId;
+  const isSuperAdmin = user.role === "SUPER_ADMIN";
 
-  if (!isLecturer && !isPrivileged) {
+  if (!isLecturer && !isAdminInOrganization && !isSuperAdmin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

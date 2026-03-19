@@ -185,7 +185,6 @@ export function BleRelayScanner({
         body: JSON.stringify({
           action: "record_scan",
           relayDeviceId: relay.id,
-          attendanceRecordId: sessionId, // Used as context mapping in backend
           bleRssi: actualRssi,
           bleDistance: distance,
         }),

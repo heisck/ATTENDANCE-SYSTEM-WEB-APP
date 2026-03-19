@@ -47,8 +47,10 @@ export async function POST(request: NextRequest) {
     if (user.role === "STUDENT") {
       if (!user.personalEmail || !user.personalEmailVerifiedAt) {
         return NextResponse.json(
-          { error: "Your personal email must be verified before password reset." },
-          { status: 400 }
+          {
+            success: true,
+            message: "If the email exists, a reset link has been sent.",
+          }
         );
       }
       deliveryEmail = user.personalEmail;

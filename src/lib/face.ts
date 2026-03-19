@@ -411,8 +411,18 @@ export async function createEnrollmentLivenessCapture(rawToken: string) {
 export async function finalizeEnrollmentLivenessCapture(input: {
   rawToken: string;
   livenessSessionId: string;
+  enforcedUserId?: string; // SECURITY: If provided, token must belong to this user
 }) {
   const token = await requireValidFaceFlowToken(input.rawToken, FaceFlowPurpose.ENROLLMENT);
+
+  // SECURITY: Prevent biometric outsourcing - enforce token belongs to authenticated user
+  if (input.enforcedUserId && token.user.id !== input.enforcedUserId) {
+    throw new FaceFlowError(
+      "This enrollment link does not belong to your account. You cannot enroll a face for another user.",
+      403
+    );
+  }
+
   const faceEnrollment = token.user.faceEnrollment;
 
   if (

@@ -103,15 +103,30 @@ export function verifyQrTokenStrict(
   phase: AttendancePhase,
   nowTs: number,
   rotationMs: number = DEFAULT_BUCKET_INTERVAL_MS,
-  graceMs: number = 1000
+  graceMs: number = 250 // SECURITY: Reduced from 1000ms to 250ms to minimize replay window
 ): boolean {
+  // SECURITY: Prevents QR replay attacks
+  // The grace period allows for network latency but MUST be short enough
+  // that a student cannot snap a photo and send it to friends via chat
+  //
+  // Analysis:
+  // - 5 second rotation = 5000ms
+  // - Old: 1000ms grace = 6000ms total window (unacceptable - 1 screenshot -> 6s to share)
+  // - New: 250ms grace = 5250ms total window (still risky but significantly reduced)
+  // - Ideal: 0ms (but would break high-latency networks)
+  //
+  // Note: A truly secure system would:
+  // 1. Use cryptographic nonces bound to the student's device
+  // 2. Require BLE proximity as primary mechanism (not QR as fallback)
+  // 3. Timestamp tokens at request arrival, not client-provided time
+
   const currentSequence = getQrSequence(nowTs, rotationMs);
   const expectedCurrent = generatePhaseBoundQrToken(secret, phase, currentSequence);
   if (safeEqual(token, expectedCurrent)) {
     return true;
   }
 
-  // Small grace to allow in-flight requests when a QR just rotated.
+  // Grace period to allow in-flight requests when a QR just rotated.
   const elapsedInCurrentBucket = nowTs - currentSequence * rotationMs;
   if (elapsedInCurrentBucket <= graceMs) {
     const previousSequence = currentSequence - 1;
@@ -150,7 +165,7 @@ export function verifyBleTokenStrict(
   phase: AttendancePhase,
   nowTs: number,
   rotationMs: number = DEFAULT_BUCKET_INTERVAL_MS,
-  graceMs: number = 1000
+  graceMs: number = 250 // SECURITY: Reduced from 1000ms to match QR grace period
 ): boolean {
   const currentSequence = getQrSequence(nowTs, rotationMs);
   const expectedCurrent = generatePhaseBoundBleToken(secret, phase, currentSequence);

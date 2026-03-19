@@ -15,6 +15,10 @@ const LOGIN_EMAIL_MAX_ATTEMPTS = 8;
 const LOGIN_IP_MAX_ATTEMPTS = 20;
 const LOGIN_WINDOW_SECONDS = 15 * 60;
 
+if (process.env.NODE_ENV === "production" && !authSecret) {
+  throw new Error("AUTH_SECRET or NEXTAUTH_SECRET is required in production");
+}
+
 class LoginRateLimitError extends CredentialsSignin {
   code = "login_rate_limited";
 }

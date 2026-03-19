@@ -17,10 +17,32 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const parsed = createCourseSchema.parse(body);
+    const requestedOrganizationId =
+      user.role === "SUPER_ADMIN"
+        ? typeof body.organizationId === "string" && body.organizationId.trim().length > 0
+          ? body.organizationId.trim()
+          : user.organizationId
+        : user.organizationId;
 
-    if (!body.lecturerId || !user.organizationId) {
+    if (!body.lecturerId || !requestedOrganizationId) {
       return NextResponse.json(
         { error: "Lecturer and organization are required" },
+        { status: 400 }
+      );
+    }
+
+    const lecturer = await db.user.findFirst({
+      where: {
+        id: body.lecturerId,
+        role: "LECTURER",
+        organizationId: requestedOrganizationId,
+      },
+      select: { id: true },
+    });
+
+    if (!lecturer) {
+      return NextResponse.json(
+        { error: "Lecturer must exist in the target organization" },
         { status: 400 }
       );
     }
@@ -30,7 +52,7 @@ export async function POST(request: NextRequest) {
         code: parsed.code,
         name: parsed.name,
         description: parsed.description,
-        organizationId: user.organizationId,
+        organizationId: requestedOrganizationId,
         lecturerId: body.lecturerId,
       },
     });
@@ -64,10 +86,27 @@ export async function DELETE(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const courseId = searchParams.get("id");
+  const requestedOrganizationId =
+    user.role === "SUPER_ADMIN"
+      ? searchParams.get("organizationId")?.trim() || user.organizationId
+      : user.organizationId;
   if (!courseId) {
     return NextResponse.json({ error: "Course ID required" }, { status: 400 });
   }
+  if (!requestedOrganizationId) {
+    return NextResponse.json({ error: "Organization is required" }, { status: 400 });
+  }
 
-  await db.course.delete({ where: { id: courseId } });
+  const deleted = await db.course.deleteMany({
+    where: {
+      id: courseId,
+      organizationId: requestedOrganizationId,
+    },
+  });
+
+  if (deleted.count !== 1) {
+    return NextResponse.json({ error: "Course not found" }, { status: 404 });
+  }
+
   return NextResponse.json({ success: true });
 }

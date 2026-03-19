@@ -304,6 +304,18 @@ export async function recordRelayAttendance(
       };
     }
 
+    const attendanceRecord = await db.attendanceRecord.findUnique({
+      where: { id: attendanceRecordId },
+      select: { id: true, sessionId: true },
+    });
+
+    if (!attendanceRecord || attendanceRecord.sessionId !== relayDevice.sessionId) {
+      return {
+        success: false,
+        message: "Attendance record does not belong to this relay session",
+      };
+    }
+
     // Create relay attendance record
     await db.relayAttendanceRecord.create({
       data: {

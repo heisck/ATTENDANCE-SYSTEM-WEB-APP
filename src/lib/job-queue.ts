@@ -2,6 +2,8 @@ import { JobStatus, JobType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { destroyCloudinaryAsset } from "@/lib/cloudinary";
 
+const STALE_JOB_LOCK_MS = 5 * 60 * 1000;
+
 export async function enqueueJob(input: {
   type: JobType;
   payload: Record<string, any>;
@@ -132,6 +134,22 @@ async function processJob(job: {
 
 export async function runDueJobs(batchSize = 100) {
   const now = new Date();
+  const staleLockCutoff = new Date(now.getTime() - STALE_JOB_LOCK_MS);
+
+  await db.jobQueue.updateMany({
+    where: {
+      status: JobStatus.RUNNING,
+      lockedAt: {
+        lt: staleLockCutoff,
+      },
+    },
+    data: {
+      status: JobStatus.PENDING,
+      lockedAt: null,
+      runAt: now,
+      lastError: "Recovered stale job lock",
+    },
+  });
 
   const dueJobs = await db.jobQueue.findMany({
     where: {
