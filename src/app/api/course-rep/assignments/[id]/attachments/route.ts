@@ -4,7 +4,11 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { hasMatchingScope } from "@/lib/course-rep";
 import { getStudentRepContext } from "@/lib/course-rep-auth";
-import { createCloudinarySignedUpload } from "@/lib/cloudinary";
+import {
+  buildCloudinaryPublicId,
+  createCloudinarySignedUpload,
+  isCloudinaryAssetUrlAllowed,
+} from "@/lib/cloudinary";
 import {
   assignmentAttachmentFinalizeSchema,
   assignmentAttachmentInitSchema,
@@ -24,7 +28,12 @@ function normalizeFileStem(fileName: string) {
 
 function matchesAnnouncementNamespace(publicId: string, organizationId: string, announcementId: string) {
   const namespace = `assignments/${organizationId}/${announcementId}/`;
-  return publicId === namespace.slice(0, -1) || publicId.includes(namespace);
+  if (!publicId.startsWith(namespace)) {
+    return false;
+  }
+
+  const suffix = publicId.slice(namespace.length);
+  return suffix.length > 0 && !suffix.includes("/") && !suffix.includes("..");
 }
 
 export async function POST(
@@ -82,6 +91,21 @@ export async function POST(
       ) {
         return NextResponse.json(
           { error: "Attachment publicId does not match assignment namespace" },
+          { status: 400 }
+        );
+      }
+
+      if (
+        !isCloudinaryAssetUrlAllowed({
+          url: parsed.url,
+          resourceType: parsed.resourceType,
+          fullPublicId: buildCloudinaryPublicId({
+            publicId: parsed.publicId,
+          }),
+        })
+      ) {
+        return NextResponse.json(
+          { error: "Attachment URL does not match the uploaded asset" },
           { status: 400 }
         );
       }

@@ -7,6 +7,7 @@ import {
   type VerifiedAuthenticationResponse,
 } from "@simplewebauthn/server";
 import { db } from "./db";
+import { cacheDel } from "./cache";
 
 type AuthenticatorTransportFuture = "ble" | "cable" | "hybrid" | "internal" | "nfc" | "smart-card" | "usb";
 
@@ -222,6 +223,8 @@ export async function verifyRegistration(
         },
       });
     });
+
+    await cacheDel(`attendance:credential-count:${userId}`);
   }
 
   // Clean up challenge after verification attempt

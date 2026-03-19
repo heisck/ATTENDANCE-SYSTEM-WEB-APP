@@ -54,6 +54,57 @@ export function createCloudinarySignedUpload(input: {
   };
 }
 
+function normalizeCloudinaryPublicIdSegment(value: string) {
+  return value
+    .trim()
+    .replace(/^\/+|\/+$/g, "")
+    .replace(/\/{2,}/g, "/");
+}
+
+export function buildCloudinaryPublicId(input: {
+  folder?: string | null;
+  publicId: string;
+}) {
+  const publicId = normalizeCloudinaryPublicIdSegment(input.publicId);
+  const folder = normalizeCloudinaryPublicIdSegment(input.folder || "");
+
+  return folder ? `${folder}/${publicId}` : publicId;
+}
+
+export function isCloudinaryAssetUrlAllowed(input: {
+  url: string;
+  resourceType: "image" | "raw" | "video";
+  fullPublicId: string;
+}) {
+  try {
+    const parsed = new URL(input.url);
+    const normalizedPublicId = normalizeCloudinaryPublicIdSegment(input.fullPublicId);
+
+    if (parsed.protocol !== "https:") {
+      return false;
+    }
+
+    if (!/^res\.cloudinary\.com$/i.test(parsed.hostname)) {
+      return false;
+    }
+
+    if (!parsed.pathname.includes(`/${input.resourceType}/upload/`)) {
+      return false;
+    }
+
+    const decodedPath = decodeURIComponent(parsed.pathname);
+    const normalizedPath = decodedPath.replace(/\/{2,}/g, "/");
+    const publicIdPattern = new RegExp(
+      `/${normalizedPublicId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\.[^/.]+)?$`,
+      "i"
+    );
+
+    return publicIdPattern.test(normalizedPath);
+  } catch {
+    return false;
+  }
+}
+
 export async function uploadCloudinaryAsset(input: {
   buffer: Buffer | Uint8Array | ArrayBuffer;
   publicId: string;

@@ -45,12 +45,55 @@ export async function registerRelayDevice(
         id: true,
         courseId: true,
         relayEnabled: true,
-        qrSecret: true,
+        status: true,
+        phase: true,
+        endsAt: true,
       },
     });
 
     if (!session) {
       return { success: false, message: "Session not found" };
+    }
+
+    if (!session.relayEnabled) {
+      return {
+        success: false,
+        message: "BLE relay is not enabled for this session",
+      };
+    }
+
+    const activePhase = deriveAttendancePhase(
+      {
+        status: session.status,
+        phase: session.phase,
+        endsAt: session.endsAt,
+      },
+      new Date()
+    );
+
+    if (activePhase === "CLOSED") {
+      return {
+        success: false,
+        message: "Session is no longer active",
+      };
+    }
+
+    const verifiedAttendance = await db.attendanceRecord.findFirst({
+      where: {
+        sessionId,
+        studentId,
+      },
+      select: {
+        id: true,
+        faceVerified: true,
+      },
+    });
+
+    if (!verifiedAttendance) {
+      return {
+        success: false,
+        message: "Mark attendance successfully before registering as a relay device",
+      };
     }
 
     // Check if this student already has a relay device for this session
@@ -273,13 +316,20 @@ export async function recordRelayAttendance(
   try {
     const relayDevice = await db.bleRelayDevice.findUnique({
       where: { id: relayDeviceId },
-      select: { id: true, sessionId: true },
+      select: { id: true, sessionId: true, status: true, revokedAt: true },
     });
 
     if (!relayDevice) {
       return {
         success: false,
         message: "Relay device not found",
+      };
+    }
+
+    if (relayDevice.status !== "APPROVED" || relayDevice.revokedAt) {
+      return {
+        success: false,
+        message: "Relay device is not approved for attendance sharing",
       };
     }
 

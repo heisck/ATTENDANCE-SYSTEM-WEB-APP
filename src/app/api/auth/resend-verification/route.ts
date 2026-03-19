@@ -47,15 +47,27 @@ export async function POST() {
   const rawToken = createRawToken();
   const expiresAt = createExpiryDate(1000 * 60 * 60 * 24);
 
-  await db.emailVerificationToken.create({
-    data: {
-      userId: user.id,
-      email: user.personalEmail,
-      tokenHash: hashToken(rawToken),
-      type: "PERSONAL_EMAIL_VERIFY",
-      expiresAt,
-    },
-  });
+  await db.$transaction([
+    db.emailVerificationToken.updateMany({
+      where: {
+        userId: user.id,
+        type: "PERSONAL_EMAIL_VERIFY",
+        usedAt: null,
+      },
+      data: {
+        usedAt: new Date(),
+      },
+    }),
+    db.emailVerificationToken.create({
+      data: {
+        userId: user.id,
+        email: user.personalEmail,
+        tokenHash: hashToken(rawToken),
+        type: "PERSONAL_EMAIL_VERIFY",
+        expiresAt,
+      },
+    }),
+  ]);
 
   const verifyUrl = buildAppUrl(`/verify-email?token=${encodeURIComponent(rawToken)}`);
   const sent = await sendEmail({

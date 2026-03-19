@@ -6,7 +6,11 @@ import { getFeatureFlags } from "@/lib/organization-settings";
 import { isAdminLike } from "@/lib/permissions";
 import { getStudentRepContext } from "@/lib/course-rep-auth";
 import { hasMatchingScope } from "@/lib/course-rep";
-import { createCloudinarySignedUpload } from "@/lib/cloudinary";
+import {
+  buildCloudinaryPublicId,
+  createCloudinarySignedUpload,
+  isCloudinaryAssetUrlAllowed,
+} from "@/lib/cloudinary";
 import { examAttachmentFinalizeSchema, examAttachmentInitSchema } from "@/lib/validators";
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
@@ -28,7 +32,12 @@ function normalizeFileStem(fileName: string) {
 
 function matchesExamNamespace(publicId: string, organizationId: string, examId: string) {
   const namespace = `exams/${organizationId}/${examId}/`;
-  return publicId === namespace.slice(0, -1) || publicId.includes(namespace);
+  if (!publicId.startsWith(namespace)) {
+    return false;
+  }
+
+  const suffix = publicId.slice(namespace.length);
+  return suffix.length > 0 && !suffix.includes("/") && !suffix.includes("..");
 }
 
 async function canManageExam(sessionUser: any, exam: { organizationId: string; cohortId: string | null; courseId: string | null }) {
@@ -105,6 +114,21 @@ export async function POST(
         );
       }
 
+      if (
+        !isCloudinaryAssetUrlAllowed({
+          url: parsed.url,
+          resourceType: parsed.resourceType,
+          fullPublicId: buildCloudinaryPublicId({
+            publicId: parsed.publicId,
+          }),
+        })
+      ) {
+        return NextResponse.json(
+          { error: "Attachment URL does not match the uploaded asset" },
+          { status: 400 }
+        );
+      }
+
       const existing = await db.examAttachment.findUnique({
         where: { publicId: parsed.publicId },
       });
@@ -170,4 +194,3 @@ export async function POST(
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-

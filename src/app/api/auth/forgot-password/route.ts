@@ -59,14 +59,25 @@ export async function POST(request: NextRequest) {
     const rawToken = createRawToken();
     const expiresAt = createExpiryDate(1000 * 60 * 30); // 30 minutes
 
-    await db.passwordResetToken.create({
-      data: {
-        userId: user.id,
-        email: deliveryEmail,
-        tokenHash: hashToken(rawToken),
-        expiresAt,
-      },
-    });
+    await db.$transaction([
+      db.passwordResetToken.updateMany({
+        where: {
+          userId: user.id,
+          usedAt: null,
+        },
+        data: {
+          usedAt: new Date(),
+        },
+      }),
+      db.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          email: deliveryEmail,
+          tokenHash: hashToken(rawToken),
+          expiresAt,
+        },
+      }),
+    ]);
 
     const resetUrl = buildAppUrl(`/reset-password?token=${encodeURIComponent(rawToken)}`);
     await sendResetEmail(deliveryEmail, user.name, resetUrl, expiresAt);
