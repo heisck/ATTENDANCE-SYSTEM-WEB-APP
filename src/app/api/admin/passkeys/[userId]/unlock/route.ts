@@ -24,11 +24,10 @@ export async function POST(
       where: { id: userId },
     });
 
-    const hasAccess =
-      Boolean(targetUser) &&
-      (user.role === "SUPER_ADMIN" || targetUser.organizationId === user.organizationId);
-
-    if (!hasAccess) {
+    if (
+      !targetUser ||
+      (user.role !== "SUPER_ADMIN" && targetUser.organizationId !== user.organizationId)
+    ) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
