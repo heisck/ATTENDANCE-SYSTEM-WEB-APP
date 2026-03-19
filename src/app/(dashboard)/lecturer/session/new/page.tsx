@@ -201,6 +201,9 @@ export default function NewSessionPage() {
       const data = await response.json();
       if (!response.ok) {
         if (response.status === 409 && data.sessionId) {
+          toast.message(
+            data?.error || "This course already has an active session. Continue it or extend it from the live monitor."
+          );
           router.push(`/lecturer/session/${data.sessionId}`);
           return;
         }

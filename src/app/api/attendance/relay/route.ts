@@ -124,8 +124,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { action, sessionId, relayDeviceId, qrToken, bleRssi, bleDistance } =
-      body;
+    const { action, sessionId, relayDeviceId, qrToken } = body;
 
     // Student actions
     if (action === "register") {
@@ -282,8 +281,8 @@ export async function POST(request: NextRequest) {
       const result = await recordRelayAttendance(
         attendanceRecord.id,
         relayDeviceId,
-        bleRssi,
-        bleDistance
+        undefined,
+        undefined
       );
 
       return NextResponse.json(result);

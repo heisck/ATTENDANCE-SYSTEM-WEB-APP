@@ -71,6 +71,7 @@ export default function SessionMonitorPage() {
   const [bleAction, setBleAction] = useState<"start" | "stop" | "refresh" | null>(null);
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);
+  const [extending, setExtending] = useState(false);
 
   const fetchSession = useCallback(async () => {
     try {
@@ -216,6 +217,31 @@ export default function SessionMonitorPage() {
     }
   }
 
+  async function handleExtend(additionalMinutes: number) {
+    setExtending(true);
+    try {
+      const res = await fetch(`/api/attendance/sessions/${sessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "extend",
+          additionalMinutes,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body?.error || "Failed to extend session");
+      }
+      await fetchSession();
+      await fetchBleStatus("auto");
+      toast.success(`Session extended by ${additionalMinutes} minute${additionalMinutes === 1 ? "" : "s"}.`);
+    } catch (error: any) {
+      toast.error(error?.message || "Unable to extend session");
+    } finally {
+      setExtending(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -297,17 +323,30 @@ export default function SessionMonitorPage() {
             Export PDF
           </a>
           {isActive && (
-            <DashboardActionButton
-              type="button"
-              onClick={() => void handleClose()}
-              disabled={closing}
-              variant="danger"
-              icon={StopCircle}
-              loading={closing}
-              className="w-full"
-            >
-              End Session
-            </DashboardActionButton>
+            <>
+              <DashboardActionButton
+                type="button"
+                onClick={() => void handleExtend(5)}
+                disabled={extending}
+                variant="secondary"
+                icon={Clock}
+                loading={extending}
+                className="w-full"
+              >
+                Extend 5 min
+              </DashboardActionButton>
+              <DashboardActionButton
+                type="button"
+                onClick={() => void handleClose()}
+                disabled={closing}
+                variant="danger"
+                icon={StopCircle}
+                loading={closing}
+                className="w-full"
+              >
+                End Session
+              </DashboardActionButton>
+            </>
           )}
         </div>
       </div>

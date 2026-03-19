@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
@@ -76,179 +77,155 @@ export async function POST(request: NextRequest) {
     const normalizedCourseCode = parsed.courseCode.trim().toUpperCase();
     const durationMinutes = normalizeSessionDurationMinutes(parsed.durationMinutes);
 
-    const course = await db.course.findFirst({
-      where: {
-        code: { equals: normalizedCourseCode, mode: "insensitive" },
-        lecturerId: user.id,
-      },
-    });
-    if (!course) {
-      return NextResponse.json(
-        { error: "Course code not found or not assigned to you" },
-        { status: 404 }
-      );
-    }
-
-    const existing = await db.attendanceSession.findFirst({
-      where: {
-        courseId: course.id,
-        status: "ACTIVE",
-        endsAt: { gt: new Date() },
-      },
-    });
-    if (existing) {
-      return NextResponse.json(
-        {
-          error: "An active session already exists for this course",
-          sessionId: existing.id,
-        },
-        { status: 409 }
-      );
-    }
-
     const sessionFlow = parsed.sessionFlow;
     const phase = getPhaseForSessionFlow(sessionFlow);
-    let sessionFamilyId: string = randomUUID();
-    let linkedSessionId: string | null = null;
+    const startedAt = new Date();
 
-    if (sessionFlow !== "NEW_SESSION") {
-      const linkedSession = await db.attendanceSession.findUnique({
-        where: { id: parsed.linkedSessionId! },
-        select: {
-          id: true,
-          courseId: true,
-          lecturerId: true,
-          sessionFamilyId: true,
-        },
-      });
-
-      if (!linkedSession) {
-        return NextResponse.json(
-          { error: "The earlier session you selected was not found." },
-          { status: 404 }
-        );
-      }
-
-      if (linkedSession.courseId !== course.id || linkedSession.lecturerId !== user.id) {
-        return NextResponse.json(
-          { error: "You can only continue sessions for your own course." },
-          { status: 403 }
-        );
-      }
-
-      sessionFamilyId =
-        linkedSession.sessionFamilyId?.trim() || linkedSession.id;
-      linkedSessionId = linkedSession.id;
-
-      if (!linkedSession.sessionFamilyId) {
-        await db.attendanceSession.update({
-          where: { id: linkedSession.id },
-          data: {
-            sessionFamilyId,
+    const attendanceSession = await db.$transaction(
+      async (tx) => {
+        const course = await tx.course.findFirst({
+          where: {
+            code: { equals: normalizedCourseCode, mode: "insensitive" },
+            lecturerId: user.id,
           },
         });
-      }
-
-      const familySessions = await db.attendanceSession.findMany({
-        where: {
-          courseId: course.id,
-          lecturerId: user.id,
-          OR: [
-            { sessionFamilyId },
-            { id: linkedSession.id },
-          ],
-        },
-        select: {
-          id: true,
-          phase: true,
-          sessionFlow: true,
-          startedAt: true,
-        },
-        orderBy: { startedAt: "asc" },
-      });
-
-      const phaseOneSessions = familySessions.filter(
-        (row) =>
-          getHistoricalPhaseFromSession({
-            sessionFlow: row.sessionFlow,
-            phase: row.phase,
-          }) === "PHASE_ONE"
-      ).length;
-      const phaseTwoSessions = familySessions.filter(
-        (row) =>
-          getHistoricalPhaseFromSession({
-            sessionFlow: row.sessionFlow,
-            phase: row.phase,
-          }) === "PHASE_TWO"
-      ).length;
-
-      if (sessionFlow === "PHASE_ONE_FOLLOW_UP") {
-        if (phaseOneSessions === 0) {
-          return buildLinkedSessionError(
-            "This class session has no Phase 1 to continue yet."
-          );
+        if (!course) {
+          throw new Error("COURSE_NOT_FOUND");
         }
 
-        if (phaseTwoSessions > 0) {
-          return buildLinkedSessionError(
-            "Phase 2 has already started for this class session. Start a new class session instead."
-          );
-        }
-      }
-
-      if (sessionFlow === "PHASE_TWO_CLOSING") {
-        if (phaseOneSessions === 0) {
-          return buildLinkedSessionError(
-            "Start Phase 1 before opening Phase 2 for this class session."
-          );
+        const existing = await tx.attendanceSession.findFirst({
+          where: {
+            courseId: course.id,
+            status: "ACTIVE",
+            endsAt: { gt: startedAt },
+          },
+        });
+        if (existing) {
+          throw new Error(`ACTIVE_SESSION_EXISTS:${existing.id}`);
         }
 
-        if (phaseTwoSessions > 0) {
-          return buildLinkedSessionError(
-            "Phase 2 is already open for this class session. Use Phase 2 follow-up instead."
-          );
-        }
-      }
+        let sessionFamilyId: string = randomUUID();
+        let linkedSessionId: string | null = null;
 
-      if (sessionFlow === "PHASE_TWO_FOLLOW_UP") {
-        if (phaseOneSessions === 0) {
-          return buildLinkedSessionError(
-            "Start Phase 1 before reopening Phase 2 for this class session."
-          );
+        if (sessionFlow !== "NEW_SESSION") {
+          const linkedSession = await tx.attendanceSession.findUnique({
+            where: { id: parsed.linkedSessionId! },
+            select: {
+              id: true,
+              courseId: true,
+              lecturerId: true,
+              sessionFamilyId: true,
+            },
+          });
+
+          if (!linkedSession) {
+            throw new Error("LINKED_SESSION_NOT_FOUND");
+          }
+
+          if (linkedSession.courseId !== course.id || linkedSession.lecturerId !== user.id) {
+            throw new Error("LINKED_SESSION_FORBIDDEN");
+          }
+
+          sessionFamilyId =
+            linkedSession.sessionFamilyId?.trim() || linkedSession.id;
+          linkedSessionId = linkedSession.id;
+
+          if (!linkedSession.sessionFamilyId) {
+            await tx.attendanceSession.update({
+              where: { id: linkedSession.id },
+              data: {
+                sessionFamilyId,
+              },
+            });
+          }
+
+          const familySessions = await tx.attendanceSession.findMany({
+            where: {
+              courseId: course.id,
+              lecturerId: user.id,
+              OR: [{ sessionFamilyId }, { id: linkedSession.id }],
+            },
+            select: {
+              id: true,
+              phase: true,
+              sessionFlow: true,
+              startedAt: true,
+            },
+            orderBy: { startedAt: "asc" },
+          });
+
+          const phaseOneSessions = familySessions.filter(
+            (row) =>
+              getHistoricalPhaseFromSession({
+                sessionFlow: row.sessionFlow,
+                phase: row.phase,
+              }) === "PHASE_ONE"
+          ).length;
+          const phaseTwoSessions = familySessions.filter(
+            (row) =>
+              getHistoricalPhaseFromSession({
+                sessionFlow: row.sessionFlow,
+                phase: row.phase,
+              }) === "PHASE_TWO"
+          ).length;
+
+          if (sessionFlow === "PHASE_ONE_FOLLOW_UP") {
+            if (phaseOneSessions === 0) {
+              throw new Error("LINKED_SESSION_PHASE_ONE_MISSING");
+            }
+
+            if (phaseTwoSessions > 0) {
+              throw new Error("LINKED_SESSION_PHASE_TWO_ALREADY_STARTED");
+            }
+          }
+
+          if (sessionFlow === "PHASE_TWO_CLOSING") {
+            if (phaseOneSessions === 0) {
+              throw new Error("LINKED_SESSION_PHASE_ONE_REQUIRED");
+            }
+
+            if (phaseTwoSessions > 0) {
+              throw new Error("LINKED_SESSION_PHASE_TWO_ALREADY_OPEN");
+            }
+          }
+
+          if (sessionFlow === "PHASE_TWO_FOLLOW_UP") {
+            if (phaseOneSessions === 0) {
+              throw new Error("LINKED_SESSION_PHASE_ONE_REOPEN_REQUIRED");
+            }
+
+            if (phaseTwoSessions === 0) {
+              throw new Error("LINKED_SESSION_PHASE_TWO_FIRST_REQUIRED");
+            }
+          }
         }
 
-        if (phaseTwoSessions === 0) {
-          return buildLinkedSessionError(
-            "Start the first Phase 2 closing session before opening a Phase 2 follow-up."
-          );
-        }
-      }
-    }
-
-    const startedAt = new Date();
-    const attendanceSession = await db.attendanceSession.create({
-      data: {
-        courseId: course.id,
-        lecturerId: user.id,
-        phase,
-        sessionFlow,
-        sessionFamilyId,
-        linkedSessionId,
-        durationMinutes,
-        startedAt,
-        endsAt: getDefaultSessionEndsAt(startedAt, durationMinutes),
-        qrRotationMs: QR_ROTATION_MS,
-        qrGraceMs: QR_GRACE_MS,
-        relayEnabled: parsed.enableBle,
-        relayOpenTime: parsed.enableBle ? startedAt : null,
-        qrSecret: generateQrSecret(),
+        return tx.attendanceSession.create({
+          data: {
+            courseId: course.id,
+            lecturerId: user.id,
+            phase,
+            sessionFlow,
+            sessionFamilyId,
+            linkedSessionId,
+            durationMinutes,
+            startedAt,
+            endsAt: getDefaultSessionEndsAt(startedAt, durationMinutes),
+            qrRotationMs: QR_ROTATION_MS,
+            qrGraceMs: QR_GRACE_MS,
+            relayEnabled: parsed.enableBle,
+            relayOpenTime: parsed.enableBle ? startedAt : null,
+            qrSecret: generateQrSecret(),
+          },
+          include: { course: true },
+        });
       },
-      include: { course: true },
-    });
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
 
     if (parsed.enableBle) {
       const beaconName = buildDefaultBeaconName({
-        courseCode: course.code,
+        courseCode: attendanceSession.course.code,
         sessionId: attendanceSession.id,
         phase,
       });
@@ -271,7 +248,7 @@ export async function POST(request: NextRequest) {
     ]);
 
     const enrollmentRows = await db.enrollment.findMany({
-      where: { courseId: course.id },
+      where: { courseId: attendanceSession.courseId },
       select: { studentId: true },
     });
     await invalidateStudentSessionKeys(enrollmentRows.map((row) => row.studentId));
@@ -280,6 +257,70 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     if (error.name === "ZodError") {
       return NextResponse.json({ error: error.errors[0].message }, { status: 400 });
+    }
+    if (error?.message === "COURSE_NOT_FOUND") {
+      return NextResponse.json(
+        { error: "Course code not found or not assigned to you" },
+        { status: 404 }
+      );
+    }
+    if (typeof error?.message === "string" && error.message.startsWith("ACTIVE_SESSION_EXISTS:")) {
+      return NextResponse.json(
+        {
+          error: "An active session already exists for this course",
+          sessionId: error.message.split(":")[1] || undefined,
+          canContinueExistingSession: true,
+        },
+        { status: 409 }
+      );
+    }
+    if (error?.message === "LINKED_SESSION_NOT_FOUND") {
+      return NextResponse.json(
+        { error: "The earlier session you selected was not found." },
+        { status: 404 }
+      );
+    }
+    if (error?.message === "LINKED_SESSION_FORBIDDEN") {
+      return NextResponse.json(
+        { error: "You can only continue sessions for your own course." },
+        { status: 403 }
+      );
+    }
+    if (error?.message === "LINKED_SESSION_PHASE_ONE_MISSING") {
+      return buildLinkedSessionError(
+        "This class session has no Phase 1 to continue yet."
+      );
+    }
+    if (error?.message === "LINKED_SESSION_PHASE_TWO_ALREADY_STARTED") {
+      return buildLinkedSessionError(
+        "Phase 2 has already started for this class session. Start a new class session instead."
+      );
+    }
+    if (error?.message === "LINKED_SESSION_PHASE_ONE_REQUIRED") {
+      return buildLinkedSessionError(
+        "Start Phase 1 before opening Phase 2 for this class session."
+      );
+    }
+    if (error?.message === "LINKED_SESSION_PHASE_TWO_ALREADY_OPEN") {
+      return buildLinkedSessionError(
+        "Phase 2 is already open for this class session. Use Phase 2 follow-up instead."
+      );
+    }
+    if (error?.message === "LINKED_SESSION_PHASE_ONE_REOPEN_REQUIRED") {
+      return buildLinkedSessionError(
+        "Start Phase 1 before reopening Phase 2 for this class session."
+      );
+    }
+    if (error?.message === "LINKED_SESSION_PHASE_TWO_FIRST_REQUIRED") {
+      return buildLinkedSessionError(
+        "Start the first Phase 2 closing session before opening a Phase 2 follow-up."
+      );
+    }
+    if (error?.code === "P2034") {
+      return NextResponse.json(
+        { error: "A session update conflict occurred. Please retry once." },
+        { status: 409 }
+      );
     }
     console.error("Create session error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

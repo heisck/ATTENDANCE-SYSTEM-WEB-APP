@@ -91,6 +91,16 @@ export async function PATCH(request: NextRequest) {
           lastProfileCompletionPromptAt: new Date(),
         },
       }),
+      db.emailVerificationToken.updateMany({
+        where: {
+          userId: user.id,
+          type: "PERSONAL_EMAIL_VERIFY",
+          usedAt: null,
+        },
+        data: {
+          usedAt: new Date(),
+        },
+      }),
       db.emailVerificationToken.create({
         data: {
           userId: user.id,

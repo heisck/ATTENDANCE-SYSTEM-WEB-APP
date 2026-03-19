@@ -1,12 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getPhaseEndsAt, syncAttendanceSessionState } from "@/lib/attendance";
+import {
+  getPhaseEndsAt,
+  normalizeSessionDurationMinutes,
+  syncAttendanceSessionState,
+} from "@/lib/attendance";
 import { generateQrPayload } from "@/lib/qr";
 import { CACHE_KEYS, cacheDel } from "@/lib/cache";
-import { clearSessionBleBroadcast } from "@/lib/lecturer-ble";
+import {
+  buildDefaultBeaconName,
+  clearSessionBleBroadcast,
+  getSessionBleBroadcast,
+  setSessionBleBroadcast,
+} from "@/lib/lecturer-ble";
 
-async function invalidateClosedSessionCaches(sessionId: string, lecturerId: string, courseId: string) {
+const patchSessionSchema = z
+  .object({
+    action: z.enum(["close", "extend"]).optional().default("close"),
+    additionalMinutes: z.number().int().min(1).max(60).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.action === "extend" && value.additionalMinutes == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["additionalMinutes"],
+        message: "additionalMinutes is required when extending a session.",
+      });
+    }
+  });
+
+async function invalidateSessionCaches(sessionId: string, lecturerId: string, courseId: string) {
   const enrollmentRows = await db.enrollment.findMany({
     where: { courseId },
     select: { studentId: true },
@@ -109,7 +134,7 @@ export async function GET(
 }
 
 export async function PATCH(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
@@ -126,11 +151,78 @@ export async function PATCH(
       id: true,
       courseId: true,
       lecturerId: true,
+      durationMinutes: true,
+      relayEnabled: true,
+      relayOpenTime: true,
+      startedAt: true,
+      course: {
+        select: {
+          code: true,
+        },
+      },
     },
   });
 
   if (!attendanceSession || attendanceSession.lecturerId !== user.id) {
     return NextResponse.json({ error: "Not found or unauthorized" }, { status: 404 });
+  }
+
+  const body = await request.json().catch(() => null);
+  const parsed = patchSessionSchema.safeParse(body ?? {});
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message || "Invalid session update payload" },
+      { status: 400 }
+    );
+  }
+
+  if (parsed.data.action === "extend") {
+    const syncedSession = await syncAttendanceSessionState(id);
+    if (!syncedSession || syncedSession.status !== "ACTIVE") {
+      return NextResponse.json(
+        { error: "Only active sessions can be extended" },
+        { status: 409 }
+      );
+    }
+
+    const additionalMinutes = normalizeSessionDurationMinutes(
+      parsed.data.additionalMinutes
+    );
+    const endsAt = new Date(
+      syncedSession.endsAt.getTime() + additionalMinutes * 60_000
+    );
+    const updated = await db.attendanceSession.update({
+      where: { id },
+      data: {
+        durationMinutes: attendanceSession.durationMinutes + additionalMinutes,
+        endsAt,
+      },
+    });
+
+    if (attendanceSession.relayEnabled) {
+      const existingBroadcast = await getSessionBleBroadcast(id);
+      await setSessionBleBroadcast(id, {
+        lecturerId: user.id,
+        beaconName:
+          existingBroadcast?.beaconName ??
+          buildDefaultBeaconName({
+            courseCode: attendanceSession.course.code,
+            sessionId: attendanceSession.id,
+            phase: syncedSession.phase,
+          }),
+        startedAt: existingBroadcast
+          ? new Date(existingBroadcast.startedAt)
+          : attendanceSession.relayOpenTime ?? attendanceSession.startedAt,
+        expiresAt: endsAt,
+      });
+    }
+
+    await invalidateSessionCaches(id, user.id, attendanceSession.courseId);
+
+    return NextResponse.json({
+      ...updated,
+      extendedByMinutes: additionalMinutes,
+    });
   }
 
   const updated = await db.attendanceSession.update({
@@ -149,7 +241,7 @@ export async function PATCH(
     console.error("Failed to clear BLE broadcast during session close:", error);
   }
 
-  await invalidateClosedSessionCaches(id, user.id, attendanceSession.courseId);
+  await invalidateSessionCaches(id, user.id, attendanceSession.courseId);
 
   return NextResponse.json(updated);
 }

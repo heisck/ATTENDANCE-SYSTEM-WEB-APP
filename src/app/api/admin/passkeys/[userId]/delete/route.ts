@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { cacheDel } from "@/lib/cache";
 
 export async function POST(
   request: NextRequest,
@@ -19,17 +20,19 @@ export async function POST(
   try {
     const { userId } = await params;
 
-    const orgId = user.organizationId;
-    if (!orgId) {
-      return NextResponse.json({ error: "No organization found" }, { status: 400 });
-    }
-
     // Verify the target user belongs to the same organization
     const targetUser = await db.user.findUnique({
       where: { id: userId },
     });
 
-    if (!targetUser || targetUser.organizationId !== orgId) {
+    if (!targetUser) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const hasAccess =
+      user.role === "SUPER_ADMIN" || targetUser.organizationId === user.organizationId;
+
+    if (!hasAccess) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
@@ -64,6 +67,8 @@ export async function POST(
         },
       },
     });
+
+    await cacheDel(`attendance:credential-count:${userId}`);
 
     return NextResponse.json({
       success: true,
