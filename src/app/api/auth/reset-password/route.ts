@@ -45,8 +45,11 @@ export async function POST(request: NextRequest) {
         where: { id: resetToken.userId },
         data: { passwordHash },
       }),
-      db.passwordResetToken.update({
-        where: { id: resetToken.id },
+      db.passwordResetToken.updateMany({
+        where: {
+          userId: resetToken.userId,
+          usedAt: null,
+        },
         data: { usedAt: now },
       }),
     ]);

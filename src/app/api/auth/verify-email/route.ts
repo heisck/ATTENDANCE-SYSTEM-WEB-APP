@@ -47,8 +47,12 @@ export async function GET(request: NextRequest) {
       data: { personalEmailVerifiedAt: now },
     });
 
-    await tx.emailVerificationToken.update({
-      where: { id: verification.id },
+    await tx.emailVerificationToken.updateMany({
+      where: {
+        userId: verification.userId,
+        type: "PERSONAL_EMAIL_VERIFY",
+        usedAt: null,
+      },
       data: { usedAt: now },
     });
 

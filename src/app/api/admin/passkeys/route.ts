@@ -14,9 +14,17 @@ export async function GET(_request: NextRequest) {
   }
 
   try {
-    const orgId = user.organizationId;
+    const requestUrl = new URL(_request.url);
+    const requestedOrgId = requestUrl.searchParams.get("organizationId");
+    const orgId =
+      user.role === "SUPER_ADMIN"
+        ? requestedOrgId || user.organizationId
+        : user.organizationId;
     if (!orgId) {
-      return NextResponse.json({ error: "No organization found" }, { status: 400 });
+      return NextResponse.json(
+        { error: "organizationId is required for super-admin queries" },
+        { status: 400 }
+      );
     }
 
     const users = await db.user.findMany({

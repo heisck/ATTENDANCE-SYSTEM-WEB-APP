@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { cacheDel } from "@/lib/cache";
 
 export async function DELETE(
   request: NextRequest,
@@ -42,6 +43,8 @@ export async function DELETE(
     await db.webAuthnCredential.delete({
       where: { credentialId },
     });
+
+    await cacheDel(`attendance:credential-count:${session.user.id}`);
 
     return NextResponse.json({
       success: true,

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const bleRelayDeviceFindUniqueMock = vi.fn();
 const attendanceSessionFindUniqueMock = vi.fn();
+const attendanceRecordFindFirstMock = vi.fn();
 const relayAttendanceRecordFindUniqueMock = vi.fn();
 const relayAttendanceRecordCreateMock = vi.fn();
 const bleRelayDeviceUpdateMock = vi.fn();
@@ -17,6 +18,10 @@ vi.mock("./db", () => ({
     },
     attendanceSession: {
       findUnique: attendanceSessionFindUniqueMock,
+    },
+    attendanceRecord: {
+      findFirst: attendanceRecordFindFirstMock,
+      findUnique: vi.fn(),
     },
     relayAttendanceRecord: {
       findUnique: relayAttendanceRecordFindUniqueMock,
@@ -37,7 +42,11 @@ vi.mock("./qr", () => ({
   verifyQrTokenStrict: verifyQrTokenStrictMock,
 }));
 
-const { recordRelayAttendance, startRelayBroadcast } = await import("./ble-relay");
+const {
+  recordRelayAttendance,
+  registerRelayDevice,
+  startRelayBroadcast,
+} = await import("./ble-relay");
 
 describe("ble-relay lease gating", () => {
   beforeEach(() => {
@@ -63,6 +72,10 @@ describe("ble-relay lease gating", () => {
       course: { code: "CSC101" },
     });
     relayAttendanceRecordFindUniqueMock.mockResolvedValue(null);
+    attendanceRecordFindFirstMock.mockResolvedValue({
+      id: "attendance-1",
+      faceVerified: true,
+    });
     relayAttendanceRecordCreateMock.mockResolvedValue({ id: "record-1" });
     bleRelayDeviceUpdateMock.mockResolvedValue({ id: "relay-1" });
     getFreshBleRelayLeaseMock.mockResolvedValue(null);
@@ -89,5 +102,15 @@ describe("ble-relay lease gating", () => {
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/heartbeat is required/i);
     expect(relayAttendanceRecordCreateMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses relay registration before the student has a verified attendance record", async () => {
+    attendanceRecordFindFirstMock.mockResolvedValueOnce(null);
+    bleRelayDeviceFindUniqueMock.mockResolvedValueOnce(null);
+
+    const result = await registerRelayDevice("session-1", "student-1", "device-1");
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/mark attendance successfully/i);
   });
 });

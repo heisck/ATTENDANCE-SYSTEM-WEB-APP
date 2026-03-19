@@ -53,6 +53,24 @@ export async function registerRelayDevice(
       return { success: false, message: "Session not found" };
     }
 
+    const verifiedAttendance = await db.attendanceRecord.findFirst({
+      where: {
+        sessionId,
+        studentId,
+      },
+      select: {
+        id: true,
+        faceVerified: true,
+      },
+    });
+
+    if (!verifiedAttendance) {
+      return {
+        success: false,
+        message: "Mark attendance successfully before registering as a relay device",
+      };
+    }
+
     // Check if this student already has a relay device for this session
     const existing = await db.bleRelayDevice.findUnique({
       where: {
