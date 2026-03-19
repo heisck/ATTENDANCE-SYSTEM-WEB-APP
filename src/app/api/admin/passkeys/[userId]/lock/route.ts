@@ -24,12 +24,9 @@ export async function POST(
       where: { id: userId },
     });
 
-    if (!targetUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
     const hasAccess =
-      user.role === "SUPER_ADMIN" || targetUser.organizationId === user.organizationId;
+      Boolean(targetUser) &&
+      (user.role === "SUPER_ADMIN" || targetUser.organizationId === user.organizationId);
 
     if (!hasAccess) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });

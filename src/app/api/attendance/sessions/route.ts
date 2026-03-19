@@ -269,7 +269,6 @@ export async function POST(request: NextRequest) {
         {
           error: "An active session already exists for this course",
           sessionId: error.message.split(":")[1] || undefined,
-          canContinueExistingSession: true,
         },
         { status: 409 }
       );
