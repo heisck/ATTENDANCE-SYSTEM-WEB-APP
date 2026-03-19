@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "dev": "npx next dev",
+    "dev": "npx next dev --webpack",
+    "dev:turbo": "npx next dev --turbopack",
     "postinstall": "cross-env PRISMA_HIDE_UPDATE_MESSAGE=1 npx prisma generate --no-hints",
     "build": "cross-env NEXT_TELEMETRY_DISABLED=1 npx next build",
     "start": "npx next start",

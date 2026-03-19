@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
-import { PageHeader } from "@/components/dashboard/page-header";
 import { CoursesTablePanel } from "@/components/admin/courses-table-panel";
 
 export default async function AdminCoursesPage() {
@@ -22,7 +21,6 @@ export default async function AdminCoursesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader description="All courses in your university. Manage enrollments to add or remove students." />
       <CoursesTablePanel
         rows={courses.map((course) => ({
           id: course.id,

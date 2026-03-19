@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { StatsGrid, StatCard } from "@/components/dashboard/stats-cards";
-import { PageHeader, SectionHeading } from "@/components/dashboard/page-header";
+import { SectionHeading } from "@/components/dashboard/page-header";
 import Image from "next/image";
 import { Building2, Users, BarChart3 } from "lucide-react";
 
@@ -40,12 +40,6 @@ export default async function PlatformAnalyticsPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader
-        eyebrow="Super Admin"
-        title="Platform Analytics"
-        description="System-wide metrics across all organizations."
-      />
-
       <StatsGrid>
         <StatCard
           title="Organizations"

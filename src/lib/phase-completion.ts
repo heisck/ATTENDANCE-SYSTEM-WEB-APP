@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { cacheDel, cacheGet, cacheSet } from "@/lib/cache";
+import { getHistoricalPhaseFromSession, resolveSessionFamilyKey } from "@/lib/session-flow";
 
 export type PendingPhase = "PHASE_ONE" | "PHASE_TWO" | null;
 
@@ -28,13 +29,19 @@ function getUtcDayRange(reference: Date) {
 
 function buildPhaseCompletionCacheKey(input: {
   studentId: string;
+  sessionFamilyId?: string | null;
   courseId: string;
   lecturerId?: string | null;
   referenceTime: Date;
 }) {
-  const { start } = getUtcDayRange(input.referenceTime);
-  const dayKey = start.toISOString().slice(0, 10);
-  return `attendance:phase-completion:${input.studentId}:${input.courseId}:${input.lecturerId ?? "all"}:${dayKey}`;
+  const familyKey = resolveSessionFamilyKey({
+    sessionFamilyId: input.sessionFamilyId,
+    courseId: input.courseId,
+    lecturerId: input.lecturerId,
+    startedAt: input.referenceTime,
+  });
+
+  return `attendance:phase-completion:${input.studentId}:${familyKey}`;
 }
 
 export function buildStudentPhaseCompletionStatus(input: {
@@ -57,6 +64,7 @@ export function buildStudentPhaseCompletionStatus(input: {
 
 export async function getStudentPhaseCompletionForCourseDay(input: {
   studentId: string;
+  sessionFamilyId?: string | null;
   courseId: string;
   lecturerId?: string | null;
   referenceTime: Date;
@@ -67,29 +75,56 @@ export async function getStudentPhaseCompletionForCourseDay(input: {
     return cached;
   }
 
-  const { start, end } = getUtcDayRange(input.referenceTime);
-  const rows = await db.attendanceSession.findMany({
-    where: {
-      courseId: input.courseId,
-      ...(input.lecturerId ? { lecturerId: input.lecturerId } : {}),
-      startedAt: {
-        gte: start,
-        lt: end,
-      },
-      records: {
-        some: {
-          studentId: input.studentId,
-        },
-      },
-    },
-    select: {
-      phase: true,
-    },
-    distinct: ["phase"],
-  });
+  const rows =
+    typeof input.sessionFamilyId === "string" && input.sessionFamilyId.trim().length > 0
+      ? await db.attendanceSession.findMany({
+          where: {
+            sessionFamilyId: input.sessionFamilyId.trim(),
+            records: {
+              some: {
+                studentId: input.studentId,
+              },
+            },
+          },
+          select: {
+            sessionFlow: true,
+            phase: true,
+          },
+        })
+      : await db.attendanceSession.findMany({
+          where: {
+            courseId: input.courseId,
+            ...(input.lecturerId ? { lecturerId: input.lecturerId } : {}),
+            startedAt: {
+              gte: getUtcDayRange(input.referenceTime).start,
+              lt: getUtcDayRange(input.referenceTime).end,
+            },
+            records: {
+              some: {
+                studentId: input.studentId,
+              },
+            },
+          },
+          select: {
+            sessionFlow: true,
+            phase: true,
+          },
+        });
 
-  const phaseOneDone = rows.some((row) => row.phase === "PHASE_ONE");
-  const phaseTwoDone = rows.some((row) => row.phase === "PHASE_TWO");
+  const phaseOneDone = rows.some(
+    (row) =>
+      getHistoricalPhaseFromSession({
+        sessionFlow: row.sessionFlow,
+        phase: row.phase,
+      }) === "PHASE_ONE"
+  );
+  const phaseTwoDone = rows.some(
+    (row) =>
+      getHistoricalPhaseFromSession({
+        sessionFlow: row.sessionFlow,
+        phase: row.phase,
+      }) === "PHASE_TWO"
+  );
 
   const result = buildStudentPhaseCompletionStatus({ phaseOneDone, phaseTwoDone });
   await cacheSet(cacheKey, result, 300);
@@ -103,6 +138,7 @@ export async function getStudentPhaseCompletionForSession(input: {
   const attendanceSession = await db.attendanceSession.findUnique({
     where: { id: input.sessionId },
     select: {
+      sessionFamilyId: true,
       courseId: true,
       lecturerId: true,
       startedAt: true,
@@ -113,6 +149,7 @@ export async function getStudentPhaseCompletionForSession(input: {
 
   return getStudentPhaseCompletionForCourseDay({
     studentId: input.studentId,
+    sessionFamilyId: attendanceSession.sessionFamilyId,
     courseId: attendanceSession.courseId,
     lecturerId: attendanceSession.lecturerId,
     referenceTime: attendanceSession.startedAt,
@@ -121,6 +158,7 @@ export async function getStudentPhaseCompletionForSession(input: {
 
 export async function invalidateStudentPhaseCompletionForCourseDay(input: {
   studentId: string;
+  sessionFamilyId?: string | null;
   courseId: string;
   lecturerId?: string | null;
   referenceTime: Date;

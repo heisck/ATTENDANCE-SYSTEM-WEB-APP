@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
-import { PageHeader } from "@/components/dashboard/page-header";
 import { LecturerCourseReportCard } from "@/components/lecturer-course-report-card";
 
 function phaseLabel(phase: "PHASE_ONE" | "PHASE_TWO" | "CLOSED") {
@@ -28,12 +27,6 @@ export default async function LecturerReportsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Lecturer"
-        title="Reports"
-        description="Export attendance by full course summary or by individual class session."
-      />
-
       {courses.map((course) => (
         <LecturerCourseReportCard
           key={course.id}

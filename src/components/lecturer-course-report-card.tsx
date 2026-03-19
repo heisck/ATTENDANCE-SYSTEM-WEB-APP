@@ -3,6 +3,7 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Loader2, Search } from "lucide-react";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
+import { getDashboardButtonClassName } from "@/components/dashboard/dashboard-controls";
 
 type CourseReportRow = {
   name: string;
@@ -124,48 +125,48 @@ export function LecturerCourseReportCard({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-background/40 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">
+      <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-background/40 p-3 sm:p-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 space-y-1">
+            <h2 className="text-base font-semibold leading-tight sm:text-lg">
               {courseCode} - {courseName}
             </h2>
             <p className="text-sm text-muted-foreground">
               {enrollmentCount} enrolled · {sessionCount} sessions
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="max-w-2xl text-xs text-muted-foreground">
               Full attendance counts only when a student completes both Phase 1 and Phase 2 on the same class day.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-3 lg:w-auto lg:min-w-[420px] lg:grid-cols-1 xl:grid-cols-3">
             <a
               href={`/api/reports/export?courseId=${courseId}&format=csv`}
-              className="inline-flex items-center rounded-md border border-border/70 px-3 py-1.5 text-xs font-medium hover:bg-accent"
+              className={getDashboardButtonClassName({ className: "h-10 w-full text-xs" })}
             >
               Course CSV
             </a>
             <a
               href={`/api/reports/export?courseId=${courseId}&format=xlsx`}
-              className="inline-flex items-center rounded-md border border-border/70 px-3 py-1.5 text-xs font-medium hover:bg-accent"
+              className={getDashboardButtonClassName({ className: "h-10 w-full text-xs" })}
             >
               Course Excel
             </a>
             <a
               href={`/api/reports/export?courseId=${courseId}&format=pdf`}
-              className="inline-flex items-center rounded-md border border-border/70 px-3 py-1.5 text-xs font-medium hover:bg-accent"
+              className={getDashboardButtonClassName({ className: "h-10 w-full text-xs" })}
             >
               Course PDF
             </a>
           </div>
         </div>
 
-        <label className="relative block max-w-xl">
+        <label className="relative block w-full">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search students by name, email, student number, index number, or cohort..."
-            className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm"
+            placeholder="Search students by name, email, student number, index number, or course..."
+            className="h-11 w-full rounded-xl border border-input bg-background pl-9 pr-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           />
         </label>
 
@@ -185,7 +186,7 @@ export function LecturerCourseReportCard({
               { key: "email", label: "Email" },
               { key: "studentId", label: "Student Number" },
               { key: "indexNumber", label: "Index Number" },
-              { key: "cohort", label: "Cohort" },
+              { key: "cohort", label: "Course / Level" },
               { key: "phaseOneDays", label: "Phase 1" },
               { key: "phaseTwoDays", label: "Phase 2" },
               { key: "fullyPresentDays", label: "Full Days" },
@@ -215,13 +216,13 @@ export function LecturerCourseReportCard({
           { key: "status", label: "Status" },
           { key: "export", label: "Export" },
         ]}
-        data={sessions.map((session) => ({
-          date: session.dateLabel,
-          phase: session.phaseLabel,
-          attendance: session.attendanceLabel,
-          status: session.status,
-          export: (
-            <div className="flex flex-wrap gap-2">
+          data={sessions.map((session) => ({
+            date: session.dateLabel,
+            phase: session.phaseLabel,
+            attendance: session.attendanceLabel,
+            status: session.status,
+            export: (
+            <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:gap-2">
               <a
                 href={`/api/reports/export?sessionId=${session.id}&format=csv`}
                 className="text-xs font-medium text-primary hover:underline"

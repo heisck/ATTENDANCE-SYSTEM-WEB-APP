@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  DEFAULT_SESSION_DURATION_MINUTES,
+  MAX_SESSION_DURATION_MINUTES,
+  MIN_SESSION_DURATION_MINUTES,
+} from "@/lib/attendance";
+import { SESSION_FLOW_VALUES } from "@/lib/session-flow";
 
 export const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -6,16 +12,19 @@ export const loginSchema = z.object({
 });
 
 export const registerSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
+  firstName: z.string().min(2, "First name must be at least 2 characters"),
+  lastName: z.string().min(2, "Last name must be at least 2 characters"),
+  otherNames: z.string().optional().default(""),
   institutionalEmail: z.string().email("Invalid institutional email"),
   personalEmail: z.string().email("Invalid personal email"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   studentId: z.string().min(1, "Student ID is required"),
   indexNumber: z.string().min(1, "Index Number is required"),
   organizationSlug: z.string().min(1, "Organization is required"),
+  signupToken: z.string().min(16, "Signup token is required"),
   department: z.string().min(1).default("CS"),
-  level: z.number().int().min(100).max(400),
-  groupCode: z.string().min(1, "Group is required"),
+  level: z.number().int().min(100).max(900),
+  groupCode: z.string().optional().default(""),
 }).superRefine((data, ctx) => {
   const institutionalEmail = data.institutionalEmail.toLowerCase().trim();
   const personalEmail = data.personalEmail.toLowerCase().trim();
@@ -31,15 +40,27 @@ export const registerSchema = z.object({
 
 export const createSessionSchema = z.object({
   courseCode: z.string().min(1, "Course code is required"),
-  phase: z.preprocess((value) => {
+  sessionFlow: z.preprocess((value) => {
     if (typeof value !== "string") return value;
-    const normalized = value.trim().toUpperCase();
-    if (normalized === "INITIAL") return "PHASE_ONE";
-    if (normalized === "REVERIFY") return "PHASE_TWO";
-    return normalized;
-  }, z.enum(["PHASE_ONE", "PHASE_TWO"]).default("PHASE_ONE")),
+    return value.trim().toUpperCase();
+  }, z.enum(SESSION_FLOW_VALUES).default("NEW_SESSION")),
+  linkedSessionId: z.string().optional(),
+  durationMinutes: z
+    .number()
+    .int()
+    .min(MIN_SESSION_DURATION_MINUTES)
+    .max(MAX_SESSION_DURATION_MINUTES)
+    .default(DEFAULT_SESSION_DURATION_MINUTES),
   enableBle: z.boolean().optional().default(false),
   confirmStart: z.boolean().optional().default(false),
+}).superRefine((data, ctx) => {
+  if (data.sessionFlow !== "NEW_SESSION" && !data.linkedSessionId?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["linkedSessionId"],
+      message: "Choose the earlier session you want to continue.",
+    });
+  }
 });
 
 export const markAttendanceSchema = z.object({

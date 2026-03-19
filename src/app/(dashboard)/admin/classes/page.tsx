@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
-import { PageHeader } from "@/components/dashboard/page-header";
 import { ClassGroupsTablePanel } from "@/components/admin/class-groups-table-panel";
 
 export default async function AdminClassesPage() {
@@ -21,7 +20,6 @@ export default async function AdminClassesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader description="View each class group and open detailed student breakdown." />
       <ClassGroupsTablePanel
         rows={classGroups.map((group) => ({
           id: group.id,

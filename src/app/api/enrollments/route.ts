@@ -44,6 +44,12 @@ async function invalidateEnrollmentCaches(courseId: string, studentIds: string[]
       cacheDel(`attendance:sessions:list:STUDENT:${studentId}:ACTIVE`),
       cacheDel(`attendance:sessions:list:STUDENT:${studentId}:ALL`),
       cacheDel(`attendance:sessions:list:STUDENT:${studentId}:CLOSED`),
+      cacheDel(`attendance:sessions:list:STUDENT:${studentId}:ACTIVE:20`),
+      cacheDel(`attendance:sessions:list:STUDENT:${studentId}:ALL:20`),
+      cacheDel(`attendance:sessions:list:STUDENT:${studentId}:CLOSED:20`),
+      cacheDel(`attendance:sessions:list:STUDENT:${studentId}:ACTIVE:100`),
+      cacheDel(`attendance:sessions:list:STUDENT:${studentId}:ALL:100`),
+      cacheDel(`attendance:sessions:list:STUDENT:${studentId}:CLOSED:100`),
       cacheDel(`student:live-sessions:${studentId}`),
       ...activeSessions.flatMap((sessionRow) => [
         cacheDel(`attendance:enrollment:${sessionRow.id}:${studentId}`),

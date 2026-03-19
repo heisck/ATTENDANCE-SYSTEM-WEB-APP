@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import {
   BookOpen,
   CalendarClock,
@@ -14,7 +13,6 @@ import {
   UserCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/dashboard/page-header";
 
 type LecturerProfile = {
   id: string;
@@ -236,21 +234,6 @@ export default function LecturerProfilePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Lecturer"
-        title="Profile"
-        description="Manage your account details and security settings."
-        action={
-          <Link
-            href="/lecturer/courses"
-            className="inline-flex items-center gap-2 rounded-xl border border-border/70 px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <BookOpen className="h-4 w-4" />
-            View Courses
-          </Link>
-        }
-      />
-
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
         <section className="space-y-6">
           <div className="surface p-5 sm:p-6">

@@ -23,7 +23,7 @@ export function OverviewMetrics({
   items,
   compact = false,
   showTitle = true,
-  showTopBorder = true,
+  showTopBorder = false,
 }: OverviewMetricsProps) {
   const [selectedKey, setSelectedKey] = useState(() => items[0]?.key ?? "");
   const selected = useMemo(

@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { OverviewMetrics } from "@/components/dashboard/overview-metrics";
-import { PageHeader, SectionHeading } from "@/components/dashboard/page-header";
+import { SectionHeading } from "@/components/dashboard/page-header";
 
 export default async function SuperAdminDashboard() {
   const session = await auth();
@@ -25,12 +25,6 @@ export default async function SuperAdminDashboard() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Super Admin"
-        title="Platform Workspace"
-        description="Tenant management and global system activity."
-      />
-
       <OverviewMetrics
         title="Platform Snapshot"
         items={[

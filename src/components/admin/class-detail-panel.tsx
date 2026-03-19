@@ -1,8 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Loader2, Save, Search } from "lucide-react";
+import { Save, Search } from "lucide-react";
 import { toast } from "sonner";
+import {
+  DashboardActionButton,
+  DashboardBinaryChoiceField,
+} from "@/components/dashboard/dashboard-controls";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
 import { OverviewMetrics } from "@/components/dashboard/overview-metrics";
 import type { FeatureFlags } from "@/lib/organization-settings";
@@ -100,15 +104,16 @@ export function ClassDetailPanel({
               These switches apply only to {classGroupName}. Organization defaults remain unchanged.
             </p>
           </div>
-          <button
+          <DashboardActionButton
             type="button"
             onClick={() => void saveGovernance()}
             disabled={savingGovernance}
-            className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
+            variant="primary"
+            icon={Save}
+            loading={savingGovernance}
           >
-            {savingGovernance ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save
-          </button>
+          </DashboardActionButton>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
@@ -202,14 +207,13 @@ function ToggleField({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="flex items-center justify-between gap-3 rounded-md border border-border/70 bg-background/30 px-3 py-2 text-sm">
-      <span>{label}</span>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        className="h-4 w-4 rounded border-input"
-      />
-    </label>
+    <DashboardBinaryChoiceField
+      label={label}
+      value={checked}
+      onChange={onChange}
+      trueLabel="Enabled"
+      falseLabel="Disabled"
+      className="h-full"
+    />
   );
 }

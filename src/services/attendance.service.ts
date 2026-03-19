@@ -1,4 +1,9 @@
 import { db } from "@/lib/db";
+import {
+  formatSessionKind,
+  getHistoricalPhaseFromSession,
+  resolveSessionFamilyKey,
+} from "@/lib/session-flow";
 
 function getUtcDayRange(reference: Date) {
   const start = new Date(
@@ -101,10 +106,12 @@ export async function getAttendanceReport(courseId: string) {
 
   const students = course.enrollments.map((e) => e.student);
   const sessions = course.sessions;
-  const dayMap = new Map<
+  const sessionFamilyMap = new Map<
     string,
     {
+      familyKey: string;
       date: string;
+      startedAt: Date;
       phaseOneSessions: number;
       phaseTwoSessions: number;
       studentPhases: Map<string, { phaseOneDone: boolean; phaseTwoDone: boolean }>;
@@ -112,53 +119,70 @@ export async function getAttendanceReport(courseId: string) {
   >();
 
   for (const session of sessions) {
-    const dayKey = getUtcDayKey(session.startedAt);
-    let dayEntry = dayMap.get(dayKey);
+    const familyKey = resolveSessionFamilyKey({
+      sessionFamilyId: session.sessionFamilyId,
+      courseId: session.courseId,
+      lecturerId: session.lecturerId,
+      startedAt: session.startedAt,
+    });
+    let familyEntry = sessionFamilyMap.get(familyKey);
 
-    if (!dayEntry) {
-      dayEntry = {
-        date: dayKey,
+    if (!familyEntry) {
+      familyEntry = {
+        familyKey,
+        date: getUtcDayKey(session.startedAt),
+        startedAt: session.startedAt,
         phaseOneSessions: 0,
         phaseTwoSessions: 0,
         studentPhases: new Map(),
       };
-      dayMap.set(dayKey, dayEntry);
+      sessionFamilyMap.set(familyKey, familyEntry);
+    } else if (session.startedAt < familyEntry.startedAt) {
+      familyEntry.startedAt = session.startedAt;
+      familyEntry.date = getUtcDayKey(session.startedAt);
     }
 
-    if (session.phase === "PHASE_ONE") {
-      dayEntry.phaseOneSessions += 1;
-    } else if (session.phase === "PHASE_TWO") {
-      dayEntry.phaseTwoSessions += 1;
+    const historicalPhase = getHistoricalPhaseFromSession({
+      sessionFlow: session.sessionFlow,
+      phase: session.phase,
+    });
+
+    if (historicalPhase === "PHASE_ONE") {
+      familyEntry.phaseOneSessions += 1;
+    } else if (historicalPhase === "PHASE_TWO") {
+      familyEntry.phaseTwoSessions += 1;
     }
 
     for (const record of session.records) {
       const current =
-        dayEntry.studentPhases.get(record.studentId) ??
+        familyEntry.studentPhases.get(record.studentId) ??
         {
           phaseOneDone: false,
           phaseTwoDone: false,
         };
 
-      if (session.phase === "PHASE_ONE") {
+      if (historicalPhase === "PHASE_ONE") {
         current.phaseOneDone = true;
-      } else if (session.phase === "PHASE_TWO") {
+      } else if (historicalPhase === "PHASE_TWO") {
         current.phaseTwoDone = true;
       }
 
-      dayEntry.studentPhases.set(record.studentId, current);
+      familyEntry.studentPhases.set(record.studentId, current);
     }
   }
 
-  const days = Array.from(dayMap.values()).sort((a, b) => a.date.localeCompare(b.date));
-  const totalClassDays = days.length;
+  const sessionFamilies = Array.from(sessionFamilyMap.values()).sort(
+    (a, b) => a.startedAt.getTime() - b.startedAt.getTime()
+  );
+  const totalClassDays = sessionFamilies.length;
 
   const report = students.map((student) => {
     let phaseOneDays = 0;
     let phaseTwoDays = 0;
     let fullyPresentDays = 0;
 
-    for (const day of days) {
-      const status = day.studentPhases.get(student.id);
+    for (const sessionFamily of sessionFamilies) {
+      const status = sessionFamily.studentPhases.get(student.id);
       if (!status) {
         continue;
       }
@@ -203,12 +227,12 @@ export async function getAttendanceReport(courseId: string) {
     totalSessions: sessions.length,
     totalClassDays,
     totalStudents: students.length,
-    days: days.map((day) => {
+    days: sessionFamilies.map((sessionFamily) => {
       let phaseOneMarked = 0;
       let phaseTwoMarked = 0;
       let fullyPresent = 0;
 
-      for (const status of day.studentPhases.values()) {
+      for (const status of sessionFamily.studentPhases.values()) {
         if (status.phaseOneDone) {
           phaseOneMarked += 1;
         }
@@ -221,9 +245,9 @@ export async function getAttendanceReport(courseId: string) {
       }
 
       return {
-        date: day.date,
-        phaseOneSessions: day.phaseOneSessions,
-        phaseTwoSessions: day.phaseTwoSessions,
+        date: sessionFamily.date,
+        phaseOneSessions: sessionFamily.phaseOneSessions,
+        phaseTwoSessions: sessionFamily.phaseTwoSessions,
         phaseOneMarked,
         phaseTwoMarked,
         fullyPresent,
@@ -273,50 +297,81 @@ export async function getAttendanceSessionReport(sessionId: string) {
   }
 
   const dayRange = getUtcDayRange(attendanceSession.startedAt);
-  const [totalEnrolled, sameDaySessions] = await Promise.all([
+  const [totalEnrolled, relatedSessions] = await Promise.all([
     db.enrollment.count({
       where: { courseId: attendanceSession.courseId },
     }),
-    db.attendanceSession.findMany({
-      where: {
-        courseId: attendanceSession.courseId,
-        startedAt: {
-          gte: dayRange.start,
-          lt: dayRange.end,
-        },
-      },
-      select: {
-        id: true,
-        phase: true,
-        startedAt: true,
-      },
-      orderBy: { startedAt: "asc" },
-    }),
+    attendanceSession.sessionFamilyId
+      ? db.attendanceSession.findMany({
+          where: {
+            courseId: attendanceSession.courseId,
+            sessionFamilyId: attendanceSession.sessionFamilyId,
+          },
+          select: {
+            id: true,
+            sessionFlow: true,
+            phase: true,
+            startedAt: true,
+          },
+          orderBy: { startedAt: "asc" },
+        })
+      : db.attendanceSession.findMany({
+          where: {
+            courseId: attendanceSession.courseId,
+            startedAt: {
+              gte: dayRange.start,
+              lt: dayRange.end,
+            },
+          },
+          select: {
+            id: true,
+            sessionFlow: true,
+            phase: true,
+            startedAt: true,
+          },
+          orderBy: { startedAt: "asc" },
+        }),
   ]);
 
-  const samePhaseSessions = sameDaySessions.filter(
-    (row) => row.phase === attendanceSession.phase
+  const samePhaseSessions = relatedSessions.filter(
+    (row) =>
+      getHistoricalPhaseFromSession({
+        sessionFlow: row.sessionFlow,
+        phase: row.phase,
+      }) ===
+      getHistoricalPhaseFromSession({
+        sessionFlow: attendanceSession.sessionFlow,
+        phase: attendanceSession.phase,
+      })
   );
   const phaseRunNumber = Math.max(
     1,
     samePhaseSessions.findIndex((row) => row.id === attendanceSession.id) + 1
   );
-  const phaseOneSessionCount = sameDaySessions.filter(
-    (row) => row.phase === "PHASE_ONE"
+  const phaseOneSessionCount = relatedSessions.filter(
+    (row) =>
+      getHistoricalPhaseFromSession({
+        sessionFlow: row.sessionFlow,
+        phase: row.phase,
+      }) === "PHASE_ONE"
   ).length;
 
+  const historicalPhase = getHistoricalPhaseFromSession({
+    sessionFlow: attendanceSession.sessionFlow,
+    phase: attendanceSession.phase,
+  });
   const phaseLabel =
-    attendanceSession.phase === "PHASE_ONE" ? "Phase 1" : "Phase 2";
-  const sessionKind =
-    attendanceSession.phase === "PHASE_ONE"
-      ? phaseRunNumber > 1
-        ? `Phase 1 Extension ${phaseRunNumber - 1}`
-        : "Phase 1 Opening"
-      : phaseRunNumber > 1
-        ? `Phase 2 Extension ${phaseRunNumber - 1}`
-        : phaseOneSessionCount > 0
-          ? "Phase 2 Closing"
-          : "Phase 2 Session";
+    historicalPhase === "PHASE_ONE"
+      ? "Phase 1"
+      : historicalPhase === "PHASE_TWO"
+        ? "Phase 2"
+        : "Closed";
+  const sessionKind = formatSessionKind({
+    sessionFlow: attendanceSession.sessionFlow,
+    phase: historicalPhase,
+    phaseRunNumber,
+    phaseOneSessionCount,
+  });
 
   return {
     scope: "session" as const,
@@ -328,7 +383,7 @@ export async function getAttendanceSessionReport(sessionId: string) {
       date: dayRange.start.toISOString().slice(0, 10),
       startedAt: attendanceSession.startedAt.toISOString(),
       status: attendanceSession.status,
-      phase: attendanceSession.phase,
+      phase: historicalPhase,
       phaseLabel,
       sessionKind,
       phaseRunNumber,

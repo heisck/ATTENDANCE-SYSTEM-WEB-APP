@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookPlus, Loader2 } from "lucide-react";
+import { BookPlus } from "lucide-react";
 import { toast } from "sonner";
+import { DashboardActionButton } from "@/components/dashboard/dashboard-controls";
 
 export function LecturerCourseSelfAssignPanel() {
   const router = useRouter();
@@ -78,7 +79,7 @@ export function LecturerCourseSelfAssignPanel() {
   }
 
   return (
-    <section id="assign-course" className="surface p-5">
+    <section id="assign-course" className="surface p-4 sm:p-5">
       <div className="flex items-start gap-3">
         <div className="rounded-xl bg-primary/10 p-3">
           <BookPlus className="h-5 w-5 text-primary" />
@@ -93,7 +94,7 @@ export function LecturerCourseSelfAssignPanel() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="mt-5 grid gap-4 lg:grid-cols-[1fr,1.4fr]">
+      <form onSubmit={handleSubmit} className="mt-5 grid gap-4 md:grid-cols-[1fr,1.4fr]">
         <label className="space-y-2">
           <span className="text-sm font-medium text-foreground">Course Code</span>
           <input
@@ -135,24 +136,17 @@ export function LecturerCourseSelfAssignPanel() {
           />
         </label>
 
-        <div className="lg:col-span-2">
-          <button
+        <div className="md:col-span-2">
+          <DashboardActionButton
             type="submit"
             disabled={submitting || code.trim().length === 0 || name.trim().length === 0}
-            className="inline-flex h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            variant="primary"
+            icon={BookPlus}
+            loading={submitting}
+            className="w-full sm:w-auto"
           >
-            {submitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Assigning Course...
-              </>
-            ) : (
-              <>
-                <BookPlus className="h-4 w-4" />
-                Assign Course To Me
-              </>
-            )}
-          </button>
+            {submitting ? "Assigning Course..." : "Assign Course To Me"}
+          </DashboardActionButton>
         </div>
       </form>
     </section>

@@ -2,7 +2,6 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
-import { PageHeader } from "@/components/dashboard/page-header";
 
 export default async function OrganizationsPage() {
   const session = await auth();
@@ -18,12 +17,6 @@ export default async function OrganizationsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Super Admin"
-        title="Organizations"
-        description="All universities on the platform."
-      />
-
       <AttendanceTable
         columns={[
           { key: "name", label: "Name" },

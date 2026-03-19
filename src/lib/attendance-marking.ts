@@ -37,6 +37,7 @@ type CachedAttendanceSessionMeta = {
   id: string;
   courseId: string;
   lecturerId: string;
+  sessionFamilyId: string | null;
   qrSecret: string;
   startedAt: string;
   endsAt: string;
@@ -51,6 +52,7 @@ type AttendanceSessionMeta = {
   id: string;
   courseId: string;
   lecturerId: string;
+  sessionFamilyId: string | null;
   qrSecret: string;
   startedAt: Date;
   endsAt: Date;
@@ -165,6 +167,7 @@ async function getAttendanceSessionMeta(sessionId: string) {
       id: true,
       courseId: true,
       lecturerId: true,
+      sessionFamilyId: true,
       qrSecret: true,
       startedAt: true,
       endsAt: true,
@@ -364,6 +367,7 @@ export async function prepareAttendanceMarkContext(input: {
 
   const phaseCompletionGate = await getStudentPhaseCompletionForCourseDay({
     studentId: input.studentId,
+    sessionFamilyId: attendanceSession.sessionFamilyId,
     courseId: attendanceSession.courseId,
     lecturerId: attendanceSession.lecturerId,
     referenceTime: attendanceSession.startedAt,
@@ -487,6 +491,7 @@ export async function executeAttendanceMark(input: {
   try {
     await invalidateStudentPhaseCompletionForCourseDay({
       studentId: input.studentId,
+      sessionFamilyId: input.context.attendanceSession.sessionFamilyId,
       courseId: input.context.attendanceSession.courseId,
       lecturerId: input.context.attendanceSession.lecturerId,
       referenceTime: input.context.attendanceSession.startedAt,
@@ -494,6 +499,7 @@ export async function executeAttendanceMark(input: {
 
     phaseCompletion = await getStudentPhaseCompletionForCourseDay({
       studentId: input.studentId,
+      sessionFamilyId: input.context.attendanceSession.sessionFamilyId,
       courseId: input.context.attendanceSession.courseId,
       lecturerId: input.context.attendanceSession.lecturerId,
       referenceTime: input.context.attendanceSession.startedAt,
@@ -540,6 +546,10 @@ export async function executeAttendanceMark(input: {
     cacheDel(`attendance:session-me:${input.context.attendanceSession.id}:${input.studentId}`),
     cacheDel(`attendance:sessions:list:STUDENT:${input.studentId}:ACTIVE`),
     cacheDel(`attendance:sessions:list:STUDENT:${input.studentId}:ALL`),
+    cacheDel(`attendance:sessions:list:STUDENT:${input.studentId}:ACTIVE:20`),
+    cacheDel(`attendance:sessions:list:STUDENT:${input.studentId}:ALL:20`),
+    cacheDel(`attendance:sessions:list:STUDENT:${input.studentId}:ACTIVE:100`),
+    cacheDel(`attendance:sessions:list:STUDENT:${input.studentId}:ALL:100`),
   ]);
 
   return {

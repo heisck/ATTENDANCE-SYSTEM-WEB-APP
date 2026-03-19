@@ -2,6 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
+import {
+  DashboardActionButton,
+  getDashboardButtonClassName,
+} from "@/components/dashboard/dashboard-controls";
 import { QrDisplay } from "@/components/qr-display";
 import { QrPortApprovalPanel } from "@/components/qr-port-approval-panel";
 import { LecturerBleBroadcasterSync } from "@/components/lecturer-ble-broadcaster-sync";
@@ -12,8 +16,6 @@ import {
   Loader2,
   AlertTriangle,
   Bluetooth,
-  RefreshCw,
-  Radio,
   FileSpreadsheet,
   FileText,
 } from "lucide-react";
@@ -66,7 +68,7 @@ export default function SessionMonitorPage() {
 
   const [data, setData] = useState<SessionData | null>(null);
   const [bleStatus, setBleStatus] = useState<BleStatus | null>(null);
-  const [bleBusy, setBleBusy] = useState(false);
+  const [bleAction, setBleAction] = useState<"start" | "stop" | "refresh" | null>(null);
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);
 
@@ -99,7 +101,11 @@ export default function SessionMonitorPage() {
     }
   }, [sessionId]);
 
-  const fetchBleStatus = useCallback(async () => {
+  const fetchBleStatus = useCallback(async (mode: "auto" | "manual" = "auto") => {
+    if (mode === "manual") {
+      setBleAction("refresh");
+    }
+
     try {
       const res = await fetch(`/api/attendance/sessions/${sessionId}/ble`, {
         cache: "no-store",
@@ -109,6 +115,10 @@ export default function SessionMonitorPage() {
       setBleStatus(body);
     } catch {
       // no-op
+    } finally {
+      if (mode === "manual") {
+        setBleAction(null);
+      }
     }
   }, [sessionId]);
 
@@ -119,17 +129,17 @@ export default function SessionMonitorPage() {
   useEffect(() => {
     if (data?.status !== "ACTIVE") return;
 
-    void fetchBleStatus();
+    void fetchBleStatus("auto");
     const interval = window.setInterval(() => {
       void fetchSession();
-      void fetchBleStatus();
+      void fetchBleStatus("auto");
     }, 5000);
     return () => window.clearInterval(interval);
   }, [data?.status, fetchBleStatus, fetchSession]);
 
   async function handleStartBle() {
     if (!data) return;
-    setBleBusy(true);
+    setBleAction("start");
     try {
       const res = await fetch(`/api/attendance/sessions/${sessionId}/ble`, {
         method: "POST",
@@ -145,12 +155,12 @@ export default function SessionMonitorPage() {
     } catch (error: any) {
       toast.error(error.message || "Unable to start BLE beacon");
     } finally {
-      setBleBusy(false);
+      setBleAction(null);
     }
   }
 
   async function handleStopBle() {
-    setBleBusy(true);
+    setBleAction("stop");
     try {
       const res = await fetch(`/api/attendance/sessions/${sessionId}/ble`, {
         method: "POST",
@@ -166,7 +176,7 @@ export default function SessionMonitorPage() {
     } catch (error: any) {
       toast.error(error.message || "Unable to stop BLE beacon");
     } finally {
-      setBleBusy(false);
+      setBleAction(null);
     }
   }
 
@@ -223,6 +233,7 @@ export default function SessionMonitorPage() {
   }
 
   const isActive = data.status === "ACTIVE";
+  const bleBusy = bleAction !== null;
 
   return (
     <div className="space-y-6">
@@ -236,7 +247,7 @@ export default function SessionMonitorPage() {
         sessionMetaCharacteristicUuid={bleStatus?.sessionMetaCharacteristicUuid ?? ""}
       />
 
-      <div className="page-header-block flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="page-header-block space-y-4">
         <div className="min-w-0">
           <h1 className="text-xl font-semibold tracking-tight">
             {data.course.code} - {data.course.name}
@@ -263,41 +274,40 @@ export default function SessionMonitorPage() {
           </div>
         </div>
 
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <a
             href={`/api/reports/export?sessionId=${sessionId}&format=csv`}
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
+            className={getDashboardButtonClassName({ className: "w-full" })}
           >
             <FileText className="h-4 w-4" />
             Export CSV
           </a>
           <a
             href={`/api/reports/export?sessionId=${sessionId}&format=xlsx`}
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
+            className={getDashboardButtonClassName({ className: "w-full" })}
           >
             <FileSpreadsheet className="h-4 w-4" />
             Export Excel
           </a>
           <a
             href={`/api/reports/export?sessionId=${sessionId}&format=pdf`}
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
+            className={getDashboardButtonClassName({ className: "w-full" })}
           >
             <FileText className="h-4 w-4" />
             Export PDF
           </a>
           {isActive && (
-            <button
-              onClick={handleClose}
+            <DashboardActionButton
+              type="button"
+              onClick={() => void handleClose()}
               disabled={closing}
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-destructive px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-destructive/90 disabled:opacity-50"
+              variant="danger"
+              icon={StopCircle}
+              loading={closing}
+              className="w-full"
             >
-              {closing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <StopCircle className="h-4 w-4" />
-              )}
               End Session
-            </button>
+            </DashboardActionButton>
           )}
         </div>
       </div>
@@ -366,37 +376,35 @@ export default function SessionMonitorPage() {
                       Beacon is currently off.
                     </p>
                   )}
-                  <div className="flex flex-wrap gap-2">
-                    <button
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+                    <DashboardActionButton
                       type="button"
-                      onClick={handleStartBle}
+                      onClick={() => void handleStartBle()}
                       disabled={bleBusy}
-                      className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+                      variant={bleStatus.enabled ? "secondary" : "primary"}
+                      loading={bleAction === "start"}
+                      className="h-9 min-w-0 px-1.5 text-[10px] leading-none sm:px-2 sm:text-xs"
                     >
-                      {bleBusy ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Radio className="h-4 w-4" />
-                      )}
-                      Enable BLE Mode
-                    </button>
-                    <button
+                      <span className="truncate">Enable BLE</span>
+                    </DashboardActionButton>
+                    <DashboardActionButton
                       type="button"
-                      onClick={handleStopBle}
+                      onClick={() => void handleStopBle()}
                       disabled={bleBusy || !bleStatus?.enabled}
-                      className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+                      loading={bleAction === "stop"}
+                      className="h-9 min-w-0 px-1.5 text-[10px] leading-none sm:px-2 sm:text-xs"
                     >
-                      Disable BLE Mode
-                    </button>
-                    <button
+                      <span className="truncate">Disable BLE</span>
+                    </DashboardActionButton>
+                    <DashboardActionButton
                       type="button"
-                      onClick={() => void fetchBleStatus()}
+                      onClick={() => void fetchBleStatus("manual")}
                       disabled={bleBusy}
-                      className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+                      loading={bleAction === "refresh"}
+                      className="h-9 min-w-0 px-1.5 text-[10px] leading-none sm:px-2 sm:text-xs"
                     >
-                      <RefreshCw className="h-4 w-4" />
-                      Refresh
-                    </button>
+                      <span className="truncate">Refresh</span>
+                    </DashboardActionButton>
                   </div>
                 </div>
               )}
@@ -442,7 +450,7 @@ export default function SessionMonitorPage() {
       </div>
 
       {isActive && (
-        <div className="max-w-3xl">
+        <div className="w-full">
           <QrPortApprovalPanel sessionId={sessionId} isLive />
         </div>
       )}

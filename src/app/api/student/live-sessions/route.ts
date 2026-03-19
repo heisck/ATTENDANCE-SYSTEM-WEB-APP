@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { TOTAL_SESSION_MS, deriveAttendancePhase } from "@/lib/attendance";
+import { deriveAttendancePhase } from "@/lib/attendance";
 import { cacheGet, cacheSet } from "@/lib/cache";
 
 const ACTIVE_POLL_MS = 15_000;
@@ -29,12 +29,10 @@ export async function GET() {
   }
 
   const now = new Date();
-  const activeWindowStart = new Date(now.getTime() - TOTAL_SESSION_MS);
-
   const sessions = await db.attendanceSession.findMany({
     where: {
       status: "ACTIVE",
-      startedAt: { gt: activeWindowStart },
+      endsAt: { gt: now },
       course: {
         enrollments: {
           some: { studentId: user.id },

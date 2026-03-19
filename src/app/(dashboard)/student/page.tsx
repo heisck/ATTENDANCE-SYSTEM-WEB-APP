@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getStudentGateState } from "@/lib/student-gates";
-import { TOTAL_SESSION_MS, deriveAttendancePhase } from "@/lib/attendance";
+import { deriveAttendancePhase } from "@/lib/attendance";
 import { redirect } from "next/navigation";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
 import { OverviewMetrics } from "@/components/dashboard/overview-metrics";
@@ -11,6 +11,7 @@ import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { getStudentHubContext } from "@/lib/student-hub";
 import { getStudentPhaseCompletionForCourseDay } from "@/lib/phase-completion";
+import { getHistoricalPhaseFromSession, resolveSessionFamilyKey } from "@/lib/session-flow";
 
 export default async function StudentDashboard() {
   const session = await auth();
@@ -21,12 +22,25 @@ export default async function StudentDashboard() {
   if (gate.redirectPath) redirect(gate.redirectPath);
 
   const now = new Date();
-  const activeWindowStart = new Date(now.getTime() - TOTAL_SESSION_MS);
 
-  const [enrollments, totalAttendance, flaggedCount, recentRecords, liveSessions] =
+  const [enrollments, attendedSessions, flaggedCount, recentRecords, liveSessions] =
     await Promise.all([
       db.enrollment.count({ where: { studentId: userId } }),
-      db.attendanceRecord.count({ where: { studentId: userId } }),
+      db.attendanceSession.findMany({
+        where: {
+          records: {
+            some: { studentId: userId },
+          },
+        },
+        select: {
+          courseId: true,
+          lecturerId: true,
+          sessionFamilyId: true,
+          sessionFlow: true,
+          phase: true,
+          startedAt: true,
+        },
+      }),
       db.attendanceRecord.count({
         where: { studentId: userId, flagged: true },
       }),
@@ -41,7 +55,7 @@ export default async function StudentDashboard() {
       db.attendanceSession.findMany({
         where: {
           status: "ACTIVE",
-          startedAt: { gt: activeWindowStart },
+          endsAt: { gt: now },
           course: {
             enrollments: {
               some: { studentId: userId },
@@ -60,6 +74,44 @@ export default async function StudentDashboard() {
         take: 10,
       }),
     ]);
+
+  const attendanceFamilies = new Map<
+    string,
+    {
+      phaseOneDone: boolean;
+      phaseTwoDone: boolean;
+    }
+  >();
+
+  for (const sessionItem of attendedSessions) {
+    const familyKey = resolveSessionFamilyKey({
+      sessionFamilyId: sessionItem.sessionFamilyId,
+      courseId: sessionItem.courseId,
+      lecturerId: sessionItem.lecturerId,
+      startedAt: sessionItem.startedAt,
+    });
+    const current = attendanceFamilies.get(familyKey) ?? {
+      phaseOneDone: false,
+      phaseTwoDone: false,
+    };
+    const historicalPhase = getHistoricalPhaseFromSession({
+      sessionFlow: sessionItem.sessionFlow,
+      phase: sessionItem.phase,
+    });
+
+    if (historicalPhase === "PHASE_ONE") {
+      current.phaseOneDone = true;
+    }
+    if (historicalPhase === "PHASE_TWO") {
+      current.phaseTwoDone = true;
+    }
+
+    attendanceFamilies.set(familyKey, current);
+  }
+
+  const totalAttendance = Array.from(attendanceFamilies.values()).filter(
+    (entry) => entry.phaseOneDone && entry.phaseTwoDone
+  ).length;
 
   const initialLiveSessions = liveSessions
     .map((sessionItem) => ({
@@ -88,6 +140,7 @@ export default async function StudentDashboard() {
     recentRecords.map((record) =>
       getStudentPhaseCompletionForCourseDay({
         studentId: userId,
+        sessionFamilyId: record.session.sessionFamilyId,
         courseId: record.session.courseId,
         lecturerId: record.session.lecturerId,
         referenceTime: record.session.startedAt,

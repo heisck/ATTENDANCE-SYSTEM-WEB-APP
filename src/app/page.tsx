@@ -14,17 +14,18 @@ export default function HomePage() {
             </div>
             <div className="flex items-center gap-4">
               <ThemeToggle />
+              <button
+                type="button"
+                disabled
+                className="inline-flex cursor-not-allowed items-center justify-center rounded-md border border-border/70 bg-muted/40 px-4 py-2 text-sm font-medium text-muted-foreground opacity-60"
+              >
+                Sign Up
+              </button>
               <Link
                 href="/login"
-                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Sign In
-              </Link>
-              <Link
-                href="/register"
                 className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition-colors"
               >
-                Get Started
+                Sign In
               </Link>
             </div>
           </div>
@@ -35,7 +36,7 @@ export default function HomePage() {
         <section className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
           <div className="text-center">
             <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
-              University Attendance,
+              Attendance IQ,
               <br />
               <span className="text-primary">Verified & Secure</span>
             </h1>
@@ -44,13 +45,20 @@ export default function HomePage() {
               WebAuthn passkeys, rotating QR tokens, and live BLE beacon validation
               work together in real time.
             </p>
-            <div className="mt-10 flex items-center justify-center gap-4">
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
               <Link
-                href="/register"
+                href="/login"
                 className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-3 text-sm font-medium text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors"
               >
-                Start Free Trial
+                Open Portal
               </Link>
+              <button
+                type="button"
+                disabled
+                className="inline-flex cursor-not-allowed items-center justify-center rounded-md border border-border/70 bg-muted/40 px-6 py-3 text-sm font-medium text-muted-foreground opacity-60"
+              >
+                Sign Up
+              </button>
               <Link
                 href="#features"
                 className="inline-flex items-center justify-center rounded-md border border-border px-6 py-3 text-sm font-medium hover:bg-accent transition-colors"

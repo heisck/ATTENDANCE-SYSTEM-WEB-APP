@@ -7,6 +7,7 @@ import { createExpiryDate, createRawToken, hashToken } from "@/lib/tokens";
 import { buildAppUrl, sendEmail } from "@/lib/email";
 import { verificationEmailHtml } from "@/lib/email-templates";
 import { getStudentEmailDomains } from "@/lib/organization-settings";
+import { validateStudentSignupToken } from "@/lib/student-signup-window";
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,12 +16,17 @@ export async function POST(request: NextRequest) {
 
     const institutionalEmail = parsed.institutionalEmail.trim().toLowerCase();
     const personalEmail = parsed.personalEmail.trim().toLowerCase();
+    const signupToken = parsed.signupToken.trim();
     const normalizedStudentId = parsed.studentId.trim();
     const normalizedIndexNumber = parsed.indexNumber.trim();
     const organizationSlug = parsed.organizationSlug.trim().toLowerCase();
-    const department = parsed.department.trim().toUpperCase();
-    const level = parsed.level;
-    const groupCode = parsed.groupCode.trim().toUpperCase();
+    const fullName = [
+      parsed.firstName.trim(),
+      parsed.otherNames?.trim() || "",
+      parsed.lastName.trim(),
+    ]
+      .filter((value) => value.length > 0)
+      .join(" ");
 
     const existingUser = await db.user.findUnique({
       where: { email: institutionalEmail },
@@ -81,6 +87,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const signupWindow = validateStudentSignupToken(org.settings, signupToken);
+    if (!signupWindow) {
+      return NextResponse.json(
+        { error: "Student signup is closed or this invite link is invalid." },
+        { status: 403 }
+      );
+    }
+
+    const department = signupWindow.department ?? parsed.department.trim().toUpperCase();
+    const level = signupWindow.level ?? parsed.level;
+    const groupCode = signupWindow.groupCode ?? parsed.groupCode.trim().toUpperCase();
+    const normalizedGroupCode = groupCode.length > 0 ? groupCode : "GENERAL";
+
+    if (signupWindow.requireGroup && normalizedGroupCode === "GENERAL") {
+      return NextResponse.json(
+        { error: "This signup window requires a group." },
+        { status: 400 }
+      );
+    }
+
     const allowedDomains = getStudentEmailDomains(org.settings, org.domain);
     const institutionalDomain = institutionalEmail.split("@")[1] || "";
     if (allowedDomains.length > 0 && !allowedDomains.includes(institutionalDomain)) {
@@ -95,28 +121,34 @@ export async function POST(request: NextRequest) {
     const cohort = await db.cohort.upsert({
       where: {
         organizationId_department_level_groupCode: {
-          organizationId: org.id,
-          department,
-          level,
-          groupCode,
+            organizationId: org.id,
+            department,
+            level,
+            groupCode: normalizedGroupCode,
         },
       },
       update: {
-        displayName: `${department} ${level} ${groupCode}`,
+        displayName:
+          normalizedGroupCode === "GENERAL"
+            ? `${department} ${level}`
+            : `${department} ${level} ${normalizedGroupCode}`,
       },
       create: {
         organizationId: org.id,
         department,
         level,
-        groupCode,
-        displayName: `${department} ${level} ${groupCode}`,
+        groupCode: normalizedGroupCode,
+        displayName:
+          normalizedGroupCode === "GENERAL"
+            ? `${department} ${level}`
+            : `${department} ${level} ${normalizedGroupCode}`,
       },
       select: { id: true },
     });
 
     const createdUser = await db.user.create({
       data: {
-        name: parsed.name,
+        name: fullName,
         email: institutionalEmail,
         personalEmail,
         passwordHash,

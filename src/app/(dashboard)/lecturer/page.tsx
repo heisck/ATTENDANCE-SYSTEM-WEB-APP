@@ -3,21 +3,22 @@ import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { AttendanceTable } from "@/components/dashboard/attendance-table";
 import { OverviewMetrics } from "@/components/dashboard/overview-metrics";
-import { PageHeader, SectionHeading } from "@/components/dashboard/page-header";
-import { Play } from "lucide-react";
+import { SectionHeading } from "@/components/dashboard/page-header";
 import Link from "next/link";
+import { deriveAttendancePhase } from "@/lib/attendance";
 
 export default async function LecturerDashboard() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
   const userId = session.user.id;
+  const now = new Date();
 
   const [courses, activeSessions, totalStudents, recentSessions] =
     await Promise.all([
       db.course.count({ where: { lecturerId: userId } }),
       db.attendanceSession.count({
-        where: { lecturerId: userId, status: "ACTIVE" },
+        where: { lecturerId: userId, status: "ACTIVE", endsAt: { gt: now } },
       }),
       db.enrollment.count({
         where: { course: { lecturerId: userId } },
@@ -35,21 +36,6 @@ export default async function LecturerDashboard() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Lecturer"
-        title="Lecturer Workspace"
-        description="Course operations and attendance sessions at a glance."
-        action={
-          <Link
-            href="/lecturer/session/new"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            <Play className="h-4 w-4" />
-            Start Session
-          </Link>
-        }
-      />
-
       <OverviewMetrics
         title="Teaching Snapshot"
         compact
@@ -82,34 +68,43 @@ export default async function LecturerDashboard() {
             { key: "status", label: "Status" },
             { key: "action", label: "" },
           ]}
-          data={recentSessions.map((s) => ({
-            course: `${s.course.code} - ${s.course.name}`,
-            date: s.startedAt.toLocaleDateString(),
-            students: s._count.records,
-            status:
-              s.status === "ACTIVE" ? (
-                <span className="inline-flex rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium">
-                  Active
-                </span>
-              ) : (
-                <span className="inline-flex rounded-full border border-border bg-muted/70 px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                  Closed
-                </span>
-              ),
-            action:
-              s.status === "ACTIVE"
-                ? (
+          data={recentSessions.map((s) => {
+            const effectivePhase = deriveAttendancePhase(
+              {
+                status: s.status,
+                phase: s.phase,
+                endsAt: s.endsAt,
+              },
+              now
+            );
+
+            return {
+              course: `${s.course.code} - ${s.course.name}`,
+              date: s.startedAt.toLocaleDateString(),
+              students: s._count.records,
+              status:
+                effectivePhase !== "CLOSED" ? (
+                  <span className="inline-flex rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium">
+                    Active
+                  </span>
+                ) : (
+                  <span className="inline-flex rounded-full border border-border bg-muted/70 px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                    Closed
+                  </span>
+                ),
+              action:
+                effectivePhase !== "CLOSED" ? (
                   <Link
                     href={`/lecturer/session/${s.id}`}
                     className="text-xs font-medium text-foreground underline underline-offset-2"
                   >
                     Monitor
                   </Link>
-                )
-                : (
+                ) : (
                   <span className="text-xs text-muted-foreground">-</span>
                 ),
-          }))}
+            };
+          })}
           emptyMessage="No sessions yet. Start your first attendance session!"
         />
       </section>

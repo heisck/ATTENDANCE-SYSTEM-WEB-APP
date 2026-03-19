@@ -5,7 +5,6 @@ import { CheckCircle2, Loader2, Lock, Trash2, Unlock } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/dashboard/page-header";
 
 interface PasskeyUser {
   id: string;
@@ -177,8 +176,6 @@ export default function PasskeyManagementPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader description="Search users, manage passkeys, and review user access details in one place." />
-
       <section className="surface grid gap-3 p-4 md:grid-cols-4">
         <label className="space-y-1 text-sm md:col-span-2">
           <span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Search</span>

@@ -26,6 +26,13 @@ enum AttendancePhase {
   CLOSED
 }
 
+enum AttendanceSessionFlow {
+  NEW_SESSION
+  PHASE_ONE_FOLLOW_UP
+  PHASE_TWO_CLOSING
+  PHASE_TWO_FOLLOW_UP
+}
+
 enum SubscriptionPlan {
   FREE
   BASIC
@@ -662,17 +669,21 @@ model Enrollment {
 }
 
 model AttendanceSession {
-  id           String          @id @default(cuid())
-  courseId     String
-  lecturerId   String
-  status       SessionStatus   @default(ACTIVE)
-  phase        AttendancePhase @default(PHASE_ONE)
-  endsAt       DateTime        @default(now())
-  qrRotationMs Int             @default(5000)
-  qrGraceMs    Int             @default(1000)
-  qrSecret     String
-  startedAt    DateTime        @default(now())
-  closedAt     DateTime?
+  id              String                @id @default(cuid())
+  courseId        String
+  lecturerId      String
+  status          SessionStatus         @default(ACTIVE)
+  phase           AttendancePhase       @default(PHASE_ONE)
+  sessionFlow     AttendanceSessionFlow @default(NEW_SESSION)
+  sessionFamilyId String?
+  linkedSessionId String?
+  durationMinutes Int                   @default(4)
+  endsAt          DateTime              @default(now())
+  qrRotationMs    Int                   @default(5000)
+  qrGraceMs       Int                   @default(1000)
+  qrSecret        String
+  startedAt       DateTime              @default(now())
+  closedAt        DateTime?
 
   // BLE relay configuration
   relayEnabled     Boolean   @default(false) // Lecturer enables relay functionality
@@ -690,6 +701,9 @@ model AttendanceSession {
   @@index([lecturerId])
   @@index([status])
   @@index([phase])
+  @@index([sessionFlow])
+  @@index([sessionFamilyId])
+  @@index([linkedSessionId])
   @@index([relayEnabled])
 }
 

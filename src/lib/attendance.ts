@@ -3,7 +3,10 @@ import { db } from "./db";
 import { CACHE_KEYS, cacheGet, cacheSet } from "./cache";
 import { clearSessionBleBroadcast } from "./lecturer-ble";
 
-export const PHASE_DURATION_MS = 240_000;
+export const DEFAULT_SESSION_DURATION_MINUTES = 4;
+export const MIN_SESSION_DURATION_MINUTES = 1;
+export const MAX_SESSION_DURATION_MINUTES = 60;
+export const PHASE_DURATION_MS = DEFAULT_SESSION_DURATION_MINUTES * 60_000;
 export const TOTAL_SESSION_MS = PHASE_DURATION_MS;
 export const QR_ROTATION_MS = 5_000;
 export const QR_GRACE_MS = 1_000;
@@ -33,8 +36,27 @@ type SessionStateCacheRow = {
   qrGraceMs: number;
 };
 
-export function getDefaultSessionEndsAt(startedAt: Date): Date {
-  return new Date(startedAt.getTime() + PHASE_DURATION_MS);
+export function normalizeSessionDurationMinutes(value?: number | null) {
+  const numericValue = Math.trunc(Number(value));
+  if (!Number.isFinite(numericValue)) {
+    return DEFAULT_SESSION_DURATION_MINUTES;
+  }
+
+  return Math.max(
+    MIN_SESSION_DURATION_MINUTES,
+    Math.min(MAX_SESSION_DURATION_MINUTES, numericValue)
+  );
+}
+
+export function getSessionDurationMs(durationMinutes?: number | null) {
+  return normalizeSessionDurationMinutes(durationMinutes) * 60_000;
+}
+
+export function getDefaultSessionEndsAt(
+  startedAt: Date,
+  durationMinutes: number = DEFAULT_SESSION_DURATION_MINUTES
+): Date {
+  return new Date(startedAt.getTime() + getSessionDurationMs(durationMinutes));
 }
 
 function serializeSessionStateRow(session: SessionStateRow): SessionStateCacheRow {

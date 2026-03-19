@@ -3,7 +3,11 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Loader2, Search, UserPlus, Trash2, Users } from "lucide-react";
-import { PageHeader } from "@/components/dashboard/page-header";
+import {
+  DashboardActionButton,
+  DashboardFieldCard,
+  getDashboardButtonClassName,
+} from "@/components/dashboard/dashboard-controls";
 
 type Student = {
   id: string;
@@ -36,16 +40,28 @@ function compareStudentsByName(a: Student, b: Student) {
   );
 }
 
+function formatCourseLevel(student: Student["cohort"]) {
+  if (!student) {
+    return null;
+  }
+
+  return (
+    student.displayName ||
+    `${student.department} Level ${student.level} ${student.groupCode}`
+  );
+}
+
 export function CourseEnrollmentManager({
   courseId,
-  courseCode,
-  courseName,
+  courseCode: _courseCode,
+  courseName: _courseName,
   backHref,
 }: CourseEnrollmentManagerProps) {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"addSelected" | "addAll" | null>(null);
+  const [removingStudentId, setRemovingStudentId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [levelFilter, setLevelFilter] = useState("ALL");
@@ -150,7 +166,7 @@ export function CourseEnrollmentManager({
   async function handleAdd() {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
-    setAdding(true);
+    setPendingAction("addSelected");
     try {
       const res = await fetch("/api/enrollments", {
         method: "POST",
@@ -164,7 +180,7 @@ export function CourseEnrollmentManager({
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Failed to add students");
     } finally {
-      setAdding(false);
+      setPendingAction(null);
     }
   }
 
@@ -172,7 +188,7 @@ export function CourseEnrollmentManager({
     const ids = availableStudents.map((student) => student.id);
     if (ids.length === 0) return;
     setSelectedIds(new Set(ids));
-    setAdding(true);
+    setPendingAction("addAll");
     try {
       const res = await fetch("/api/enrollments", {
         method: "POST",
@@ -186,12 +202,13 @@ export function CourseEnrollmentManager({
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Failed to add students");
     } finally {
-      setAdding(false);
+      setPendingAction(null);
     }
   }
 
   async function handleRemove(studentId: string) {
     if (!confirm("Remove this student from the course?")) return;
+    setRemovingStudentId(studentId);
     try {
       const res = await fetch(
         `/api/enrollments?courseId=${encodeURIComponent(courseId)}&studentId=${encodeURIComponent(studentId)}`,
@@ -204,6 +221,8 @@ export function CourseEnrollmentManager({
       await loadData();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Failed to remove student");
+    } finally {
+      setRemovingStudentId(null);
     }
   }
 
@@ -216,6 +235,8 @@ export function CourseEnrollmentManager({
     });
   }
 
+  const adding = pendingAction !== null;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -226,42 +247,35 @@ export function CourseEnrollmentManager({
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Course"
-        title={`${courseCode} - ${courseName}`}
-        description="Manage which students are enrolled in this course."
-        action={
-          <Link
-            href={backHref}
-            prefetch
-            className="inline-flex items-center rounded-md border border-border/70 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            Back
-          </Link>
-        }
-      />
+      <div className="flex justify-start">
+        <Link
+          href={backHref}
+          prefetch
+          className={getDashboardButtonClassName({ className: "w-full sm:w-auto sm:min-w-[108px]" })}
+        >
+          Back
+        </Link>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <div className="surface p-4">
-          <div className="mb-4 space-y-3">
-            <label className="relative block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search by name, email, student number, index number, or cohort..."
-                className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm"
-              />
-            </label>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1">
-                <span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                  Level
-                </span>
+        <div className="surface p-4 sm:p-5">
+          <div className="mb-4 grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.75fr)_minmax(0,1fr)]">
+            <DashboardFieldCard label="Search Students">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search by name, email, student number, index number, or course..."
+                  className="h-11 w-full rounded-xl border border-input bg-background pl-9 pr-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                />
+              </div>
+            </DashboardFieldCard>
+            <DashboardFieldCard label="Level">
                 <select
                   value={levelFilter}
                   onChange={(event) => setLevelFilter(event.target.value)}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 >
                   <option value="ALL">All levels</option>
                   {levelOptions.map((level) => (
@@ -270,25 +284,21 @@ export function CourseEnrollmentManager({
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                  Program / Cohort
-                </span>
+            </DashboardFieldCard>
+            <DashboardFieldCard label="Course / Level">
                 <select
                   value={cohortFilter}
                   onChange={(event) => setCohortFilter(event.target.value)}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 >
-                  <option value="ALL">All cohorts</option>
+                  <option value="ALL">All courses</option>
                   {cohortOptions.map((cohort) => (
                     <option key={cohort.id} value={cohort.id}>
                       {cohort.label}
                     </option>
                   ))}
                 </select>
-              </label>
-            </div>
+            </DashboardFieldCard>
           </div>
 
           <h2 className="mb-4 flex items-center gap-2 font-semibold">
@@ -302,8 +312,11 @@ export function CourseEnrollmentManager({
               </p>
             ) : (
               filteredEnrollments.map((e) => (
-                <div key={e.id} className="flex items-center justify-between rounded-md border border-border/70 bg-background/40 px-3 py-2">
-                  <div>
+                <div
+                  key={e.id}
+                  className="flex flex-col gap-3 rounded-md border border-border/70 bg-background/40 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
                     <p className="font-medium">{e.student.name}</p>
                     <p className="text-xs text-muted-foreground">
                       {e.student.email}
@@ -312,39 +325,43 @@ export function CourseEnrollmentManager({
                     </p>
                     {e.student.cohort ? (
                       <p className="text-xs text-muted-foreground">
-                        {e.student.cohort.displayName} · Level {e.student.cohort.level}
+                        {formatCourseLevel(e.student.cohort)}
                       </p>
                     ) : null}
                   </div>
-                  <button
+                  <DashboardActionButton
                     type="button"
-                    onClick={() => handleRemove(e.student.id)}
-                    className="rounded p-2 text-destructive hover:bg-destructive/10 transition-colors"
-                    aria-label="Remove"
+                    onClick={() => void handleRemove(e.student.id)}
+                    variant="danger"
+                    icon={Trash2}
+                    loading={removingStudentId === e.student.id}
+                    disabled={adding || removingStudentId === e.student.id}
+                    className="h-9 w-full px-3 sm:w-auto sm:min-w-[102px]"
                   >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                    Remove
+                  </DashboardActionButton>
                 </div>
               ))
             )}
           </div>
         </div>
 
-        <div className="surface p-4">
+        <div className="surface p-4 sm:p-5">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="flex items-center gap-2 font-semibold">
               <UserPlus className="h-5 w-5" />
               Add Students
             </h2>
-            <button
+            <DashboardActionButton
               type="button"
-              onClick={handleAddAllFiltered}
+              onClick={() => void handleAddAllFiltered()}
               disabled={adding || availableStudents.length === 0}
-              className="inline-flex items-center justify-center gap-2 rounded-md border border-border/70 px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              icon={Users}
+              loading={pendingAction === "addAll"}
+              className="w-full sm:w-auto sm:min-w-[178px]"
             >
-              {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
               Add All Filtered ({availableStudents.length})
-            </button>
+            </DashboardActionButton>
           </div>
           <div className="max-h-64 overflow-y-auto space-y-2 mb-4">
             {availableStudents.length === 0 ? (
@@ -353,17 +370,15 @@ export function CourseEnrollmentManager({
               </p>
             ) : (
               availableStudents.map((s) => (
-                <label
+                <div
                   key={s.id}
-                  className="flex cursor-pointer items-center gap-3 rounded-md border border-border/70 bg-background/40 px-3 py-2 hover:bg-muted/35"
+                  className={`flex flex-col gap-3 rounded-xl border px-3 py-3 transition-[background-color,border-color,box-shadow] duration-150 sm:flex-row sm:items-start sm:justify-between ${
+                    selectedIds.has(s.id)
+                      ? "border-primary/45 bg-primary/5 shadow-sm"
+                      : "border-border/70 bg-background/40 hover:bg-muted/35"
+                  }`}
                 >
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(s.id)}
-                    onChange={() => toggleSelect(s.id)}
-                    className="rounded border-input"
-                  />
-                  <div>
+                  <div className="min-w-0">
                     <p className="font-medium">{s.name}</p>
                     <p className="text-xs text-muted-foreground">
                       {s.email}
@@ -372,27 +387,35 @@ export function CourseEnrollmentManager({
                     </p>
                     {s.cohort ? (
                       <p className="text-xs text-muted-foreground">
-                        {s.cohort.displayName} · Level {s.cohort.level}
+                        {formatCourseLevel(s.cohort)}
                       </p>
                     ) : null}
                   </div>
-                </label>
+                  <DashboardActionButton
+                    type="button"
+                    onClick={() => toggleSelect(s.id)}
+                    variant={selectedIds.has(s.id) ? "primary" : "secondary"}
+                    pressed={selectedIds.has(s.id)}
+                    disabled={adding}
+                    className="h-9 w-full px-3 sm:w-auto sm:min-w-[108px] sm:shrink-0"
+                  >
+                    {selectedIds.has(s.id) ? "Selected" : "Select"}
+                  </DashboardActionButton>
+                </div>
               ))
             )}
           </div>
-          <button
+          <DashboardActionButton
             type="button"
-            onClick={handleAdd}
+            onClick={() => void handleAdd()}
             disabled={adding || selectedIds.size === 0}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            variant="primary"
+            icon={UserPlus}
+            loading={pendingAction === "addSelected"}
+            className="w-full sm:w-auto sm:min-w-[172px]"
           >
-            {adding ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <UserPlus className="h-4 w-4" />
-            )}
             Add {selectedIds.size > 0 ? `${selectedIds.size} ` : ""}Student{selectedIds.size !== 1 ? "s" : ""}
-          </button>
+          </DashboardActionButton>
         </div>
       </div>
     </div>

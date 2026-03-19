@@ -63,6 +63,7 @@ export async function GET(
 
   const phaseCompletion = await getStudentPhaseCompletionForCourseDay({
     studentId: user.id,
+    sessionFamilyId: attendanceSession.sessionFamilyId,
     courseId: attendanceSession.courseId,
     lecturerId: attendanceSession.lecturerId,
     referenceTime: attendanceSession.startedAt,

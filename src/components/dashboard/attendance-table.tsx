@@ -19,13 +19,13 @@ export function AttendanceTable({
   return (
     <div className="overflow-hidden rounded-xl border border-border/70 bg-background/40">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px]">
+        <table className="w-full min-w-[560px] sm:min-w-[640px]">
           <thead>
             <tr className="border-b border-border/70 bg-muted/35">
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground"
+                  className="px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground sm:px-4 sm:py-3 sm:text-[11px]"
                 >
                   {col.label}
                 </th>
@@ -37,7 +37,7 @@ export function AttendanceTable({
               <tr>
                 <td
                   colSpan={columns.length}
-                  className="px-4 py-12 text-center text-sm text-muted-foreground"
+                  className="px-3 py-10 text-center text-sm text-muted-foreground sm:px-4 sm:py-12"
                 >
                   {emptyMessage}
                 </td>
@@ -49,7 +49,10 @@ export function AttendanceTable({
                   className="border-b border-border/60 transition-colors hover:bg-muted/25 last:border-0"
                 >
                   {columns.map((col) => (
-                    <td key={col.key} className="px-4 py-3.5 text-sm text-foreground/90 align-middle">
+                    <td
+                      key={col.key}
+                      className="px-3 py-3 text-sm align-middle text-foreground/90 sm:px-4 sm:py-3.5"
+                    >
                       {row[col.key]}
                     </td>
                   ))}

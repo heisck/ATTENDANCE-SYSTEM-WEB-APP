@@ -93,7 +93,6 @@ function LoginForm() {
       pageLabel="Sign In"
       viewportMode="stable"
       contentMaxWidthClass="max-w-xl"
-      headerLink={{ href: "/register", label: "Sign Up" }}
     >
       <div className="mx-auto flex h-full w-full max-w-md flex-col">
         <form
@@ -165,23 +164,33 @@ function LoginForm() {
                 Forgot password?
               </Link>
             </div>
+
           </div>
 
           <div className="shrink-0 border-t border-border/70 px-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 sm:px-6 sm:pb-4">
-            <button
-              type="submit"
-              disabled={loading}
-              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Signing in...
-                </>
-              ) : (
-                "Sign In"
-              )}
-            </button>
+            <div className="space-y-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  "Sign In"
+                )}
+              </button>
+              <button
+                type="button"
+                disabled
+                className="inline-flex h-12 w-full cursor-not-allowed items-center justify-center rounded-xl border border-border/70 bg-muted/35 px-4 text-sm font-medium text-muted-foreground opacity-60"
+              >
+                Sign Up
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -197,7 +206,6 @@ export default function LoginPage() {
           pageLabel="Sign In"
           viewportMode="stable"
           contentMaxWidthClass="max-w-xl"
-          headerLink={{ href: "/register", label: "Sign Up" }}
         >
           <div className="flex w-full items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />

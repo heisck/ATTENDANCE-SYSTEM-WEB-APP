@@ -111,14 +111,14 @@ export async function GET(request: NextRequest) {
       { key: "email", label: "Email" },
       { key: "studentId", label: "Student Number" },
       { key: "indexNumber", label: "Index Number" },
-      { key: "cohort", label: "Cohort" },
+      { key: "cohort", label: "Course / Level" },
       { key: "markedAt", label: "Marked At" },
       { key: "confidence", label: "Confidence" },
       { key: "flagged", label: "Flagged" },
     ];
 
     const fileBase = sanitizeFilePart(
-      `${report.session.courseCode}_${report.session.date}_${report.session.phaseLabel}`
+      `${report.session.courseCode}_${report.session.date}_${report.session.sessionKind}_${report.session.id.slice(-6)}`
     );
 
     if (format === "pdf") {
@@ -215,7 +215,7 @@ export async function GET(request: NextRequest) {
     { key: "email", label: "Email" },
     { key: "studentId", label: "Student Number" },
     { key: "indexNumber", label: "Index Number" },
-    { key: "cohort", label: "Cohort" },
+    { key: "cohort", label: "Course / Level" },
     { key: "phaseOneDays", label: "Phase 1 Days" },
     { key: "phaseTwoDays", label: "Phase 2 Days" },
     { key: "fullyPresentDays", label: "Fully Present Days" },
@@ -234,7 +234,7 @@ export async function GET(request: NextRequest) {
         `Course: ${report.course.code} - ${report.course.name}`,
         `Class Days Held: ${report.totalClassDays}`,
         `Students Enrolled: ${report.totalStudents}`,
-        `Phase Rule: Full attendance requires both Phase 1 and Phase 2 on the same class day.`,
+        `Phase Rule: Full attendance requires both Phase 1 and Phase 2 in the same class session.`,
       ],
       columns,
       rows: courseRows,

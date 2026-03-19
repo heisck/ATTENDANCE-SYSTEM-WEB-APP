@@ -1,8 +1,13 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { Loader2, RefreshCcw, Save, TrendingUp } from "lucide-react";
+import { RefreshCcw, Save, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
+import {
+  DashboardActionButton,
+  DashboardBinaryChoiceField,
+  DashboardFieldCard,
+} from "@/components/dashboard/dashboard-controls";
 import type {
   AcademicCalendarSettings,
   AcademicProgressionSettings,
@@ -172,14 +177,15 @@ export function StudentHubGovernanceForm({
             Control module enablement, academic calendar behavior, and trial/payment access for this organization.
           </p>
         </div>
-        <button
+        <DashboardActionButton
           type="submit"
           disabled={saving}
-          className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          variant="primary"
+          icon={Save}
+          loading={saving}
         >
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Save Settings
-        </button>
+        </DashboardActionButton>
       </div>
 
       <section className="space-y-3">
@@ -211,10 +217,7 @@ export function StudentHubGovernanceForm({
       <section className="space-y-3 border-t border-border/70 pt-5">
         <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Academic Calendar</p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="space-y-1 text-sm">
-            <span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-              Current Semester
-            </span>
+          <DashboardFieldCard label="Current Semester">
             <select
               value={String(academicCalendar.currentSemester)}
               onChange={(event) =>
@@ -223,12 +226,12 @@ export function StudentHubGovernanceForm({
                   currentSemester: event.target.value === "2" ? 2 : 1,
                 }))
               }
-              className="h-10 w-full rounded-md border border-input bg-background px-3"
+              className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               <option value="1">Semester 1</option>
               <option value="2">Semester 2</option>
             </select>
-          </label>
+          </DashboardFieldCard>
           <ToggleField
             label="Exam Mode Active"
             checked={academicCalendar.examMode}
@@ -236,15 +239,15 @@ export function StudentHubGovernanceForm({
           />
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
+          <DashboardActionButton
             type="button"
             onClick={() => void advanceSemester()}
             disabled={advancingSemester}
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-border px-4 text-sm font-medium hover:bg-accent disabled:opacity-50"
+            icon={RefreshCcw}
+            loading={advancingSemester}
           >
-            {advancingSemester ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
             Advance Semester
-          </button>
+          </DashboardActionButton>
         </div>
       </section>
 
@@ -253,8 +256,7 @@ export function StudentHubGovernanceForm({
           Academic Progression
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="space-y-1 text-sm">
-            <span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Max Level</span>
+          <DashboardFieldCard label="Max Level">
             <input
               type="number"
               min={100}
@@ -266,24 +268,24 @@ export function StudentHubGovernanceForm({
                   maxLevel: Math.max(100, Number(event.target.value || 400)),
                 }))
               }
-              className="h-10 w-full rounded-md border border-input bg-background px-3"
+              className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             />
-          </label>
+          </DashboardFieldCard>
           <ToggleField
             label="Archive Graduates on Promotion"
             checked={academicProgression.archiveGraduates}
             onChange={(checked) => setAcademicProgression((prev) => ({ ...prev, archiveGraduates: checked }))}
           />
         </div>
-        <button
+        <DashboardActionButton
           type="button"
           onClick={() => void promoteAcademicLevels()}
           disabled={promotingLevels}
-          className="inline-flex h-10 items-center gap-2 rounded-md border border-border px-4 text-sm font-medium hover:bg-accent disabled:opacity-50"
+          icon={TrendingUp}
+          loading={promotingLevels}
         >
-          {promotingLevels ? <Loader2 className="h-4 w-4 animate-spin" /> : <TrendingUp className="h-4 w-4" />}
           Increase Academic Levels
-        </button>
+        </DashboardActionButton>
       </section>
 
       <section className="space-y-3 border-t border-border/70 pt-5">
@@ -306,10 +308,7 @@ export function StudentHubGovernanceForm({
             checked={billing.lockAfterTrial}
             onChange={(checked) => setBilling((prev) => ({ ...prev, lockAfterTrial: checked }))}
           />
-          <label className="space-y-1 text-sm">
-            <span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-              Payment Amount
-            </span>
+          <DashboardFieldCard label="Payment Amount">
             <input
               type="number"
               min={0}
@@ -318,40 +317,33 @@ export function StudentHubGovernanceForm({
               onChange={(event) =>
                 setBilling((prev) => ({ ...prev, paymentAmount: Math.max(0, Number(event.target.value || 0)) }))
               }
-              className="h-10 w-full rounded-md border border-input bg-background px-3"
+              className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Currency</span>
+          </DashboardFieldCard>
+          <DashboardFieldCard label="Currency">
             <input
               value={billing.paymentCurrency}
               onChange={(event) => setBilling((prev) => ({ ...prev, paymentCurrency: event.target.value }))}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 uppercase"
+              className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               maxLength={5}
             />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-              Trial Starts At
-            </span>
+          </DashboardFieldCard>
+          <DashboardFieldCard label="Trial Starts At">
             <input
               type="datetime-local"
               value={trialStartsAtInput}
               onChange={(event) => setTrialStartsAtInput(event.target.value)}
-              className="h-10 w-full rounded-md border border-input bg-background px-3"
+              className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-              Trial Ends At
-            </span>
+          </DashboardFieldCard>
+          <DashboardFieldCard label="Trial Ends At">
             <input
               type="datetime-local"
               value={trialEndsAtInput}
               onChange={(event) => setTrialEndsAtInput(event.target.value)}
-              className="h-10 w-full rounded-md border border-input bg-background px-3"
+              className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             />
-          </label>
+          </DashboardFieldCard>
         </div>
         <p className="text-xs text-muted-foreground">Trial status: {trialWindowState}</p>
       </section>
@@ -369,14 +361,13 @@ function ToggleField({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="flex items-center justify-between gap-3 rounded-md border border-border/70 bg-background/30 px-3 py-2 text-sm">
-      <span>{label}</span>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        className="h-4 w-4 rounded border-input"
-      />
-    </label>
+    <DashboardBinaryChoiceField
+      label={label}
+      value={checked}
+      onChange={onChange}
+      trueLabel="Enabled"
+      falseLabel="Disabled"
+      className="h-full"
+    />
   );
 }
