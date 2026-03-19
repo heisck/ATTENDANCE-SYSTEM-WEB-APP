@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { getQrSequence, verifyBleTokenForSequence } from "@/lib/qr";
 import { logError, ApiErrorMessages } from "@/lib/api-error";
 import { setBrowserDeviceProofCookie } from "@/lib/browser-device-proof";
 import { SharedRedisRequiredError } from "@/lib/cache";
+import { createPendingAttendanceFaceVerification } from "@/lib/face";
 import {
   AttendanceRequestError,
   BrowserDeviceVerificationError,
@@ -162,35 +162,22 @@ export async function POST(request: NextRequest) {
         )
       );
 
-      await db.pendingAttendanceFaceVerification.updateMany({
-        where: {
-          userId: session.user.id,
-          sessionId: context.attendanceSession.id,
-          consumedAt: null,
-        },
-        data: {
-          consumedAt: new Date(),
-        },
-      });
-
-      const pending = await db.pendingAttendanceFaceVerification.create({
-        data: {
-          userId: session.user.id,
-          sessionId: context.attendanceSession.id,
-          sessionFamilyId: context.attendanceSession.sessionFamilyId,
-          phase: context.syncedSession.phase,
-          source: "BLE",
-          qrToken: built.recordData.qrToken,
-          confidence: built.confidence,
-          flagged: built.flagged,
-          deviceToken: built.recordData.deviceToken,
-          bleSignalStrength: built.recordData.bleSignalStrength,
-          deviceConsistency: built.recordData.deviceConsistency,
-          anomalyScore: built.recordData.anomalyScore,
-          responseLayers: built.responseLayers as Prisma.InputJsonValue,
-          anomalyDetails: (built.anomalyDetails ?? {}) as Prisma.InputJsonValue,
-          expiresAt: provisionalExpiresAt,
-        },
+      const pending = await createPendingAttendanceFaceVerification({
+        userId: session.user.id,
+        sessionId: context.attendanceSession.id,
+        sessionFamilyId: context.attendanceSession.sessionFamilyId,
+        phase: context.syncedSession.phase,
+        source: "BLE",
+        qrToken: built.recordData.qrToken,
+        confidence: built.confidence,
+        flagged: built.flagged,
+        deviceToken: built.recordData.deviceToken,
+        bleSignalStrength: built.recordData.bleSignalStrength,
+        deviceConsistency: built.recordData.deviceConsistency,
+        anomalyScore: built.recordData.anomalyScore,
+        responseLayers: built.responseLayers as Prisma.InputJsonValue,
+        anomalyDetails: (built.anomalyDetails ?? {}) as Prisma.InputJsonValue,
+        expiresAt: provisionalExpiresAt,
       });
 
       const response = NextResponse.json({

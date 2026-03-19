@@ -10,7 +10,13 @@ import {
   GetCredentialsForIdentityCommand,
   GetIdCommand,
 } from "@aws-sdk/client-cognito-identity";
-import { FaceFlowPurpose, FaceVerificationStatus, Prisma } from "@prisma/client";
+import {
+  FaceFlowPurpose,
+  FaceVerificationStatus,
+  Prisma,
+  type AttendancePhase,
+  type AttendanceVerificationSource,
+} from "@prisma/client";
 import { db } from "@/lib/db";
 import { destroyCloudinaryAsset, uploadCloudinaryAsset } from "@/lib/cloudinary";
 import { createExpiryDate, createRawToken, hashToken } from "@/lib/tokens";
@@ -276,6 +282,68 @@ async function logFaceFailure(input: {
       failureReason: input.failureReason,
     },
   });
+}
+
+export async function createPendingAttendanceFaceVerification(input: {
+  userId: string;
+  sessionId: string;
+  sessionFamilyId: string | null;
+  phase: AttendancePhase;
+  source: AttendanceVerificationSource;
+  qrToken: string;
+  confidence: number;
+  flagged: boolean;
+  deviceToken: string | null;
+  bleSignalStrength: number | null;
+  deviceConsistency: number | null;
+  anomalyScore: number | null;
+  responseLayers: Prisma.InputJsonValue;
+  anomalyDetails: Prisma.InputJsonValue;
+  expiresAt: Date;
+}) {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await db.$transaction(
+        async (tx) => {
+          await tx.pendingAttendanceFaceVerification.findFirst({
+            where: {
+              userId: input.userId,
+              sessionId: input.sessionId,
+              consumedAt: null,
+            },
+            select: { id: true },
+          });
+
+          await tx.pendingAttendanceFaceVerification.updateMany({
+            where: {
+              userId: input.userId,
+              sessionId: input.sessionId,
+              consumedAt: null,
+            },
+            data: {
+              consumedAt: new Date(),
+            },
+          });
+
+          return tx.pendingAttendanceFaceVerification.create({
+            data: input,
+          });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+      );
+    } catch (error) {
+      lastError = error;
+      const code = (error as { code?: string } | null)?.code;
+      if (code === "P2034" && attempt < 2) {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw lastError;
 }
 
 async function requireValidFaceFlowToken(rawToken: string, purpose: FaceFlowPurpose) {
