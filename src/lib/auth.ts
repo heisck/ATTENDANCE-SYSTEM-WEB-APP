@@ -137,6 +137,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: user.name,
           role: user.role,
           organizationId: user.organizationId,
+          image: user.image,
         };
       },
     }),
@@ -147,15 +148,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id as string;
         token.role = (user as any).role;
         token.organizationId = ((user as any).organizationId ?? null) as string | null;
+        token.image = ((user as any).image ?? null) as string | null;
       }
 
       // Self-heal older/incomplete JWT payloads by hydrating role/org from DB.
-      if ((!token.role || !token.id) && token.sub) {
+      if ((!token.role || !token.id || token.image == null) && token.sub) {
         const dbUser = await db.user.findUnique({
           where: { id: token.sub },
           select: {
             role: true,
             organizationId: true,
+            image: true,
           },
         });
 
@@ -163,6 +166,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.id = token.sub;
           token.role = dbUser.role;
           token.organizationId = dbUser.organizationId;
+          token.image = dbUser.image;
         }
       }
 
@@ -174,6 +178,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.id = resolvedId as string;
         session.user.role = token.role as any;
         session.user.organizationId = (token.organizationId as string | null) ?? null;
+        session.user.image = (token.image as string | null | undefined) ?? null;
       }
       return session;
     },

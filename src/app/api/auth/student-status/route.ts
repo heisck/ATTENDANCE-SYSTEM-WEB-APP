@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getStudentGateState } from "@/lib/student-gates";
 import {
   getAcademicCalendarSettings,
   getEffectiveFeatureFlags,
@@ -19,12 +20,14 @@ export async function GET() {
       role: user.role,
       requiresProfileCompletion: false,
       personalEmailVerified: true,
+      hasFaceEnrollment: true,
+      requiresFaceEnrollment: false,
       hasPasskey: true,
       canProceed: true,
     });
   }
 
-  const [student, credentialCount] = await Promise.all([
+  const [student, gate] = await Promise.all([
     db.user.findUnique({
       where: { id: user.id },
       select: {
@@ -48,19 +51,23 @@ export async function GET() {
         },
       },
     }),
-    db.webAuthnCredential.count({
-      where: { userId: user.id },
-    }),
+    getStudentGateState(user.id),
   ]);
 
   if (!student) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const requiresProfileCompletion = !student.personalEmail;
-  const personalEmailVerified = Boolean(student.personalEmailVerifiedAt);
-  const hasPasskey = credentialCount > 0;
-  const canProceed = !requiresProfileCompletion && personalEmailVerified && hasPasskey;
+  const requiresProfileCompletion = gate.requiresProfileCompletion;
+  const personalEmailVerified = !gate.requiresEmailVerification;
+  const hasFaceEnrollment = gate.hasFaceEnrollment;
+  const requiresFaceEnrollment = gate.requiresFaceEnrollment;
+  const hasPasskey = gate.hasPasskey;
+  const canProceed =
+    !requiresProfileCompletion &&
+    personalEmailVerified &&
+    hasFaceEnrollment &&
+    hasPasskey;
   const settings = student.organization?.settings;
   const cohortId = student.cohort?.id || null;
   const rawFeatureFlags = getEffectiveFeatureFlags(settings, cohortId);
@@ -95,6 +102,8 @@ export async function GET() {
     role: user.role,
     requiresProfileCompletion,
     personalEmailVerified,
+    hasFaceEnrollment,
+    requiresFaceEnrollment,
     hasPasskey,
     canProceed,
     featureFlags,

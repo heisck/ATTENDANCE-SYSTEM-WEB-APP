@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { issueEnrollmentFaceFlowToken } from "@/lib/face";
 import { hashToken } from "@/lib/tokens";
 
 export async function GET(request: NextRequest) {
@@ -116,5 +117,10 @@ export async function GET(request: NextRequest) {
     }
   });
 
-  return NextResponse.json({ success: true });
+  const enrollment = await issueEnrollmentFaceFlowToken(verification.userId);
+  return NextResponse.json({
+    success: true,
+    nextUrl: `/face-enroll?token=${encodeURIComponent(enrollment.token)}`,
+    expiresAt: enrollment.expiresAt.toISOString(),
+  });
 }

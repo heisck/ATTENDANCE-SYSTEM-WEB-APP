@@ -14,7 +14,12 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-svh bg-background">
-      <Sidebar role={user.role} userName={user.name || user.email || ""} userEmail={user.email || ""} />
+      <Sidebar
+        role={user.role}
+        userName={user.name || user.email || ""}
+        userEmail={user.email || ""}
+        userImage={user.image || null}
+      />
       <main
         className="min-w-0 pt-16"
         style={{ paddingBottom: "calc(6.5rem + env(safe-area-inset-bottom))" }}

@@ -104,6 +104,7 @@ export async function GET(
       flagged: true,
       confidence: true,
       webauthnUsed: true,
+      faceVerified: true,
       qrToken: true,
       bleSignalStrength: true,
     },
@@ -132,6 +133,7 @@ export async function GET(
             webauthn: Boolean(record.webauthnUsed),
             qr: typeof record.qrToken === "string" && record.qrToken.length > 0,
             ble: record.bleSignalStrength != null,
+            face: record.faceVerified,
           },
         }
       : null,

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const attendanceRecordCreateMock = vi.fn();
 const attendanceAnomalyCreateManyMock = vi.fn();
+const transactionMock = vi.fn();
 const cacheDelMock = vi.fn();
 const linkDeviceMock = vi.fn();
 const getDeviceConsistencyScoreMock = vi.fn();
@@ -15,6 +16,7 @@ const hasValidBrowserDeviceProofMock = vi.fn();
 
 vi.mock("@/lib/db", () => ({
   db: {
+    $transaction: transactionMock,
     attendanceRecord: {
       create: attendanceRecordCreateMock,
     },
@@ -72,6 +74,10 @@ vi.mock("@/lib/phase-completion", () => ({
     invalidateStudentPhaseCompletionForCourseDayMock,
 }));
 
+vi.mock("@/lib/face", () => ({
+  hasSuccessfulPhaseOneFaceVerificationForCourseDay: vi.fn().mockResolvedValue(true),
+}));
+
 const { AttendanceAlreadyMarkedError, executeAttendanceMark } = await import(
   "@/lib/attendance-marking"
 );
@@ -82,6 +88,16 @@ describe("executeAttendanceMark", () => {
 
     attendanceRecordCreateMock.mockResolvedValue({ id: "record-1" });
     attendanceAnomalyCreateManyMock.mockResolvedValue({ count: 1 });
+    transactionMock.mockImplementation(async (callback: any) =>
+      callback({
+        attendanceRecord: {
+          create: attendanceRecordCreateMock,
+        },
+        pendingAttendanceFaceVerification: {
+          update: vi.fn(),
+        },
+      })
+    );
     cacheDelMock.mockResolvedValue(true);
     linkDeviceMock.mockResolvedValue({
       id: "device-1",
@@ -204,6 +220,7 @@ describe("executeAttendanceMark", () => {
     expect(deletedKeys).not.toContain("student:live-sessions:student-1");
     expect(invalidateStudentPhaseCompletionForCourseDayMock).toHaveBeenCalledWith({
       studentId: "student-1",
+      sessionFamilyId: undefined,
       courseId: "course-1",
       lecturerId: "lecturer-1",
       referenceTime: new Date("2026-03-17T10:00:00.000Z"),

@@ -33,6 +33,29 @@ enum AttendanceSessionFlow {
   PHASE_TWO_FOLLOW_UP
 }
 
+enum FaceFlowPurpose {
+  ENROLLMENT
+  ATTENDANCE_PHASE_ONE
+}
+
+enum FaceEnrollmentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum FaceVerificationStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  EXPIRED
+}
+
+enum AttendanceVerificationSource {
+  QR
+  BLE
+}
+
 enum SubscriptionPlan {
   FREE
   BASIC
@@ -158,6 +181,10 @@ model User {
   lecturerInvitesCreated         LecturerInvite[]         @relation("LecturerInvitesCreatedBy")
   emailVerificationTokens        EmailVerificationToken[]
   passwordResetTokens            PasswordResetToken[]
+  faceEnrollment                 FaceEnrollment?
+  faceFlowTokens                 FaceFlowToken[]
+  pendingFaceVerifications       PendingAttendanceFaceVerification[]
+  faceVerificationLogs           FaceVerificationLog[]
   pushSubscriptions              PushSubscription[]
   notifications                  UserNotification[]
   userDevices                    UserDevice[]
@@ -693,6 +720,8 @@ model AttendanceSession {
   course         Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
   lecturer       User                 @relation("LecturerSessions", fields: [lecturerId], references: [id])
   records        AttendanceRecord[]
+  pendingFaceVerifications PendingAttendanceFaceVerification[]
+  faceVerificationLogs     FaceVerificationLog[]
   relayDevices   BleRelayDevice[]     @relation("RelayDevices")
   broadcastState RelayBroadcastState? @relation("BroadcastState")
   qrPortRequests QrPortRequest[]      @relation("SessionQrPortRequests")
@@ -713,6 +742,7 @@ model AttendanceRecord {
   studentId    String
   qrToken      String
   webauthnUsed Boolean @default(true)
+  faceVerified Boolean @default(false)
   confidence   Int     @default(0)
   flagged      Boolean @default(false)
   // New device and security fields
@@ -732,6 +762,96 @@ model AttendanceRecord {
   @@index([flagged])
   @@index([anomalyScore])
   @@index([deviceToken])
+  @@index([faceVerified])
+}
+
+model FaceEnrollment {
+  id                 String               @id @default(cuid())
+  userId             String               @unique
+  status             FaceEnrollmentStatus @default(PENDING)
+  primaryImageUrl    String?
+  primaryImagePublicId String?
+  livenessScore      Float?
+  qualityMetadata    Json                 @default("{}")
+  lastLivenessSessionId String?
+  enrolledAt         DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+model FaceFlowToken {
+  id        String          @id @default(cuid())
+  userId    String
+  tokenHash String          @unique
+  purpose   FaceFlowPurpose @default(ENROLLMENT)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime        @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose, expiresAt])
+}
+
+model PendingAttendanceFaceVerification {
+  id                 String                       @id @default(cuid())
+  userId             String
+  sessionId          String
+  sessionFamilyId    String?
+  phase              AttendancePhase             @default(PHASE_ONE)
+  source             AttendanceVerificationSource
+  livenessSessionId  String?                     @unique
+  qrToken            String
+  confidence         Int
+  flagged            Boolean                     @default(false)
+  deviceToken        String?
+  bleSignalStrength  Int?
+  deviceConsistency  Float?
+  anomalyScore       Float?
+  responseLayers     Json                        @default("{}")
+  anomalyDetails     Json                        @default("{}")
+  expiresAt          DateTime
+  consumedAt         DateTime?
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  user    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  logs    FaceVerificationLog[]
+
+  @@index([userId, sessionId, expiresAt])
+  @@index([sessionFamilyId])
+  @@index([livenessSessionId])
+}
+
+model FaceVerificationLog {
+  id                    String                @id @default(cuid())
+  userId                String
+  sessionId             String?
+  pendingVerificationId String?
+  purpose               FaceFlowPurpose
+  status                FaceVerificationStatus
+  livenessSessionId     String?
+  livenessScore         Float?
+  faceSimilarity        Float?
+  failureReason         String?
+  referenceImageUrl     String?
+  metadata              Json                  @default("{}")
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  user                User                              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session             AttendanceSession?                @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  pendingVerification PendingAttendanceFaceVerification? @relation(fields: [pendingVerificationId], references: [id], onDelete: SetNull)
+
+  @@index([userId, purpose, createdAt])
+  @@index([sessionId, status])
+  @@index([pendingVerificationId])
+  @@index([livenessSessionId])
 }
 
 model AuditLog {

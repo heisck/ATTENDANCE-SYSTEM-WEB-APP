@@ -245,10 +245,12 @@ export function Sidebar({
   role,
   userName,
   userEmail,
+  userImage,
 }: {
   role: string;
   userName: string;
   userEmail?: string | null;
+  userImage?: string | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -610,6 +612,7 @@ export function Sidebar({
             role={role}
             userName={userName}
             userEmail={userEmail}
+            userImage={userImage}
             profileHref={profileHref}
             canSwitchHubs={role === "STUDENT"}
             studentHubEnabled={studentFlags.studentHubCore}

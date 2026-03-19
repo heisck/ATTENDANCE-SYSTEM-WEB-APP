@@ -30,6 +30,7 @@ import {
   invalidateStudentPhaseCompletionForCourseDay,
   type StudentPhaseCompletion,
 } from "@/lib/phase-completion";
+import { hasSuccessfulPhaseOneFaceVerificationForCourseDay } from "@/lib/face";
 
 const ATTENDANCE_SESSION_META_TTL_SECONDS = 5 * 60;
 
@@ -132,6 +133,54 @@ export class AttendanceAlreadyMarkedError extends AttendanceRequestError {
 export type PreparedAttendanceMarkContext = {
   syncedSession: NonNullable<Awaited<ReturnType<typeof syncAttendanceSessionState>>>;
   attendanceSession: AttendanceSessionMeta;
+};
+
+type AttendanceRecordDraft = {
+  sessionId: string;
+  studentId: string;
+  qrToken: string;
+  webauthnUsed: boolean;
+  confidence: number;
+  flagged: boolean;
+  deviceToken: string | null;
+  bleSignalStrength: number | null;
+  deviceConsistency: number;
+  anomalyScore: number;
+};
+
+export type BuiltAttendanceMark = {
+  recordData: AttendanceRecordDraft;
+  phaseCompletion: StudentPhaseCompletion | null;
+  flagged: boolean;
+  confidence: number;
+  deviceMismatch: boolean;
+  deviceConsistency: number;
+  anomalyDetails?: Record<string, unknown>;
+  responseLayers: {
+    webauthn: boolean;
+    qr: boolean | null;
+    ble: boolean | null;
+    deviceConsistent: boolean;
+    face?: boolean | null;
+  };
+  browserDeviceBinding: {
+    deviceToken: string;
+    fingerprintHash: string;
+  } | null;
+  deviceLinkResult: {
+    id: string;
+    isNewDevice: boolean;
+    trustedAt: Date | null;
+  } | null;
+};
+
+export type PersistedAttendanceMark = BuiltAttendanceMark & {
+  record: {
+    id: string;
+    confidence: number;
+    flagged: boolean;
+    faceVerified: boolean;
+  };
 };
 
 function serializeAttendanceSessionMeta(
@@ -298,14 +347,24 @@ export async function prepareAttendanceMarkContext(input: {
   let studentState = await cacheGet<{
     personalEmail: string | null;
     personalEmailVerifiedAt: string | Date | null;
+    faceEnrollment?: {
+      status: string;
+      primaryImageUrl: string | null;
+    } | null;
   }>(cacheKey);
 
-  if (!studentState) {
+  if (!studentState || !("faceEnrollment" in studentState)) {
     const result = await db.user.findUnique({
       where: { id: input.studentId },
       select: {
         personalEmail: true,
         personalEmailVerifiedAt: true,
+        faceEnrollment: {
+          select: {
+            status: true,
+            primaryImageUrl: true,
+          },
+        },
       },
     });
     studentState = result;
@@ -317,6 +376,16 @@ export async function prepareAttendanceMarkContext(input: {
   if (!studentState?.personalEmail || !studentState.personalEmailVerifiedAt) {
     throw new AttendanceRequestError(
       "Complete and verify your personal email before attendance.",
+      403
+    );
+  }
+
+  if (
+    studentState.faceEnrollment?.status !== "COMPLETED" ||
+    !studentState.faceEnrollment.primaryImageUrl
+  ) {
+    throw new AttendanceRequestError(
+      "Complete face enrollment before attendance.",
       403
     );
   }
@@ -388,6 +457,22 @@ export async function prepareAttendanceMarkContext(input: {
       );
     }
 
+    const hasSuccessfulPhaseOneFaceVerification =
+      await hasSuccessfulPhaseOneFaceVerificationForCourseDay({
+        userId: input.studentId,
+        sessionFamilyId: attendanceSession.sessionFamilyId,
+        courseId: attendanceSession.courseId,
+        lecturerId: attendanceSession.lecturerId,
+        referenceTime: attendanceSession.startedAt,
+      });
+
+    if (!hasSuccessfulPhaseOneFaceVerification) {
+      throw new AttendanceRequestError(
+        "Your Phase 1 face verification is required before you can mark Phase 2.",
+        403
+      );
+    }
+
     if (phaseCompletionGate.phaseTwoDone) {
       throw new AttendanceRequestError(
         "You already completed Phase 2 for this class.",
@@ -402,7 +487,7 @@ export async function prepareAttendanceMarkContext(input: {
   } as PreparedAttendanceMarkContext;
 }
 
-export async function executeAttendanceMark(input: {
+export async function buildAttendanceMark(input: {
   request: NextRequest;
   studentId: string;
   context: PreparedAttendanceMarkContext;
@@ -410,7 +495,7 @@ export async function executeAttendanceMark(input: {
   recordQrToken: string;
   loadBleStats?: boolean;
   buildSecurity: (input: SecurityBuildInput) => SecurityBuildOutput;
-}) {
+}): Promise<BuiltAttendanceMark> {
   const deviceContext = resolveDeviceContext(input.request, input.studentId, input.body);
 
   const deviceLinkResult = await linkDevice(input.studentId, deviceContext.deviceToken, {
@@ -462,26 +547,96 @@ export async function executeAttendanceMark(input: {
       ? settings.confidenceThreshold
       : 70;
   const flagged = isFlagged(confidence, threshold, deviceMismatch);
+  return {
+    recordData: {
+      sessionId: input.context.attendanceSession.id,
+      studentId: input.studentId,
+      qrToken: input.recordQrToken,
+      webauthnUsed: true,
+      confidence,
+      flagged,
+      deviceToken: deviceContext.deviceToken,
+      bleSignalStrength: security.recordBleSignalStrength ?? null,
+      deviceConsistency,
+      anomalyScore: deviceMismatch ? Math.max(0, 100 - confidence) : 0,
+    },
+    phaseCompletion: null,
+    flagged,
+    confidence,
+    deviceMismatch,
+    deviceConsistency,
+    anomalyDetails: security.anomalyDetails,
+    deviceLinkResult,
+    browserDeviceBinding:
+      deviceContext.isBrowserClient && deviceContext.fingerprint
+        ? {
+            deviceToken: deviceContext.deviceToken,
+            fingerprintHash: deviceContext.fingerprint,
+          }
+        : null,
+    responseLayers: {
+      webauthn: true,
+      ...security.responseLayers,
+      deviceConsistent: !deviceMismatch,
+    },
+  };
+}
 
-  let record;
+export async function persistAttendanceMark(input: {
+  studentId: string;
+  context: PreparedAttendanceMarkContext;
+  built: BuiltAttendanceMark;
+  faceVerified?: boolean;
+  consumePendingVerificationId?: string | null;
+}): Promise<PersistedAttendanceMark> {
+  const faceVerified = input.faceVerified ?? false;
+
+  let record:
+    | {
+        id: string;
+        confidence: number;
+        flagged: boolean;
+        faceVerified: boolean;
+      }
+    | undefined;
+
   try {
-    record = await db.attendanceRecord.create({
-      data: {
-        sessionId: input.context.attendanceSession.id,
-        studentId: input.studentId,
-        qrToken: input.recordQrToken,
-        webauthnUsed: true,
-        confidence,
-        flagged,
-        deviceToken: deviceContext.deviceToken,
-        bleSignalStrength: security.recordBleSignalStrength ?? null,
-        deviceConsistency,
-        anomalyScore: deviceMismatch ? Math.max(0, 100 - confidence) : 0,
-      },
+    await db.$transaction(async (tx) => {
+      record = await tx.attendanceRecord.create({
+        data: {
+          ...input.built.recordData,
+          faceVerified,
+        },
+        select: {
+          id: true,
+          confidence: true,
+          flagged: true,
+          faceVerified: true,
+        },
+      });
+
+      if (input.consumePendingVerificationId) {
+        await tx.pendingAttendanceFaceVerification.update({
+          where: { id: input.consumePendingVerificationId },
+          data: {
+            consumedAt: new Date(),
+          },
+        });
+      }
     });
   } catch (error) {
     const code = (error as { code?: string })?.code;
     if (code === "P2002") {
+      if (input.consumePendingVerificationId) {
+        await db.pendingAttendanceFaceVerification.updateMany({
+          where: {
+            id: input.consumePendingVerificationId,
+          },
+          data: {
+            consumedAt: new Date(),
+          },
+        });
+      }
       throw new AttendanceAlreadyMarkedError();
     }
     throw error;
@@ -512,7 +667,7 @@ export async function executeAttendanceMark(input: {
     });
   }
 
-  if (deviceMismatch && flagged) {
+  if (input.built.deviceMismatch && input.built.flagged) {
     try {
       await db.attendanceAnomaly.createMany({
         data: [
@@ -521,11 +676,11 @@ export async function executeAttendanceMark(input: {
             sessionId: input.context.attendanceSession.id,
             anomalyType: "DEVICE_MISMATCH",
             severity: 40,
-            confidence: deviceConsistency / 100,
+            confidence: input.built.deviceConsistency / 100,
             details: {
-              consistency: deviceConsistency,
-              isNewDevice: deviceLinkResult.isNewDevice,
-              ...(security.anomalyDetails ?? {}),
+              consistency: input.built.deviceConsistency,
+              isNewDevice: input.built.deviceLinkResult?.isNewDevice ?? false,
+              ...(input.built.anomalyDetails ?? {}),
             },
           } as never,
         ],
@@ -553,24 +708,33 @@ export async function executeAttendanceMark(input: {
   ]);
 
   return {
-    record,
+    ...input.built,
     phaseCompletion,
-    flagged,
-    confidence,
-    deviceMismatch,
-    browserDeviceBinding:
-      deviceContext.isBrowserClient && deviceContext.fingerprint
-        ? {
-            deviceToken: deviceContext.deviceToken,
-            fingerprintHash: deviceContext.fingerprint,
-          }
-        : null,
     responseLayers: {
-      webauthn: true,
-      ...security.responseLayers,
-      deviceConsistent: !deviceMismatch,
+      ...input.built.responseLayers,
+      face: faceVerified ? true : null,
     },
+    record: record!,
   };
+}
+
+export async function executeAttendanceMark(input: {
+  request: NextRequest;
+  studentId: string;
+  context: PreparedAttendanceMarkContext;
+  body: DevicePayload;
+  recordQrToken: string;
+  loadBleStats?: boolean;
+  buildSecurity: (input: SecurityBuildInput) => SecurityBuildOutput;
+}) {
+  const built = await buildAttendanceMark(input);
+
+  return persistAttendanceMark({
+    studentId: input.studentId,
+    context: input.context,
+    built,
+    faceVerified: false,
+  });
 }
 
 export { BrowserDeviceVerificationError, DeviceTokenConflictError };

@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  Camera,
   BadgeCheck,
   CalendarClock,
   Eye,
@@ -19,6 +20,7 @@ type StudentProfile = {
   role: string;
   name: string;
   email: string;
+  image: string | null;
   studentId: string | null;
   indexNumber: string | null;
   personalEmail: string | null;
@@ -172,6 +174,29 @@ export default function StudentProfilePage() {
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
         <section className="space-y-6">
+          <div className="surface p-5 sm:p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+              <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl border border-border/70 bg-muted/40">
+                {profile.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={profile.image}
+                    alt={`${profile.name} profile`}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <Camera className="h-8 w-8 text-muted-foreground" />
+                )}
+              </div>
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold tracking-tight">Profile Photo</h2>
+                <p className="text-sm text-muted-foreground">
+                  Your enrolled face image is used as your profile photo and primary face reference.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div className="surface p-5 sm:p-6">
             <div className="mb-5 flex items-start gap-3">
               <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/70 bg-muted/40">

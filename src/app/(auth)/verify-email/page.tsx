@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 export default function VerifyEmailPage() {
+  const router = useRouter();
   const [token, setToken] = useState("");
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [error, setError] = useState<string>("");
+  const [nextUrl, setNextUrl] = useState<string | null>(null);
 
   useEffect(() => {
     setToken(new URLSearchParams(window.location.search).get("token") || "");
@@ -27,6 +30,11 @@ export default function VerifyEmailPage() {
         if (!res.ok) {
           throw new Error(data.error || "Verification failed");
         }
+        if (typeof data.nextUrl === "string" && data.nextUrl.length > 0) {
+          setNextUrl(data.nextUrl);
+          router.replace(data.nextUrl);
+          return;
+        }
         setStatus("success");
       } catch (err: any) {
         setStatus("error");
@@ -35,7 +43,7 @@ export default function VerifyEmailPage() {
     }
 
     void verify();
-  }, [token]);
+  }, [router, token]);
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
@@ -43,7 +51,9 @@ export default function VerifyEmailPage() {
         {status === "loading" && (
           <div className="space-y-3">
             <Loader2 className="mx-auto h-10 w-10 animate-spin text-primary" />
-            <h1 className="text-xl font-semibold">Verifying email...</h1>
+            <h1 className="text-xl font-semibold">
+              {nextUrl ? "Opening face enrollment..." : "Verifying email..."}
+            </h1>
           </div>
         )}
 
@@ -52,10 +62,13 @@ export default function VerifyEmailPage() {
             <CheckCircle2 className="mx-auto h-10 w-10 text-green-600" />
             <h1 className="text-xl font-semibold">Personal email verified</h1>
             <p className="text-sm text-muted-foreground">
-              You can now sign in and continue attendance setup.
+              Continue to the face enrollment step to finish account setup.
             </p>
-            <Link href="/login" className="inline-flex text-sm font-medium text-primary hover:underline">
-              Go to login
+            <Link
+              href={nextUrl || "/student/enroll-face"}
+              className="inline-flex text-sm font-medium text-primary hover:underline"
+            >
+              Continue
             </Link>
           </div>
         )}

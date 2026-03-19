@@ -42,6 +42,19 @@ Optional if used:
 - `GMAIL_SMTP_USER`
 - `GMAIL_SMTP_APP_PASSWORD`
 - `GMAIL_FROM_EMAIL`
+- `CLOUDINARY_CLOUD_NAME`
+- `CLOUDINARY_API_KEY`
+- `CLOUDINARY_API_SECRET`
+- `CLOUDINARY_UPLOAD_FOLDER`
+- `AWS_REGION`
+- `AWS_REKOGNITION_REGION`
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_COGNITO_IDENTITY_POOL_ID`
+- `FACE_FLOW_TOKEN_TTL_MINUTES`
+- `PENDING_FACE_VERIFICATION_TTL_SECONDS`
+- `FACE_LIVENESS_MIN_CONFIDENCE`
+- `FACE_MATCH_MIN_SIMILARITY`
 - `NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY`
 - `WEB_PUSH_PRIVATE_KEY`
 
@@ -126,7 +139,15 @@ curl -X POST "$APP_URL/api/notifications/run-reminders" `
 - `WEBAUTHN_ORIGIN` must be exact protocol + domain.
 - If you change from `*.vercel.app` to a custom domain later, update both values.
 
-## 8. Useful Commands Summary
+## 8. Face Verification Notes
+
+- Face enrollment now sits between personal-email verification and passkey setup.
+- `AWS_COGNITO_IDENTITY_POOL_ID` is used only for temporary browser liveness credentials.
+- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` need permission for Rekognition Face Liveness and CompareFaces.
+- `CLOUDINARY_*` is required if you want the enrollment liveness reference image saved as the student profile photo.
+- Temporary liveness artifacts are not stored long-term by the app; only the final profile/reference image and verification metadata are persisted.
+
+## 9. Useful Commands Summary
 
 ```powershell
 npm ci

@@ -30,6 +30,10 @@ export default function SetupDevicePage() {
           router.push("/student/complete-profile");
           return;
         }
+        if (status.role === "STUDENT" && status.requiresFaceEnrollment) {
+          router.push("/student/enroll-face");
+          return;
+        }
       }
 
       const res = await fetch("/api/webauthn/devices");

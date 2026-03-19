@@ -13,6 +13,7 @@ export interface SessionUser {
   name: string;
   role: Role;
   organizationId: string | null;
+  image?: string | null;
 }
 
 /**
@@ -24,6 +25,7 @@ declare module "next-auth/jwt" {
     id: string;
     role: Role;
     organizationId: string | null;
+    image?: string | null;
   }
 }
 
@@ -37,12 +39,14 @@ declare module "next-auth" {
       id: string;
       role: Role;
       organizationId: string | null;
+      image?: string | null;
     };
   }
 
   interface User {
     role: Role;
     organizationId: string | null;
+    image?: string | null;
   }
 }
 

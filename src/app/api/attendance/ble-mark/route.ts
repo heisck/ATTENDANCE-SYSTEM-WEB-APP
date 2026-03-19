@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
 import { getQrSequence, verifyBleTokenForSequence } from "@/lib/qr";
 import { logError, ApiErrorMessages } from "@/lib/api-error";
 import { setBrowserDeviceProofCookie } from "@/lib/browser-device-proof";
@@ -8,6 +10,7 @@ import { SharedRedisRequiredError } from "@/lib/cache";
 import {
   AttendanceRequestError,
   BrowserDeviceVerificationError,
+  buildAttendanceMark,
   DeviceTokenConflictError,
   executeAttendanceMark,
   prepareAttendanceMarkContext,
@@ -113,6 +116,98 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (context.syncedSession.phase === "PHASE_ONE") {
+      const built = await buildAttendanceMark({
+        request,
+        studentId: session.user.id,
+        context,
+        body,
+        recordQrToken: parsed.token,
+        buildSecurity: () => ({
+          confidenceInput: {
+            qrTokenValid: null,
+            bleProximityVerified: true,
+            bleSignalStrength: null,
+          },
+          responseLayers: {
+            qr: null,
+            ble: true,
+          },
+          recordBleSignalStrength: null,
+          anomalyDetails: {
+            source: "BLE_TOKEN_ATTENDANCE",
+            beaconName: parsed.beaconName ?? null,
+            relayLeaseActive: true,
+          },
+        }),
+      });
+
+      const pendingTtlSeconds = Number(process.env.PENDING_FACE_VERIFICATION_TTL_SECONDS);
+      const provisionalExpiresAt = new Date(
+        Math.min(
+          context.attendanceSession.endsAt.getTime(),
+          Date.now() +
+            ((Number.isFinite(pendingTtlSeconds) && pendingTtlSeconds > 0
+              ? pendingTtlSeconds
+              : 300) *
+              1000)
+        )
+      );
+
+      await db.pendingAttendanceFaceVerification.updateMany({
+        where: {
+          userId: session.user.id,
+          sessionId: context.attendanceSession.id,
+          consumedAt: null,
+        },
+        data: {
+          consumedAt: new Date(),
+        },
+      });
+
+      const pending = await db.pendingAttendanceFaceVerification.create({
+        data: {
+          userId: session.user.id,
+          sessionId: context.attendanceSession.id,
+          sessionFamilyId: context.attendanceSession.sessionFamilyId,
+          phase: context.syncedSession.phase,
+          source: "BLE",
+          qrToken: built.recordData.qrToken,
+          confidence: built.confidence,
+          flagged: built.flagged,
+          deviceToken: built.recordData.deviceToken,
+          bleSignalStrength: built.recordData.bleSignalStrength,
+          deviceConsistency: built.recordData.deviceConsistency,
+          anomalyScore: built.recordData.anomalyScore,
+          responseLayers: built.responseLayers as Prisma.InputJsonValue,
+          anomalyDetails: (built.anomalyDetails ?? {}) as Prisma.InputJsonValue,
+          expiresAt: provisionalExpiresAt,
+        },
+      });
+
+      const response = NextResponse.json({
+        success: true,
+        provisional: true,
+        requiresFaceVerification: true,
+        pendingVerificationId: pending.id,
+        expiresAt: pending.expiresAt.toISOString(),
+        layers: {
+          ...built.responseLayers,
+          face: null,
+        },
+      });
+
+      if (built.browserDeviceBinding) {
+        setBrowserDeviceProofCookie(response, {
+          userId: session.user.id,
+          deviceToken: built.browserDeviceBinding.deviceToken,
+          fingerprintHash: built.browserDeviceBinding.fingerprintHash,
+        });
+      }
+
+      return response;
+    }
+
     const result = await executeAttendanceMark({
       request,
       studentId: session.user.id,
@@ -148,6 +243,7 @@ export async function POST(request: NextRequest) {
         anomalies: {
           deviceMismatch: result.deviceMismatch,
         },
+        faceVerified: result.record.faceVerified,
       },
       phaseCompletion: result.phaseCompletion,
     });

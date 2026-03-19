@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { QrScanner, type QrScanPayload, type QrScanResult } from "@/components/qr-scanner";
+import { FaceLivenessCapture } from "@/components/face-liveness-capture";
 import { WebAuthnPrompt } from "@/components/webauthn-prompt";
 import { ATTENDANCE_BLE } from "@/lib/ble-spec";
 import {
@@ -16,10 +17,11 @@ import {
   Radio,
   RefreshCw,
   Share2,
+  ShieldCheck,
   XCircle,
 } from "lucide-react";
 
-type Step = "webauthn" | "session" | "qr" | "result";
+type Step = "webauthn" | "session" | "qr" | "face" | "result";
 type QrPortStatus = "PENDING" | "APPROVED" | "REJECTED" | null;
 type ScanMode = "QR" | "BLE";
 type PendingPhase = "PHASE_ONE" | "PHASE_TWO" | null;
@@ -46,6 +48,7 @@ interface LayerResult {
   webauthn: boolean | null;
   qr: boolean | null;
   ble: boolean | null;
+  face?: boolean | null;
 }
 
 interface AttendanceResult {
@@ -54,8 +57,26 @@ interface AttendanceResult {
   flagged: boolean;
   layers: LayerResult;
   alreadyMarked?: boolean;
+  provisional?: boolean;
   phaseCompletion?: StudentPhaseCompletion | null;
   error?: string;
+}
+
+interface PendingFaceVerification {
+  id: string;
+  expiresAt: string;
+  layers: LayerResult;
+}
+
+interface FaceVerificationCapture {
+  sessionId: string;
+  region: string;
+  credentials: {
+    accessKeyId: string;
+    secretAccessKey: string;
+    sessionToken?: string;
+    expiration?: string | null;
+  };
 }
 
 interface SessionSyncResponse {
@@ -237,6 +258,12 @@ export default function AttendPage() {
   const [initialVerifyTrigger, setInitialVerifyTrigger] = useState(0);
   const [initialScanTrigger, setInitialScanTrigger] = useState(0);
   const [showPortVerifyOverlay, setShowPortVerifyOverlay] = useState(false);
+  const [pendingFaceVerification, setPendingFaceVerification] =
+    useState<PendingFaceVerification | null>(null);
+  const [faceCapture, setFaceCapture] = useState<FaceVerificationCapture | null>(null);
+  const [faceCaptureLoading, setFaceCaptureLoading] = useState(false);
+  const [faceSubmitting, setFaceSubmitting] = useState(false);
+  const [faceError, setFaceError] = useState<string | null>(null);
   const previousQrPortStatusRef = useRef<QrPortStatus>(null);
 
   const qrPortStatus = syncState?.qrPortStatus ?? qrPortStatusLocal ?? null;
@@ -326,6 +353,10 @@ export default function AttendPage() {
           const status = await statusRes.json();
           if (status.requiresProfileCompletion || !status.personalEmailVerified) {
             router.push("/student/complete-profile");
+            return;
+          }
+          if (status.requiresFaceEnrollment) {
+            router.push("/student/enroll-face");
             return;
           }
           if (!status.hasPasskey) {
@@ -452,6 +483,76 @@ export default function AttendPage() {
     void loadSessions();
   }, [loadSessions]);
 
+  const beginFaceVerificationCapture = useCallback(async (pendingVerificationId: string) => {
+    setFaceCaptureLoading(true);
+    setFaceError(null);
+    setFaceCapture(null);
+
+    try {
+      const response = await fetch("/api/face/attendance/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pendingVerificationId }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to start face verification.");
+      }
+      setFaceCapture(data);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to start face verification.";
+      setFaceError(message);
+      toast.error(message);
+    } finally {
+      setFaceCaptureLoading(false);
+    }
+  }, []);
+
+  const finalizeFaceVerification = useCallback(async () => {
+    if (!pendingFaceVerification || !faceCapture) {
+      throw new Error("Face verification is no longer ready. Start a new capture.");
+    }
+
+    setFaceSubmitting(true);
+    try {
+      const response = await fetch("/api/face/attendance/finalize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pendingVerificationId: pendingFaceVerification.id,
+          livenessSessionId: faceCapture.sessionId,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to finalize face verification.");
+      }
+
+      setResult({
+        success: true,
+        confidence: data.record.confidence,
+        flagged: data.record.flagged,
+        layers: data.record.layers,
+        phaseCompletion: data.phaseCompletion ?? null,
+      });
+      setPendingFaceVerification(null);
+      setFaceCapture(null);
+      setFaceError(null);
+      setStep("result");
+      if (data.phaseCompletion?.overallPresent) {
+        toast.success("Attendance complete for Phase 1 and Phase 2.");
+      } else if (data.phaseCompletion?.pendingPhase) {
+        toast.success(`Phase 1 verified. Pending ${phaseLabel(data.phaseCompletion.pendingPhase)}.`);
+      } else {
+        toast.success("Phase 1 verified and recorded successfully.");
+      }
+      void loadSessions();
+    } finally {
+      setFaceSubmitting(false);
+    }
+  }, [faceCapture, loadSessions, pendingFaceVerification]);
+
   const handleSelectSession = useCallback(
     async (session: ActiveSession) => {
       if (session.canMarkPhase === false) {
@@ -554,11 +655,28 @@ export default function AttendPage() {
             success: false,
             confidence: 0,
             flagged: true,
-            layers: { webauthn: false, qr: false, ble: false },
+            layers: { webauthn: false, qr: false, ble: false, face: false },
             error: message,
           });
           setStep("result");
           return "stop";
+        }
+
+        if (body.requiresFaceVerification) {
+          setPendingFaceVerification({
+            id: body.pendingVerificationId,
+            expiresAt: body.expiresAt,
+            layers: body.layers ?? { webauthn: true, qr: true, ble: null, face: null },
+          });
+          setActiveSessionId(data.sessionId);
+          setFaceCapture(null);
+          setResult(null);
+          setStep("face");
+          toast.info(
+            "Phase 1 scan is provisional until face liveness and face match succeed."
+          );
+          void beginFaceVerificationCapture(body.pendingVerificationId);
+          return "accepted";
         }
 
         setResult({
@@ -584,7 +702,7 @@ export default function AttendPage() {
         return "retry";
       }
     },
-    [loadSessions, selectedSession, webauthnVerified]
+    [beginFaceVerificationCapture, loadSessions, selectedSession, webauthnVerified]
   );
 
   const submitBleAttendance = useCallback(
@@ -642,6 +760,23 @@ export default function AttendPage() {
           bleSignalStrength: params.signalStrength,
         });
 
+        if (body.requiresFaceVerification) {
+          setPendingFaceVerification({
+            id: body.pendingVerificationId,
+            expiresAt: body.expiresAt,
+            layers: body.layers ?? { webauthn: true, qr: null, ble: true, face: null },
+          });
+          setActiveSessionId(selectedSession.id);
+          setFaceCapture(null);
+          setResult(null);
+          setStep("face");
+          toast.info(
+            "Phase 1 scan is provisional until face liveness and face match succeed."
+          );
+          void beginFaceVerificationCapture(body.pendingVerificationId);
+          return;
+        }
+
         setResult({
           success: true,
           confidence: body.record.confidence,
@@ -663,7 +798,7 @@ export default function AttendPage() {
         toast.error(error.message || "Failed to mark attendance via Bluetooth");
       }
     },
-    [loadSessions, selectedSession, submitBleAttendance]
+    [beginFaceVerificationCapture, loadSessions, selectedSession, submitBleAttendance]
   );
 
   const handleRequestQrPort = useCallback(async () => {
@@ -709,6 +844,11 @@ export default function AttendPage() {
     setSessionsError(null);
     setRequestingQrPort(false);
     setQrPortStatusLocal(null);
+    setPendingFaceVerification(null);
+    setFaceCapture(null);
+    setFaceCaptureLoading(false);
+    setFaceSubmitting(false);
+    setFaceError(null);
     setShowPortVerifyOverlay(false);
     previousQrPortStatusRef.current = null;
   }, []);
@@ -740,7 +880,9 @@ export default function AttendPage() {
       {hasDevice && !result && (
         <>
           <div className="flex flex-wrap items-center gap-3 text-sm">
-            <span className="status-chip-soft">Verify Passkey → Select Session → Scan QR or BLE Beacon</span>
+            <span className="status-chip-soft">
+              Verify Passkey → Select Session → Scan QR or BLE Beacon → Face Verify Phase 1
+            </span>
           </div>
 
           {step === "webauthn" && (
@@ -880,6 +1022,74 @@ export default function AttendPage() {
               )}
             </div>
           )}
+
+          {step === "face" && pendingFaceVerification && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-border/70 bg-background/40 p-4">
+                <div className="flex items-start gap-3">
+                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border/70 bg-muted/35">
+                    <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                  </span>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold">Complete Live Face Verification</p>
+                    <p className="text-sm text-muted-foreground">
+                      Phase 1 stays provisional until face liveness and face match succeed.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Pending request expires at{" "}
+                      {new Date(pendingFaceVerification.expiresAt).toLocaleTimeString()}.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {faceCaptureLoading ? (
+                <div className="flex min-h-[16rem] items-center justify-center rounded-2xl border border-border/70 bg-background/40">
+                  <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Starting face verification...
+                  </div>
+                </div>
+              ) : faceCapture ? (
+                <FaceLivenessCapture
+                  sessionId={faceCapture.sessionId}
+                  region={faceCapture.region}
+                  credentials={faceCapture.credentials}
+                  title="Phase 1 Face Verification"
+                  description="Stay centered in good lighting. Attendance is finalized only after this live check succeeds."
+                  submitting={faceSubmitting}
+                  onComplete={finalizeFaceVerification}
+                  onCancel={() => {
+                    setFaceCapture(null);
+                    setFaceError("Face verification was cancelled. Start a new capture to continue.");
+                  }}
+                />
+              ) : (
+                <div className="surface-muted space-y-3 p-4">
+                  <p className="text-sm text-muted-foreground">
+                    {faceError || "Face verification is not active yet."}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void beginFaceVerificationCapture(pendingFaceVerification.id)}
+                      className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Start Face Verification
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStep("qr")}
+                      className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                    >
+                      Back to Scan
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 
@@ -952,6 +1162,14 @@ export default function AttendPage() {
                     }
                     points={50}
                   />
+                  {selectedSession?.phase === "PHASE_ONE" || result.layers.face !== undefined ? (
+                    <LayerRow
+                      icon={<ShieldCheck className="h-4 w-4" />}
+                      label="Live Face Match"
+                      passed={result.layers.face ?? null}
+                      points={50}
+                    />
+                  ) : null}
                 </div>
               </div>
 

@@ -12,6 +12,7 @@ type UserMenuProps = {
   role: string;
   userName: string;
   userEmail?: string | null;
+  userImage?: string | null;
   profileHref?: string;
   canSwitchHubs?: boolean;
   studentHubEnabled?: boolean;
@@ -36,6 +37,7 @@ export function UserMenu({
   role,
   userName,
   userEmail,
+  userImage,
   profileHref,
   canSwitchHubs = false,
   studentHubEnabled = false,
@@ -89,8 +91,17 @@ export function UserMenu({
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border/70 bg-muted text-xs font-semibold text-foreground">
-          {initials}
+        <span className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-border/70 bg-muted text-xs font-semibold text-foreground">
+          {userImage ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={userImage}
+              alt={`${userName} profile`}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            initials
+          )}
         </span>
         <span className="hidden min-w-0 sm:block">
           <span className="block max-w-[9rem] truncate text-xs font-medium text-foreground">{userName}</span>
