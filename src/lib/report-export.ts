@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts } from "pdf-lib";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 
 type ExportValue = string | number | boolean | Date | null | undefined;
 type ExportRow = Record<string, ExportValue>;
@@ -97,46 +97,43 @@ export function buildCsv<T extends ExportRow>(
   return [header, ...body].join("\n");
 }
 
-export function buildXlsxBuffer<T extends ExportRow>(input: {
+export async function buildXlsxBuffer<T extends ExportRow>(input: {
   sheetName: string;
   columns: ExportColumn<T>[];
   rows: T[];
 }) {
   const { sheetName, columns, rows } = input;
-  const worksheet = XLSX.utils.aoa_to_sheet([
-    columns.map((column) => column.label),
-    ...rows.map((row) => columns.map((column) => stringifyExportValue(row[column.key]))),
-  ]);
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(sheetName.slice(0, 31) || "Report");
 
-  worksheet["!cols"] = columns.map((column) => ({
-    wch: Math.min(
+  worksheet.addRow(columns.map((column) => column.label));
+  worksheet.addRows(
+    rows.map((row) => columns.map((column) => stringifyExportValue(row[column.key])))
+  );
+
+  const headerRow = worksheet.getRow(1);
+  headerRow.font = { bold: true };
+  worksheet.views = [{ state: "frozen", ySplit: 1 }];
+
+  columns.forEach((column, index) => {
+    worksheet.getColumn(index + 1).width = Math.min(
       36,
       Math.max(
         column.label.length + 2,
         ...rows.map((row) => stringifyExportValue(row[column.key]).length + 2)
       )
-    ),
-  }));
+    );
+  });
 
-  if (rows.length > 0) {
-    const lastColumn = XLSX.utils.encode_col(columns.length - 1);
-    const lastRow = rows.length + 1;
-    worksheet["!autofilter"] = {
-      ref: `A1:${lastColumn}${lastRow}`,
+  if (rows.length > 0 && columns.length > 0) {
+    worksheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: rows.length + 1, column: columns.length },
     };
   }
 
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(
-    workbook,
-    worksheet,
-    sheetName.slice(0, 31) || "Report"
-  );
-
-  return XLSX.write(workbook, {
-    type: "buffer",
-    bookType: "xlsx",
-  });
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
 }
 
 export async function buildPdfBuffer<T extends ExportRow>(input: {

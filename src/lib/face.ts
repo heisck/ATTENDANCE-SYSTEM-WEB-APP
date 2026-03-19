@@ -45,10 +45,34 @@ export class FaceFlowError extends Error {
 }
 
 function mapFaceProviderError(error: unknown): FaceFlowError | null {
+  const errorDetails =
+    typeof error === "object" && error !== null
+      ? (error as { name?: unknown; code?: unknown; message?: unknown })
+      : null;
   const name =
-    typeof error === "object" && error !== null && "name" in error
-      ? String((error as { name?: unknown }).name)
+    errorDetails && "name" in errorDetails && errorDetails.name != null
+      ? String(errorDetails.name)
       : "";
+  const code =
+    errorDetails && "code" in errorDetails && errorDetails.code != null
+      ? String(errorDetails.code)
+      : "";
+  const message =
+    errorDetails && "message" in errorDetails && errorDetails.message != null
+      ? String(errorDetails.message)
+      : "";
+
+  if (
+    code === "ENOTFOUND" ||
+    name === "UnknownEndpoint" ||
+    name === "UnknownEndpointError" ||
+    message.includes("getaddrinfo ENOTFOUND")
+  ) {
+    return new FaceFlowError(
+      "Face verification is not configured correctly yet. Set AWS_REKOGNITION_REGION to a Rekognition Face Liveness region such as eu-west-1.",
+      503
+    );
+  }
 
   switch (name) {
     case "AccessDeniedException":
@@ -111,6 +135,24 @@ function getCognitoIdentityPoolId() {
   return identityPoolId;
 }
 
+function getCognitoIdentityRegion() {
+  const explicitRegion = process.env.AWS_COGNITO_REGION || process.env.AWS_REGION;
+  if (explicitRegion) {
+    return explicitRegion;
+  }
+
+  const identityPoolId = getCognitoIdentityPoolId();
+  const separatorIndex = identityPoolId.indexOf(":");
+  if (separatorIndex > 0) {
+    return identityPoolId.slice(0, separatorIndex);
+  }
+
+  throw new FaceFlowError(
+    "Face verification is not configured yet. Ask your administrator to set the Cognito region.",
+    503
+  );
+}
+
 function getFaceFlowTokenTtlMs() {
   const value = Number(process.env.FACE_FLOW_TOKEN_TTL_MINUTES);
   if (Number.isFinite(value) && value > 0) {
@@ -137,17 +179,22 @@ export function getFaceClientConfig() {
   };
 }
 
-const rekognitionClient = new RekognitionClient({
-  region: process.env.AWS_REKOGNITION_REGION || process.env.AWS_REGION,
-});
+function createRekognitionClient() {
+  return new RekognitionClient({
+    region: getFaceRegion(),
+  });
+}
 
-const cognitoIdentityClient = new CognitoIdentityClient({
-  region: process.env.AWS_REGION || process.env.AWS_REKOGNITION_REGION,
-});
+function createCognitoIdentityClient() {
+  return new CognitoIdentityClient({
+    region: getCognitoIdentityRegion(),
+  });
+}
 
 async function createTemporaryCredentials(): Promise<FaceAwsCredentials> {
   try {
     const identityPoolId = getCognitoIdentityPoolId();
+    const cognitoIdentityClient = createCognitoIdentityClient();
     const getId = await cognitoIdentityClient.send(
       new GetIdCommand({
         IdentityPoolId: identityPoolId,
@@ -191,6 +238,7 @@ async function createTemporaryCredentials(): Promise<FaceAwsCredentials> {
 
 async function createRekognitionLivenessSession() {
   try {
+    const rekognitionClient = createRekognitionClient();
     const result = await rekognitionClient.send(new CreateFaceLivenessSessionCommand({}));
     if (!result.SessionId) {
       throw new FaceFlowError("Unable to start the face liveness session.", 503);
@@ -237,6 +285,7 @@ async function fetchRemoteImageBytes(imageUrl: string) {
 }
 
 async function getFaceLivenessResults(livenessSessionId: string) {
+  const rekognitionClient = createRekognitionClient();
   const result = await rekognitionClient.send(
     new GetFaceLivenessSessionResultsCommand({
       SessionId: livenessSessionId,
@@ -754,6 +803,7 @@ export async function performAttendanceFaceVerification(input: {
 
   const liveSourceImage = getReferenceImageBytes(results.ReferenceImage);
   const referenceImageBytes = await fetchRemoteImageBytes(enrollment.primaryImageUrl);
+  const rekognitionClient = createRekognitionClient();
   const compareResult = await rekognitionClient.send(
     new CompareFacesCommand({
       SourceImage: {

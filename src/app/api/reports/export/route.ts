@@ -144,7 +144,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (format === "xlsx") {
-      const buffer = buildXlsxBuffer({
+      const buffer = await buildXlsxBuffer({
         sheetName: `${report.session.courseCode} Session`,
         columns,
         rows: sessionRows,
@@ -249,7 +249,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (format === "xlsx") {
-    const buffer = buildXlsxBuffer({
+    const buffer = await buildXlsxBuffer({
       sheetName: `${report.course.code} Summary`,
       columns,
       rows: courseRows,
