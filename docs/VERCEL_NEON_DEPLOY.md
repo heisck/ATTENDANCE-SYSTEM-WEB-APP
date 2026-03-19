@@ -143,6 +143,8 @@ curl -X POST "$APP_URL/api/notifications/run-reminders" `
 
 - Face enrollment now sits between personal-email verification and passkey setup.
 - `AWS_COGNITO_IDENTITY_POOL_ID` is used only for temporary browser liveness credentials.
+- `AWS_REKOGNITION_REGION` can be different from `AWS_REGION`; it must point to a Rekognition Face Liveness-supported region such as `eu-west-1`.
+- Keep Cognito in the region that owns your identity pool. You can set `AWS_COGNITO_REGION` explicitly if it differs from `AWS_REGION`.
 - `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` need permission for Rekognition Face Liveness and CompareFaces.
 - `CLOUDINARY_*` is required if you want the enrollment liveness reference image saved as the student profile photo.
 - Temporary liveness artifacts are not stored long-term by the app; only the final profile/reference image and verification metadata are persisted.
