@@ -56,11 +56,13 @@ describe("ble-relay lease gating", () => {
       id: "relay-1",
       sessionId: "session-1",
       status: "APPROVED",
+      revokedAt: null,
       bleBeaconUuid: "uuid-1",
       broadcastPower: -5,
       studentId: "student-1",
     });
     attendanceSessionFindUniqueMock.mockResolvedValue({
+      id: "session-1",
       courseId: "course-1",
       status: "ACTIVE",
       phase: "PHASE_ONE",
@@ -112,5 +114,37 @@ describe("ble-relay lease gating", () => {
 
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/mark attendance successfully/i);
+  });
+
+  it("refuses relay registration when relay mode is disabled", async () => {
+    attendanceSessionFindUniqueMock.mockResolvedValueOnce({
+      id: "session-1",
+      courseId: "course-1",
+      relayEnabled: false,
+      status: "ACTIVE",
+      phase: "PHASE_ONE",
+      endsAt: new Date("2026-03-17T10:10:00.000Z"),
+    });
+
+    const result = await registerRelayDevice("session-1", "student-1", "device-1");
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/not enabled/i);
+  });
+
+  it("refuses relay attendance recording for non-approved devices", async () => {
+    bleRelayDeviceFindUniqueMock.mockReset();
+    bleRelayDeviceFindUniqueMock.mockResolvedValue({
+      id: "relay-1",
+      sessionId: "session-1",
+      status: "REVOKED",
+      revokedAt: new Date("2026-03-17T10:00:00.000Z"),
+    });
+
+    const result = await recordRelayAttendance("attendance-1", "relay-1", -65, 3);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/not approved/i);
+    expect(relayAttendanceRecordCreateMock).not.toHaveBeenCalled();
   });
 });
