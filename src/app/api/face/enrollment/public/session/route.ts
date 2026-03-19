@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { logError } from "@/lib/api-error";
 import { createEnrollmentLivenessCapture, FaceFlowError } from "@/lib/face";
 
 const schema = z.object({
@@ -20,6 +21,8 @@ export async function POST(request: NextRequest) {
     if (error instanceof FaceFlowError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
+
+    logError("face/enrollment/public/session POST", error);
 
     return NextResponse.json(
       { error: "Unable to start face enrollment right now." },

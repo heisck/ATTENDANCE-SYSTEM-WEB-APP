@@ -38,6 +38,42 @@ export class FaceFlowError extends Error {
   }
 }
 
+function mapFaceProviderError(error: unknown): FaceFlowError | null {
+  const name =
+    typeof error === "object" && error !== null && "name" in error
+      ? String((error as { name?: unknown }).name)
+      : "";
+
+  switch (name) {
+    case "AccessDeniedException":
+    case "AuthFailure":
+    case "NotAuthorizedException":
+    case "UnrecognizedClientException":
+      return new FaceFlowError(
+        "Face verification is not configured correctly yet. Ask your administrator to check the AWS permissions.",
+        503
+      );
+    case "InvalidIdentityPoolConfigurationException":
+    case "InvalidParameterException":
+    case "ResourceNotFoundException":
+    case "ValidationException":
+      return new FaceFlowError(
+        "Face verification is not configured correctly yet. Ask your administrator to check the AWS region and Cognito identity pool.",
+        503
+      );
+    case "NetworkingError":
+    case "TimeoutError":
+    case "TooManyRequestsException":
+    case "ThrottlingException":
+      return new FaceFlowError(
+        "Face verification is temporarily unavailable. Please wait a moment and try again.",
+        503
+      );
+    default:
+      return null;
+  }
+}
+
 function getFaceRegion() {
   const region =
     process.env.AWS_REKOGNITION_REGION ||
@@ -104,43 +140,69 @@ const cognitoIdentityClient = new CognitoIdentityClient({
 });
 
 async function createTemporaryCredentials(): Promise<FaceAwsCredentials> {
-  const identityPoolId = getCognitoIdentityPoolId();
-  const getId = await cognitoIdentityClient.send(
-    new GetIdCommand({
-      IdentityPoolId: identityPoolId,
-    })
-  );
+  try {
+    const identityPoolId = getCognitoIdentityPoolId();
+    const getId = await cognitoIdentityClient.send(
+      new GetIdCommand({
+        IdentityPoolId: identityPoolId,
+      })
+    );
 
-  if (!getId.IdentityId) {
-    throw new FaceFlowError("Unable to create a temporary face verification identity.", 503);
+    if (!getId.IdentityId) {
+      throw new FaceFlowError("Unable to create a temporary face verification identity.", 503);
+    }
+
+    const credentialsResponse = await cognitoIdentityClient.send(
+      new GetCredentialsForIdentityCommand({
+        IdentityId: getId.IdentityId,
+      })
+    );
+
+    const credentials = credentialsResponse.Credentials;
+    if (!credentials?.AccessKeyId || !credentials.SecretKey) {
+      throw new FaceFlowError("Unable to create temporary face verification credentials.", 503);
+    }
+
+    return {
+      accessKeyId: credentials.AccessKeyId,
+      secretAccessKey: credentials.SecretKey,
+      sessionToken: credentials.SessionToken,
+      expiration: credentials.Expiration ? credentials.Expiration.toISOString() : null,
+    };
+  } catch (error) {
+    if (error instanceof FaceFlowError) {
+      throw error;
+    }
+
+    const mappedError = mapFaceProviderError(error);
+    if (mappedError) {
+      throw mappedError;
+    }
+
+    throw error;
   }
-
-  const credentialsResponse = await cognitoIdentityClient.send(
-    new GetCredentialsForIdentityCommand({
-      IdentityId: getId.IdentityId,
-    })
-  );
-
-  const credentials = credentialsResponse.Credentials;
-  if (!credentials?.AccessKeyId || !credentials.SecretKey) {
-    throw new FaceFlowError("Unable to create temporary face verification credentials.", 503);
-  }
-
-  return {
-    accessKeyId: credentials.AccessKeyId,
-    secretAccessKey: credentials.SecretKey,
-    sessionToken: credentials.SessionToken,
-    expiration: credentials.Expiration ? credentials.Expiration.toISOString() : null,
-  };
 }
 
 async function createRekognitionLivenessSession() {
-  const result = await rekognitionClient.send(new CreateFaceLivenessSessionCommand({}));
-  if (!result.SessionId) {
-    throw new FaceFlowError("Unable to start the face liveness session.", 503);
-  }
+  try {
+    const result = await rekognitionClient.send(new CreateFaceLivenessSessionCommand({}));
+    if (!result.SessionId) {
+      throw new FaceFlowError("Unable to start the face liveness session.", 503);
+    }
 
-  return result.SessionId;
+    return result.SessionId;
+  } catch (error) {
+    if (error instanceof FaceFlowError) {
+      throw error;
+    }
+
+    const mappedError = mapFaceProviderError(error);
+    if (mappedError) {
+      throw mappedError;
+    }
+
+    throw error;
+  }
 }
 
 function buildFaceUploadPublicId(userId: string) {

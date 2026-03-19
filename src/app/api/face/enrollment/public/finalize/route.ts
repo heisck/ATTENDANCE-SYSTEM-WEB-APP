@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { logError } from "@/lib/api-error";
 import { FaceFlowError, finalizeEnrollmentLivenessCapture } from "@/lib/face";
 
 const schema = z.object({
@@ -40,6 +41,8 @@ export async function POST(request: NextRequest) {
     if (error instanceof FaceFlowError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
+
+    logError("face/enrollment/public/finalize POST", error);
 
     return NextResponse.json(
       { error: "Unable to finalize face enrollment." },
