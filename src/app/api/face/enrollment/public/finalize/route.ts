@@ -47,6 +47,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid face enrollment request." }, { status: 400 });
     }
     if (error instanceof FaceFlowError) {
+      logError("face/enrollment/public/finalize POST", error, {
+        handled: true,
+        status: error.status,
+      });
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
 

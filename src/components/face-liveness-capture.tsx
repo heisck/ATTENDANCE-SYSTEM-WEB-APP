@@ -1,10 +1,11 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useState } from "react";
-import { AlertCircle, Camera, Loader2 } from "lucide-react";
+import { useMemo } from "react";
+import { Camera, Loader2 } from "lucide-react";
 import "@aws-amplify/ui-react-liveness/styles.css";
 import type { AwsCredentials } from "@aws-amplify/ui-react-liveness";
+import { toast } from "sonner";
 
 const FaceLivenessDetectorCore = dynamic(
   () =>
@@ -45,7 +46,6 @@ export function FaceLivenessCapture({
   onComplete,
   onCancel,
 }: FaceLivenessCaptureProps) {
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const provider = useMemo(
     () => async (): Promise<AwsCredentials> => ({
       accessKeyId: credentials.accessKeyId,
@@ -73,23 +73,15 @@ export function FaceLivenessCapture({
         </div>
       </div>
 
-      {errorMessage ? (
-        <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>{errorMessage}</p>
-        </div>
-      ) : null}
-
       <div className="overflow-hidden rounded-2xl border border-border/70 bg-black/20">
         <FaceLivenessDetectorCore
           sessionId={sessionId}
           region={region}
           onAnalysisComplete={async () => {
-            setErrorMessage(null);
             try {
               await onComplete();
             } catch (error) {
-              setErrorMessage(
+              toast.error(
                 error instanceof Error
                   ? error.message
                   : "Face verification could not be completed."
@@ -98,7 +90,7 @@ export function FaceLivenessCapture({
           }}
           onUserCancel={onCancel}
           onError={(livenessError) => {
-            setErrorMessage(
+            toast.error(
               livenessError.error?.message ||
                 "Face capture could not be started. Please try again."
             );

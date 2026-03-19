@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle2, Loader2, ShieldCheck, XCircle } from "lucide-react";
+import { toast } from "sonner";
 import { AuthPageLayout } from "@/components/auth/auth-page-layout";
 import { FaceLivenessCapture } from "@/components/face-liveness-capture";
 
@@ -98,7 +99,6 @@ function FaceEnrollPageContent() {
 
   async function handleStartCapture() {
     try {
-      setErrorMessage("");
       const response = await fetch("/api/face/enrollment/public/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -112,7 +112,7 @@ function FaceEnrollPageContent() {
       setStatus("capturing");
     } catch (error) {
       setStatus("ready");
-      setErrorMessage(
+      toast.error(
         error instanceof Error ? error.message : "Unable to start face capture."
       );
     }
@@ -138,6 +138,14 @@ function FaceEnrollPageContent() {
 
       setContinueUrl(typeof data.continueUrl === "string" ? data.continueUrl : null);
       setStatus("done");
+    } catch (error) {
+      setCapture(null);
+      setStatus("ready");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to finalize face enrollment."
+      );
     } finally {
       setSubmitting(false);
     }
@@ -197,12 +205,6 @@ function FaceEnrollPageContent() {
                   </p>
                 ) : null}
               </div>
-
-              {errorMessage ? (
-                <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  {errorMessage}
-                </div>
-              ) : null}
 
               <button
                 type="button"
