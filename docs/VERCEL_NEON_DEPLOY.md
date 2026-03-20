@@ -146,6 +146,7 @@ curl -X POST "$APP_URL/api/notifications/run-reminders" `
 - `AWS_REKOGNITION_REGION` can be different from `AWS_REGION`; it must point to a Rekognition Face Liveness-supported region such as `eu-west-1`.
 - Keep Cognito in the region that owns your identity pool. You can set `AWS_COGNITO_REGION` explicitly if it differs from `AWS_REGION`.
 - `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` need permission for Rekognition Face Liveness and CompareFaces.
+- `FACE_LIVENESS_MIN_CONFIDENCE` should be tuned for real-world cameras. Start around `70` instead of `90` if students keep failing enrollment despite being real.
 - `CLOUDINARY_*` is required if you want the enrollment liveness reference image saved as the student profile photo.
 - Temporary liveness artifacts are not stored long-term by the app; only the final profile/reference image and verification metadata are persisted.
 

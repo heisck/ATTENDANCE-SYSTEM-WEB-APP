@@ -24,7 +24,7 @@ import { syncAttendanceSessionState } from "@/lib/attendance";
 import { CACHE_KEYS, cacheDel } from "@/lib/cache";
 
 const DEFAULT_FACE_FLOW_TOKEN_TTL_MS = 1000 * 60 * 30;
-const DEFAULT_LIVENESS_THRESHOLD = 90;
+const DEFAULT_LIVENESS_THRESHOLD = 70;
 const DEFAULT_SIMILARITY_THRESHOLD = 90;
 
 export type FaceAwsCredentials = {

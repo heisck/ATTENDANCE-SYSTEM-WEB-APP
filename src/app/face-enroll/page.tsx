@@ -187,8 +187,8 @@ function FaceEnrollPageContent() {
                 <div className="space-y-2">
                   <h1 className="text-xl font-semibold">Verify Your Face</h1>
                   <p className="text-sm text-muted-foreground">
-                    This short liveness capture is required before passkey setup. The best
-                    reference image becomes your initial profile photo.
+                    Record one short live face video. Amazon Rekognition checks liveness, then we
+                    keep the best reference image as your profile photo before passkey setup.
                   </p>
                 </div>
               </div>
@@ -221,7 +221,8 @@ function FaceEnrollPageContent() {
               </h2>
               <ul className="space-y-3 text-sm text-muted-foreground">
                 <li>Face the camera directly and keep your full face visible.</li>
-                <li>Good lighting improves both liveness and face match accuracy.</li>
+                <li>Good lighting improves both liveness and profile-photo quality.</li>
+                <li>Use another signed-in phone if its camera is better.</li>
                 <li>Finish this step before trying to register your passkey.</li>
               </ul>
             </aside>
