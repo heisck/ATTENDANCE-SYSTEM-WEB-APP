@@ -34,6 +34,7 @@ type FaceLivenessCaptureProps = {
   submitting?: boolean;
   onComplete: () => Promise<void>;
   onCancel?: () => void;
+  onFailure?: (message: string) => void;
 };
 
 export function FaceLivenessCapture({
@@ -45,6 +46,7 @@ export function FaceLivenessCapture({
   submitting = false,
   onComplete,
   onCancel,
+  onFailure,
 }: FaceLivenessCaptureProps) {
   const provider = useMemo(
     () => async (): Promise<AwsCredentials> => ({
@@ -81,19 +83,21 @@ export function FaceLivenessCapture({
             try {
               await onComplete();
             } catch (error) {
-              toast.error(
+              const message =
                 error instanceof Error
                   ? error.message
-                  : "Face verification could not be completed."
-              );
+                  : "Face verification could not be completed.";
+              onFailure?.(message);
+              toast.error(message);
             }
           }}
           onUserCancel={onCancel}
           onError={(livenessError) => {
-            toast.error(
+            const message =
               livenessError.error?.message ||
-                "Face capture could not be started. Please try again."
-            );
+              "Face capture could not be started. Please try again.";
+            onFailure?.(message);
+            toast.error(message);
           }}
           config={{
             credentialProvider: provider,

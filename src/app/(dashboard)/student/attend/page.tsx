@@ -230,6 +230,19 @@ function phaseLabel(phase: ActiveSession["phase"]) {
   return "Closed";
 }
 
+function buildFaceRecognitionFailureMessage(message: string) {
+  const normalized = message.trim();
+  if (!normalized) {
+    return "Face recognition failed. Please try again.";
+  }
+
+  if (/^face recognition failed/i.test(normalized)) {
+    return normalized;
+  }
+
+  return `Face recognition failed. ${normalized}`;
+}
+
 export default function AttendPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -507,6 +520,12 @@ export default function AttendPage() {
     } finally {
       setFaceCaptureLoading(false);
     }
+  }, []);
+
+  const handleFaceVerificationFailure = useCallback((message: string) => {
+    setFaceCapture(null);
+    setFaceCaptureLoading(false);
+    setFaceError(buildFaceRecognitionFailureMessage(message));
   }, []);
 
   const finalizeFaceVerification = useCallback(async () => {
@@ -1031,9 +1050,13 @@ export default function AttendPage() {
                     <ShieldCheck className="h-4 w-4 text-muted-foreground" />
                   </span>
                   <div className="space-y-1">
-                    <p className="text-sm font-semibold">Complete Live Face Verification</p>
+                    <p className="text-sm font-semibold">
+                      {faceError ? "Face recognition failed" : "Complete Live Face Verification"}
+                    </p>
                     <p className="text-sm text-muted-foreground">
-                      Phase 1 stays provisional until face liveness and face match succeed.
+                      {faceError
+                        ? faceError
+                        : "Phase 1 stays provisional until face liveness and face match succeed."}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Pending request expires at{" "}
@@ -1059,6 +1082,7 @@ export default function AttendPage() {
                   description="Stay centered in good lighting. Attendance is finalized only after this live check succeeds."
                   submitting={faceSubmitting}
                   onComplete={finalizeFaceVerification}
+                  onFailure={handleFaceVerificationFailure}
                   onCancel={() => {
                     setFaceCapture(null);
                     setFaceError("Face verification was cancelled. Start a new capture to continue.");
@@ -1076,7 +1100,7 @@ export default function AttendPage() {
                       className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                     >
                       <RefreshCw className="h-4 w-4" />
-                      Start Face Verification
+                      {faceError ? "Retry Face Verification" : "Start Face Verification"}
                     </button>
                     <button
                       type="button"

@@ -5,6 +5,10 @@ import {
   createAttendanceFaceVerificationCapture,
   FaceFlowError,
 } from "@/lib/face";
+import {
+  buildFaceRateLimitMessage,
+  checkFaceRateLimit,
+} from "@/lib/face-rate-limit";
 
 const schema = z.object({
   pendingVerificationId: z.string().min(10),
@@ -26,6 +30,23 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const parsed = schema.parse(body);
+    const rateLimit = await checkFaceRateLimit({
+      scope: "attendance-session",
+      identifier: `${session.user.id}:${parsed.pendingVerificationId}`,
+      maxAttempts: 5,
+      windowSeconds: 300,
+    });
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: buildFaceRateLimitMessage(
+            "attendance face verification",
+            300
+          ),
+        },
+        { status: 429 }
+      );
+    }
     const capture = await createAttendanceFaceVerificationCapture({
       userId: session.user.id,
       pendingVerificationId: parsed.pendingVerificationId,

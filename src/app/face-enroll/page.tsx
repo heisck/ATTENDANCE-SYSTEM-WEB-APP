@@ -61,6 +61,7 @@ function FaceEnrollPageContent() {
   const [submitting, setSubmitting] = useState(false);
   const [continueUrl, setContinueUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [captureError, setCaptureError] = useState<string>("");
 
   const expiresLabel = useMemo(() => {
     if (!summary?.expiresAt) return null;
@@ -98,6 +99,7 @@ function FaceEnrollPageContent() {
   }, [token]);
 
   async function handleStartCapture() {
+    setCaptureError("");
     try {
       const response = await fetch("/api/face/enrollment/public/session", {
         method: "POST",
@@ -116,6 +118,19 @@ function FaceEnrollPageContent() {
         error instanceof Error ? error.message : "Unable to start face capture."
       );
     }
+  }
+
+  function buildCaptureFailureMessage(message: string) {
+    const normalized = message.trim();
+    if (!normalized) {
+      return "Face enrollment failed. Please try again.";
+    }
+
+    if (/^face enrollment failed/i.test(normalized)) {
+      return normalized;
+    }
+
+    return `Face enrollment failed. ${normalized}`;
   }
 
   async function handleFinalize() {
@@ -137,15 +152,8 @@ function FaceEnrollPageContent() {
       }
 
       setContinueUrl(typeof data.continueUrl === "string" ? data.continueUrl : null);
+      setCaptureError("");
       setStatus("done");
-    } catch (error) {
-      setCapture(null);
-      setStatus("ready");
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Unable to finalize face enrollment."
-      );
     } finally {
       setSubmitting(false);
     }
@@ -206,12 +214,19 @@ function FaceEnrollPageContent() {
                 ) : null}
               </div>
 
+              {captureError ? (
+                <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4">
+                  <p className="text-sm font-semibold text-foreground">Face enrollment failed</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{captureError}</p>
+                </div>
+              ) : null}
+
               <button
                 type="button"
                 onClick={handleStartCapture}
                 className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
               >
-                Start Face Capture
+                {captureError ? "Retry Face Capture" : "Start Face Capture"}
               </button>
             </section>
 
@@ -238,9 +253,17 @@ function FaceEnrollPageContent() {
             description="Follow the camera guidance once, then wait while we finalize your enrollment."
             submitting={submitting}
             onComplete={handleFinalize}
+            onFailure={(message) => {
+              setCapture(null);
+              setStatus("ready");
+              setCaptureError(buildCaptureFailureMessage(message));
+            }}
             onCancel={() => {
               setCapture(null);
               setStatus("ready");
+              setCaptureError(
+                "Face enrollment was cancelled. Start a new capture when you are ready."
+              );
             }}
           />
         ) : null}

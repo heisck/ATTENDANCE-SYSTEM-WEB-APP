@@ -4,6 +4,10 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { logError } from "@/lib/api-error";
 import { FaceFlowError, finalizeEnrollmentLivenessCapture } from "@/lib/face";
+import {
+  buildFaceRateLimitMessage,
+  checkFaceRateLimit,
+} from "@/lib/face-rate-limit";
 
 const schema = z.object({
   token: z.string().min(16),
@@ -19,6 +23,20 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const parsed = schema.parse(body);
+    const rateLimit = await checkFaceRateLimit({
+      scope: "enrollment-finalize",
+      identifier: `${session.user.id}:${parsed.token}`,
+      maxAttempts: 5,
+      windowSeconds: 600,
+    });
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: buildFaceRateLimitMessage("face enrollment", 600),
+        },
+        { status: 429 }
+      );
+    }
 
     // SECURITY: Verify the enrollment token belongs to the authenticated user BEFORE enrollment
     // This prevents biometric outsourcing attacks where attacker enrolls own face for victim's account
