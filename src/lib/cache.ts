@@ -137,6 +137,25 @@ class UpstashRestClient {
 
     return items.length;
   }
+
+  async delMany(keys: string[]) {
+    if (keys.length === 0) {
+      return 0;
+    }
+
+    const responses = await this.pipeline(keys.map((key) => ["DEL", key]));
+    let deleted = 0;
+
+    for (const response of responses) {
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      deleted += Number(response.result || 0);
+    }
+
+    return deleted;
+  }
 }
 
 type CacheClient = Redis | UpstashRestClient;
@@ -383,6 +402,45 @@ export async function cacheDel(key: string): Promise<boolean> {
     return memoryDeleted || redisDeleted > 0;
   } catch (error) {
     console.error(`[v0] Cache del error for ${key}:`, error);
+    return memoryDeleted;
+  }
+}
+
+export async function cacheDelBatch(keys: string[]): Promise<number> {
+  if (keys.length === 0) {
+    return 0;
+  }
+
+  const uniqueKeys = Array.from(new Set(keys));
+  const client = getRedis();
+  let memoryDeleted = 0;
+
+  if (canUseMemoryFallback()) {
+    for (const key of uniqueKeys) {
+      if (memoryDelKey(key)) {
+        memoryDeleted += 1;
+      }
+    }
+  }
+
+  if (shouldUseMemoryFallback()) {
+    return memoryDeleted;
+  }
+
+  if (!client) {
+    return memoryDeleted;
+  }
+
+  try {
+    if (client instanceof UpstashRestClient) {
+      const redisDeleted = await client.delMany(uniqueKeys);
+      return memoryDeleted + redisDeleted;
+    }
+
+    const redisDeleted = await client.del(...uniqueKeys);
+    return memoryDeleted + redisDeleted;
+  } catch (error) {
+    console.error("[v0] Cache batch del error:", error);
     return memoryDeleted;
   }
 }

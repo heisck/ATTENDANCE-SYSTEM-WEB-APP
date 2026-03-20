@@ -18,6 +18,7 @@ import {
 import { markAttendanceSchema } from "@/lib/validators";
 
 export async function POST(request: NextRequest) {
+  const requestReceivedAt = Date.now();
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -45,10 +46,10 @@ export async function POST(request: NextRequest) {
       sessionId: parsed.sessionId,
     });
 
-    const serverNowTs = Date.now();
     const maxScanAgeMs =
       context.syncedSession.qrRotationMs + context.syncedSession.qrGraceMs;
-    const scanAgeMs = serverNowTs - scanTimestamp;
+    const scanAgeMs = requestReceivedAt - scanTimestamp;
+    const verificationTimestamp = scanTimestamp;
     if (scanAgeMs > maxScanAgeMs || scanAgeMs < -1_500) {
       return NextResponse.json(
         {
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
       context.attendanceSession.qrSecret,
       parsed.qrToken,
       context.syncedSession.phase,
-      serverNowTs,
+      verificationTimestamp,
       context.syncedSession.qrRotationMs,
       context.syncedSession.qrGraceMs
     );

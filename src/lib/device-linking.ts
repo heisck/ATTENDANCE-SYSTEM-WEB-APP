@@ -32,6 +32,49 @@ export class BrowserDeviceVerificationError extends Error {
 }
 
 const RECENT_WEB_DEVICE_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+const DEVICE_TOUCH_INTERVAL_MS = 5 * 60 * 1000;
+
+function buildDeviceUpdateData(
+  deviceInfo: Parameters<typeof linkDevice>[2],
+  touchedAt: Date
+) {
+  return {
+    deviceName: deviceInfo.deviceName,
+    deviceType: deviceInfo.deviceType,
+    osVersion: deviceInfo.osVersion,
+    appVersion: deviceInfo.appVersion,
+    fingerprint: deviceInfo.fingerprint,
+    bleSignature: deviceInfo.bleSignature,
+    revokedAt: null,
+    lastUsedAt: touchedAt,
+  };
+}
+
+function shouldSkipDeviceTouch(
+  existing: {
+    revokedAt: Date | null;
+    fingerprint: string | null;
+    deviceName: string;
+    deviceType: string;
+    osVersion: string | null;
+    appVersion: string | null;
+    bleSignature: string | null;
+    lastUsedAt: Date;
+  },
+  deviceInfo: Parameters<typeof linkDevice>[2],
+  now: Date
+) {
+  return (
+    existing.revokedAt === null &&
+    now.getTime() - existing.lastUsedAt.getTime() < DEVICE_TOUCH_INTERVAL_MS &&
+    existing.fingerprint === (deviceInfo.fingerprint ?? null) &&
+    existing.deviceName === deviceInfo.deviceName &&
+    existing.deviceType === deviceInfo.deviceType &&
+    existing.osVersion === (deviceInfo.osVersion ?? null) &&
+    existing.appVersion === (deviceInfo.appVersion ?? null) &&
+    existing.bleSignature === (deviceInfo.bleSignature ?? null)
+  );
+}
 
 export function generateDeviceFingerprint(
   userAgent: string,
@@ -84,6 +127,8 @@ export async function linkDevice(
     browserProofValid?: boolean;
   }
 ): Promise<{ id: string; isNewDevice: boolean; trustedAt: Date | null }> {
+  const touchedAt = new Date();
+
   try {
     const existingByToken = await db.userDevice.findUnique({
       where: { deviceToken },
@@ -93,6 +138,12 @@ export async function linkDevice(
         trustedAt: true,
         revokedAt: true,
         fingerprint: true,
+        deviceName: true,
+        deviceType: true,
+        osVersion: true,
+        appVersion: true,
+        bleSignature: true,
+        lastUsedAt: true,
       },
     });
 
@@ -110,25 +161,22 @@ export async function linkDevice(
         throw new BrowserDeviceVerificationError();
       }
 
+      if (shouldSkipDeviceTouch(existingByToken, deviceInfo, touchedAt)) {
+        return {
+          id: existingByToken.id,
+          isNewDevice: false,
+          trustedAt: existingByToken.trustedAt,
+        };
+      }
+
       const updated = await db.userDevice.update({
         where: { id: existingByToken.id },
-        data: {
-          deviceName: deviceInfo.deviceName,
-          deviceType: deviceInfo.deviceType,
-          osVersion: deviceInfo.osVersion,
-          appVersion: deviceInfo.appVersion,
-          fingerprint: deviceInfo.fingerprint,
-          bleSignature: deviceInfo.bleSignature,
-          revokedAt: null,
-          lastUsedAt: new Date(),
-        },
+        data: buildDeviceUpdateData(deviceInfo, touchedAt),
         select: {
           id: true,
           trustedAt: true,
         },
       });
-
-      await cacheDel(CACHE_KEYS.USER_CREDENTIALS(userId));
 
       return {
         id: updated.id,
@@ -150,6 +198,12 @@ export async function linkDevice(
           fingerprint: true,
           trustedAt: true,
           lastUsedAt: true,
+          deviceName: true,
+          deviceType: true,
+          osVersion: true,
+          appVersion: true,
+          bleSignature: true,
+          revokedAt: true,
         },
         orderBy: { lastUsedAt: "desc" },
       });
@@ -159,26 +213,25 @@ export async function linkDevice(
       );
 
       if (sameFingerprintDevice) {
+        if (shouldSkipDeviceTouch(sameFingerprintDevice, deviceInfo, touchedAt)) {
+          return {
+            id: sameFingerprintDevice.id,
+            isNewDevice: false,
+            trustedAt: sameFingerprintDevice.trustedAt,
+          };
+        }
+
         const updated = await db.userDevice.update({
           where: { id: sameFingerprintDevice.id },
           data: {
             deviceToken,
-            deviceName: deviceInfo.deviceName,
-            deviceType: deviceInfo.deviceType,
-            osVersion: deviceInfo.osVersion,
-            appVersion: deviceInfo.appVersion,
-            fingerprint: deviceInfo.fingerprint,
-            bleSignature: deviceInfo.bleSignature,
-            revokedAt: null,
-            lastUsedAt: new Date(),
+            ...buildDeviceUpdateData(deviceInfo, touchedAt),
           },
           select: {
             id: true,
             trustedAt: true,
           },
         });
-
-        await cacheDel(CACHE_KEYS.USER_CREDENTIALS(userId));
 
         return {
           id: updated.id,
@@ -210,15 +263,13 @@ export async function linkDevice(
         appVersion: deviceInfo.appVersion,
         fingerprint: deviceInfo.fingerprint,
         bleSignature: deviceInfo.bleSignature,
-        lastUsedAt: new Date(),
+        lastUsedAt: touchedAt,
       },
       select: {
         id: true,
         trustedAt: true,
       },
     });
-
-    await cacheDel(CACHE_KEYS.USER_CREDENTIALS(userId));
 
     return {
       id: newDevice.id,
@@ -240,6 +291,12 @@ export async function linkDevice(
           trustedAt: true,
           revokedAt: true,
           fingerprint: true,
+          deviceName: true,
+          deviceType: true,
+          osVersion: true,
+          appVersion: true,
+          bleSignature: true,
+          lastUsedAt: true,
         },
       });
 
@@ -257,25 +314,22 @@ export async function linkDevice(
           throw new BrowserDeviceVerificationError();
         }
 
+        if (shouldSkipDeviceTouch(conflicting, deviceInfo, touchedAt)) {
+          return {
+            id: conflicting.id,
+            isNewDevice: false,
+            trustedAt: conflicting.trustedAt,
+          };
+        }
+
         const updated = await db.userDevice.update({
           where: { id: conflicting.id },
-          data: {
-            deviceName: deviceInfo.deviceName,
-            deviceType: deviceInfo.deviceType,
-            osVersion: deviceInfo.osVersion,
-            appVersion: deviceInfo.appVersion,
-            fingerprint: deviceInfo.fingerprint,
-            bleSignature: deviceInfo.bleSignature,
-            revokedAt: null,
-            lastUsedAt: new Date(),
-          },
+          data: buildDeviceUpdateData(deviceInfo, touchedAt),
           select: {
             id: true,
             trustedAt: true,
           },
         });
-
-        await cacheDel(CACHE_KEYS.USER_CREDENTIALS(userId));
 
         return {
           id: updated.id,

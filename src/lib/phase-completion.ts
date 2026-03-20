@@ -165,3 +165,16 @@ export async function invalidateStudentPhaseCompletionForCourseDay(input: {
 }) {
   await cacheDel(buildPhaseCompletionCacheKey(input));
 }
+
+export async function setStudentPhaseCompletionForCourseDay(
+  input: {
+    studentId: string;
+    sessionFamilyId?: string | null;
+    courseId: string;
+    lecturerId?: string | null;
+    referenceTime: Date;
+  },
+  value: StudentPhaseCompletion
+) {
+  await cacheSet(buildPhaseCompletionCacheKey(input), value, 300);
+}

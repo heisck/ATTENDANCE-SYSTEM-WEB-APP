@@ -10,6 +10,7 @@
     "start": "npx next start",
     "lint": "npx eslint .",
     "test:unit": "vitest run",
+    "loadtest:attendance:prepare": "node scripts/prepare-load-test.mjs",
     "loadtest:attendance:burst": "k6 run load-tests/attendance-burst.js",
     "db:generate": "npx prisma generate",
     "db:push": "npx prisma db push",

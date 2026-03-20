@@ -31,6 +31,7 @@ const markAttendanceBleSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  const requestReceivedAt = Date.now();
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -76,10 +77,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const serverNowTs = Date.now();
     const maxScanAgeMs =
       context.syncedSession.qrRotationMs + context.syncedSession.qrGraceMs;
-    const scanAgeMs = serverNowTs - parsed.tokenTimestamp;
+    const scanAgeMs = requestReceivedAt - parsed.tokenTimestamp;
+    const verificationTimestamp = parsed.tokenTimestamp;
     if (scanAgeMs > maxScanAgeMs || scanAgeMs < -1_500) {
       return NextResponse.json(
         { error: "BLE token is out of the allowed validation window. Scan again." },
@@ -88,11 +89,12 @@ export async function POST(request: NextRequest) {
     }
 
     const expectedCurrentSequence = getQrSequence(
-      serverNowTs,
+      verificationTimestamp,
       context.syncedSession.qrRotationMs
     );
     const elapsedInCurrentBucket =
-      serverNowTs - expectedCurrentSequence * context.syncedSession.qrRotationMs;
+      verificationTimestamp -
+      expectedCurrentSequence * context.syncedSession.qrRotationMs;
     const allowsPrevious = elapsedInCurrentBucket <= context.syncedSession.qrGraceMs;
     const isAllowedSequence =
       parsed.sequence === expectedCurrentSequence ||

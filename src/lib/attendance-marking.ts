@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import {
   CACHE_KEYS,
   CACHE_TTL,
-  cacheDel,
+  cacheDelBatch,
   cacheGet,
   cacheSet,
   checkRateLimit,
@@ -26,8 +26,9 @@ import {
 } from "@/lib/device-linking";
 import { getDeviceBleStats } from "@/lib/ble-verification";
 import {
+  buildStudentPhaseCompletionStatus,
   getStudentPhaseCompletionForCourseDay,
-  invalidateStudentPhaseCompletionForCourseDay,
+  setStudentPhaseCompletionForCourseDay,
   type StudentPhaseCompletion,
 } from "@/lib/phase-completion";
 import { hasSuccessfulPhaseOneFaceVerificationForCourseDay } from "@/lib/face";
@@ -133,6 +134,7 @@ export class AttendanceAlreadyMarkedError extends AttendanceRequestError {
 export type PreparedAttendanceMarkContext = {
   syncedSession: NonNullable<Awaited<ReturnType<typeof syncAttendanceSessionState>>>;
   attendanceSession: AttendanceSessionMeta;
+  phaseCompletionGate: StudentPhaseCompletion;
 };
 
 type AttendanceRecordDraft = {
@@ -248,6 +250,57 @@ async function getAttendanceSessionMeta(sessionId: string) {
   return session;
 }
 
+async function getCachedStudentAttendanceState(studentId: string) {
+  const cacheKey = CACHE_KEYS.USER_CREDENTIALS(studentId);
+  let studentState = await cacheGet<{
+    personalEmail: string | null;
+    personalEmailVerifiedAt: string | Date | null;
+    faceEnrollment?: {
+      status: string;
+      primaryImageUrl: string | null;
+    } | null;
+    credentialCount?: number;
+  }>(cacheKey);
+
+  if (
+    !studentState ||
+    !("faceEnrollment" in studentState) ||
+    typeof studentState.credentialCount !== "number"
+  ) {
+    const result = await db.user.findUnique({
+      where: { id: studentId },
+      select: {
+        personalEmail: true,
+        personalEmailVerifiedAt: true,
+        faceEnrollment: {
+          select: {
+            status: true,
+            primaryImageUrl: true,
+          },
+        },
+        _count: {
+          select: {
+            credentials: true,
+          },
+        },
+      },
+    });
+    studentState = result
+      ? {
+          personalEmail: result.personalEmail,
+          personalEmailVerifiedAt: result.personalEmailVerifiedAt,
+          faceEnrollment: result.faceEnrollment,
+          credentialCount: result._count.credentials,
+        }
+      : null;
+    if (studentState) {
+      await cacheSet(cacheKey, studentState, CACHE_TTL.USER_CREDENTIALS);
+    }
+  }
+
+  return studentState;
+}
+
 function resolveDeviceContext(
   request: NextRequest,
   studentId: string,
@@ -343,35 +396,11 @@ export async function prepareAttendanceMarkContext(input: {
     );
   }
 
-  const cacheKey = CACHE_KEYS.USER_CREDENTIALS(input.studentId);
-  let studentState = await cacheGet<{
-    personalEmail: string | null;
-    personalEmailVerifiedAt: string | Date | null;
-    faceEnrollment?: {
-      status: string;
-      primaryImageUrl: string | null;
-    } | null;
-  }>(cacheKey);
-
-  if (!studentState || !("faceEnrollment" in studentState)) {
-    const result = await db.user.findUnique({
-      where: { id: input.studentId },
-      select: {
-        personalEmail: true,
-        personalEmailVerifiedAt: true,
-        faceEnrollment: {
-          select: {
-            status: true,
-            primaryImageUrl: true,
-          },
-        },
-      },
-    });
-    studentState = result;
-    if (studentState) {
-      await cacheSet(cacheKey, studentState, CACHE_TTL.USER_CREDENTIALS);
-    }
-  }
+  const [studentState, syncedSession, attendanceSession] = await Promise.all([
+    getCachedStudentAttendanceState(input.studentId),
+    syncAttendanceSessionState(input.sessionId),
+    getAttendanceSessionMeta(input.sessionId),
+  ]);
 
   if (!studentState?.personalEmail || !studentState.personalEmailVerifiedAt) {
     throw new AttendanceRequestError(
@@ -390,20 +419,10 @@ export async function prepareAttendanceMarkContext(input: {
     );
   }
 
-  const credentialCacheKey = `attendance:credential-count:${input.studentId}`;
-  let credentialCount = await cacheGet<number>(credentialCacheKey);
-  if (credentialCount == null) {
-    credentialCount = await db.webAuthnCredential.count({
-      where: { userId: input.studentId },
-    });
-    await cacheSet(credentialCacheKey, credentialCount, 600);
-  }
-
-  if (credentialCount === 0) {
+  if ((studentState.credentialCount ?? 0) === 0) {
     throw new AttendanceRequestError("Register a passkey before attendance.", 403);
   }
 
-  const syncedSession = await syncAttendanceSessionState(input.sessionId);
   if (!syncedSession) {
     throw new AttendanceRequestError("Session not found", 404);
   }
@@ -412,7 +431,6 @@ export async function prepareAttendanceMarkContext(input: {
     throw new AttendanceRequestError("Session is no longer active", 410);
   }
 
-  const attendanceSession = await getAttendanceSessionMeta(input.sessionId);
   if (!attendanceSession) {
     throw new AttendanceRequestError("Session not found", 404);
   }
@@ -484,6 +502,7 @@ export async function prepareAttendanceMarkContext(input: {
   return {
     syncedSession,
     attendanceSession,
+    phaseCompletionGate,
   } as PreparedAttendanceMarkContext;
 }
 
@@ -642,23 +661,27 @@ export async function persistAttendanceMark(input: {
     throw error;
   }
 
-  let phaseCompletion: StudentPhaseCompletion | null = null;
-  try {
-    await invalidateStudentPhaseCompletionForCourseDay({
-      studentId: input.studentId,
-      sessionFamilyId: input.context.attendanceSession.sessionFamilyId,
-      courseId: input.context.attendanceSession.courseId,
-      lecturerId: input.context.attendanceSession.lecturerId,
-      referenceTime: input.context.attendanceSession.startedAt,
-    });
+  const phaseCompletion = buildStudentPhaseCompletionStatus({
+    phaseOneDone:
+      input.context.syncedSession.phase === "PHASE_ONE" ||
+      input.context.syncedSession.phase === "PHASE_TWO" ||
+      input.context.phaseCompletionGate.phaseOneDone,
+    phaseTwoDone:
+      input.context.syncedSession.phase === "PHASE_TWO" ||
+      input.context.phaseCompletionGate.phaseTwoDone,
+  });
 
-    phaseCompletion = await getStudentPhaseCompletionForCourseDay({
-      studentId: input.studentId,
-      sessionFamilyId: input.context.attendanceSession.sessionFamilyId,
-      courseId: input.context.attendanceSession.courseId,
-      lecturerId: input.context.attendanceSession.lecturerId,
-      referenceTime: input.context.attendanceSession.startedAt,
-    });
+  try {
+    await setStudentPhaseCompletionForCourseDay(
+      {
+        studentId: input.studentId,
+        sessionFamilyId: input.context.attendanceSession.sessionFamilyId,
+        courseId: input.context.attendanceSession.courseId,
+        lecturerId: input.context.attendanceSession.lecturerId,
+        referenceTime: input.context.attendanceSession.startedAt,
+      },
+      phaseCompletion
+    );
   } catch (phaseError) {
     console.warn("[attendance-marking] phase completion lookup failed", {
       studentId: input.studentId,
@@ -697,14 +720,14 @@ export async function persistAttendanceMark(input: {
     }
   }
 
-  await Promise.all([
-    cacheDel(`attendance:session-me:${input.context.attendanceSession.id}:${input.studentId}`),
-    cacheDel(`attendance:sessions:list:STUDENT:${input.studentId}:ACTIVE`),
-    cacheDel(`attendance:sessions:list:STUDENT:${input.studentId}:ALL`),
-    cacheDel(`attendance:sessions:list:STUDENT:${input.studentId}:ACTIVE:20`),
-    cacheDel(`attendance:sessions:list:STUDENT:${input.studentId}:ALL:20`),
-    cacheDel(`attendance:sessions:list:STUDENT:${input.studentId}:ACTIVE:100`),
-    cacheDel(`attendance:sessions:list:STUDENT:${input.studentId}:ALL:100`),
+  await cacheDelBatch([
+    `attendance:session-me:${input.context.attendanceSession.id}:${input.studentId}`,
+    `attendance:sessions:list:STUDENT:${input.studentId}:ACTIVE`,
+    `attendance:sessions:list:STUDENT:${input.studentId}:ALL`,
+    `attendance:sessions:list:STUDENT:${input.studentId}:ACTIVE:20`,
+    `attendance:sessions:list:STUDENT:${input.studentId}:ALL:20`,
+    `attendance:sessions:list:STUDENT:${input.studentId}:ACTIVE:100`,
+    `attendance:sessions:list:STUDENT:${input.studentId}:ALL:100`,
   ]);
 
   return {
