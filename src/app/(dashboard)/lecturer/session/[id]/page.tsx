@@ -14,7 +14,6 @@ import {
   Clock,
   StopCircle,
   Loader2,
-  AlertTriangle,
   Bluetooth,
   FileSpreadsheet,
   FileText,
@@ -27,6 +26,7 @@ interface SessionData {
   phase: "PHASE_ONE" | "PHASE_TWO" | "CLOSED";
   phaseEndsAt: string;
   startedAt: string;
+  courseEnrollmentCount: number;
   course: { code: string; name: string };
   records: {
     id: string;
@@ -234,6 +234,11 @@ export default function SessionMonitorPage() {
 
   const isActive = data.status === "ACTIVE";
   const bleBusy = bleAction !== null;
+  const markedCount = data._count.records;
+  const enrolledCount = data.courseEnrollmentCount;
+  const remainingCount = Math.max(enrolledCount - markedCount, 0);
+  const completionRate =
+    enrolledCount > 0 ? Math.round((markedCount / enrolledCount) * 100) : 0;
 
   return (
     <div className="space-y-6">
@@ -259,7 +264,7 @@ export default function SessionMonitorPage() {
             </span>
             <span className="flex items-center gap-1">
               <Users className="h-4 w-4" />
-              {data._count.records} students marked
+              {markedCount}/{enrolledCount} students marked
             </span>
             <span className="flex items-center gap-1">
               <Clock className="h-4 w-4" />
@@ -312,138 +317,140 @@ export default function SessionMonitorPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-        {isActive && (
-          <div className="surface space-y-4 p-4 sm:p-5">
-            <h2 className="text-lg font-semibold">Live QR Code</h2>
-            <QrDisplay sessionId={sessionId} />
+      <div className="space-y-6">
+        <div className="surface space-y-4 p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">
+              {isActive ? "Live QR Code" : "Session Summary"}
+            </h2>
+            <span className="rounded-full border border-border/70 bg-muted px-3 py-1 text-xs font-medium text-foreground">
+              {markedCount}/{enrolledCount} marked
+            </span>
+          </div>
 
-            <div className="rounded-xl border border-border/70 bg-background/40 p-3">
-              <div className="mb-2 flex items-center gap-2">
-                <Bluetooth className="h-4 w-4 text-muted-foreground" />
-                <p className="text-sm font-semibold">Lecturer BLE Broadcast</p>
-              </div>
-              {!bleStatus ? (
-                <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Loading BLE status...
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="status-panel-subtle text-xs">
-                    <p className="font-semibold">
-                      Expected Beacon Name: {bleStatus.beaconName ?? "Not available"}
-                    </p>
-                    <p className="text-muted-foreground">Service UUID: {bleStatus.serviceUuid}</p>
-                    <p className="text-muted-foreground">
-                      Token Char: {bleStatus.currentTokenCharacteristicUuid}
-                    </p>
-                    <p className="text-muted-foreground">
-                      Meta Char: {bleStatus.sessionMetaCharacteristicUuid}
-                    </p>
-                    <p className="text-muted-foreground">
-                      Manufacturer: 0x{bleStatus.manufacturerCompanyId.toString(16).toUpperCase()} · Data: {bleStatus.manufacturerDataHex ?? "N/A"}
-                    </p>
-                  </div>
-                  {bleStatus.enabled ? (
-                    <div className="status-panel-subtle text-xs">
-                      <p className="font-semibold">
-                        Android Broadcaster: {bleStatus.active ? "Active" : "No heartbeat yet"}
-                      </p>
-                      {!bleStatus.active ? (
-                        <p className="text-muted-foreground">
-                          If broadcaster is external and not sending heartbeat, students can still try BLE scan.
-                        </p>
-                      ) : null}
-                      {bleStatus.broadcasterDeviceName ? (
-                        <p className="text-muted-foreground">
-                          Device: {bleStatus.broadcasterDeviceName}
-                        </p>
-                      ) : null}
-                      {bleStatus.lastHeartbeatAt ? (
-                        <p className="text-muted-foreground">
-                          Last heartbeat {new Date(bleStatus.lastHeartbeatAt).toLocaleTimeString()}
-                        </p>
-                      ) : null}
-                      {bleStatus.expiresAt ? (
-                        <p className="text-muted-foreground">
-                          BLE mode until {new Date(bleStatus.expiresAt).toLocaleTimeString()}
-                        </p>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Beacon is currently off.
-                    </p>
-                  )}
-                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-                    <DashboardActionButton
-                      type="button"
-                      onClick={() => void handleStartBle()}
-                      disabled={bleBusy}
-                      variant={bleStatus.enabled ? "secondary" : "primary"}
-                      loading={bleAction === "start"}
-                      className="h-9 min-w-0 px-1.5 text-[10px] leading-none sm:px-2 sm:text-xs"
-                    >
-                      <span className="truncate">Enable BLE</span>
-                    </DashboardActionButton>
-                    <DashboardActionButton
-                      type="button"
-                      onClick={() => void handleStopBle()}
-                      disabled={bleBusy || !bleStatus?.enabled}
-                      loading={bleAction === "stop"}
-                      className="h-9 min-w-0 px-1.5 text-[10px] leading-none sm:px-2 sm:text-xs"
-                    >
-                      <span className="truncate">Disable BLE</span>
-                    </DashboardActionButton>
-                    <DashboardActionButton
-                      type="button"
-                      onClick={() => void fetchBleStatus("manual")}
-                      disabled={bleBusy}
-                      loading={bleAction === "refresh"}
-                      className="h-9 min-w-0 px-1.5 text-[10px] leading-none sm:px-2 sm:text-xs"
-                    >
-                      <span className="truncate">Refresh</span>
-                    </DashboardActionButton>
-                  </div>
-                </div>
-              )}
+          {isActive ? (
+            <QrDisplay sessionId={sessionId} />
+          ) : (
+            <div className="rounded-2xl border border-border/70 bg-background/40 p-6 text-center text-sm text-muted-foreground">
+              This attendance session is closed. The live QR code is no longer active.
+            </div>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-border/70 bg-background/40 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Marked
+              </p>
+              <p className="mt-2 text-2xl font-semibold tracking-tight">
+                {markedCount}
+                <span className="ml-2 text-sm font-medium text-muted-foreground">
+                  / {enrolledCount}
+                </span>
+              </p>
+            </div>
+            <div className="rounded-xl border border-border/70 bg-background/40 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Remaining
+              </p>
+              <p className="mt-2 text-2xl font-semibold tracking-tight">{remainingCount}</p>
+            </div>
+            <div className="rounded-xl border border-border/70 bg-background/40 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Completion
+              </p>
+              <p className="mt-2 text-2xl font-semibold tracking-tight">{completionRate}%</p>
             </div>
           </div>
-        )}
 
-        <div className="surface space-y-4 p-4 sm:p-5">
-          <h2 className="text-lg font-semibold">Attendance ({data.records.length})</h2>
-          <div className="max-h-[640px] space-y-2 overflow-y-auto pr-1">
-            {data.records.map((record) => (
-              <div
-                key={record.id}
-                className="rounded-xl border border-border/70 bg-background/40 p-3"
-              >
-                <div>
-                  <p className="text-sm font-medium">{record.student.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {record.student.studentId || "No ID"} ·{" "}
-                    {new Date(record.markedAt).toLocaleTimeString()}
+          <div className="rounded-xl border border-border/70 bg-background/40 p-3">
+            <div className="mb-2 flex items-center gap-2">
+              <Bluetooth className="h-4 w-4 text-muted-foreground" />
+              <p className="text-sm font-semibold">Lecturer BLE Broadcast</p>
+            </div>
+            {!bleStatus ? (
+              <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Loading BLE status...
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="status-panel-subtle text-xs">
+                  <p className="font-semibold">
+                    Expected Beacon Name: {bleStatus.beaconName ?? "Not available"}
+                  </p>
+                  <p className="text-muted-foreground">Service UUID: {bleStatus.serviceUuid}</p>
+                  <p className="text-muted-foreground">
+                    Token Char: {bleStatus.currentTokenCharacteristicUuid}
+                  </p>
+                  <p className="text-muted-foreground">
+                    Meta Char: {bleStatus.sessionMetaCharacteristicUuid}
+                  </p>
+                  <p className="text-muted-foreground">
+                    Manufacturer: 0x{bleStatus.manufacturerCompanyId.toString(16).toUpperCase()} · Data: {bleStatus.manufacturerDataHex ?? "N/A"}
                   </p>
                 </div>
-                <div className="mt-3 flex items-center gap-3">
-                  <span className="text-sm font-mono">{record.confidence}%</span>
-                  {record.flagged ? (
-                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                      <AlertTriangle className="h-4 w-4" />
-                      Flagged
-                    </span>
-                  ) : null}
+                {bleStatus.enabled ? (
+                  <div className="status-panel-subtle text-xs">
+                    <p className="font-semibold">
+                      Android Broadcaster: {bleStatus.active ? "Active" : "No heartbeat yet"}
+                    </p>
+                    {!bleStatus.active ? (
+                      <p className="text-muted-foreground">
+                        If broadcaster is external and not sending heartbeat, students can still try BLE scan.
+                      </p>
+                    ) : null}
+                    {bleStatus.broadcasterDeviceName ? (
+                      <p className="text-muted-foreground">
+                        Device: {bleStatus.broadcasterDeviceName}
+                      </p>
+                    ) : null}
+                    {bleStatus.lastHeartbeatAt ? (
+                      <p className="text-muted-foreground">
+                        Last heartbeat {new Date(bleStatus.lastHeartbeatAt).toLocaleTimeString()}
+                      </p>
+                    ) : null}
+                    {bleStatus.expiresAt ? (
+                      <p className="text-muted-foreground">
+                        BLE mode until {new Date(bleStatus.expiresAt).toLocaleTimeString()}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Beacon is currently off.
+                  </p>
+                )}
+                <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+                  <DashboardActionButton
+                    type="button"
+                    onClick={() => void handleStartBle()}
+                    disabled={bleBusy}
+                    variant={bleStatus.enabled ? "secondary" : "primary"}
+                    loading={bleAction === "start"}
+                    className="h-9 min-w-0 px-1.5 text-[10px] leading-none sm:px-2 sm:text-xs"
+                  >
+                    <span className="truncate">Enable BLE</span>
+                  </DashboardActionButton>
+                  <DashboardActionButton
+                    type="button"
+                    onClick={() => void handleStopBle()}
+                    disabled={bleBusy || !bleStatus?.enabled}
+                    loading={bleAction === "stop"}
+                    className="h-9 min-w-0 px-1.5 text-[10px] leading-none sm:px-2 sm:text-xs"
+                  >
+                    <span className="truncate">Disable BLE</span>
+                  </DashboardActionButton>
+                  <DashboardActionButton
+                    type="button"
+                    onClick={() => void fetchBleStatus("manual")}
+                    disabled={bleBusy}
+                    loading={bleAction === "refresh"}
+                    className="h-9 min-w-0 px-1.5 text-[10px] leading-none sm:px-2 sm:text-xs"
+                  >
+                    <span className="truncate">Refresh</span>
+                  </DashboardActionButton>
                 </div>
               </div>
-            ))}
-            {data.records.length === 0 && (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                No students have marked attendance yet.
-                <br />
-                Display the QR code for students to scan.
-              </p>
             )}
           </div>
         </div>

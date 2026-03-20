@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getPhaseEndsAt, syncAttendanceSessionState } from "@/lib/attendance";
-import { generatePhaseBoundBleToken, getQrSequence } from "@/lib/qr";
+import {
+  generatePhaseBoundBleToken,
+  getQrSequence,
+  getQrSequenceStartTs,
+} from "@/lib/qr";
 import { cacheGet, cacheSet } from "@/lib/cache";
 import type { BleTokenPayload } from "@/lib/ble-spec";
 import { getFreshBleRelayLease, getSessionBleBroadcast } from "@/lib/lecturer-ble";
@@ -126,7 +130,7 @@ export async function GET(
       sequence: currentSequence,
       rotationMs: syncedSession.qrRotationMs,
       phaseEndsAt,
-      ts: nowTs,
+      ts: getQrSequenceStartTs(currentSequence, syncedSession.qrRotationMs),
     }),
     next: buildTokenPayload({
       sessionId: id,

@@ -75,6 +75,10 @@ export async function GET(
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
 
+  const courseEnrollmentCount = await db.enrollment.count({
+    where: { courseId: attendanceSession.courseId },
+  });
+
   const user = session.user as any;
   const isLecturer = attendanceSession.lecturerId === user.id;
   const isAdminInOrganization =
@@ -99,6 +103,7 @@ export async function GET(
 
   return NextResponse.json({
     ...attendanceSession,
+    courseEnrollmentCount,
     status: syncedSession.status,
     phase: syncedSession.phase,
     endsAt: syncedSession.endsAt,

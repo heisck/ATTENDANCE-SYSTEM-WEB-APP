@@ -62,7 +62,7 @@ function renderMetaBadge(
 ) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${getToneClasses(
+      className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-3 py-1 text-xs font-medium ${getToneClasses(
         tone
       )}`}
     >
@@ -87,14 +87,16 @@ function renderResultBadge(entry: CourseFamilySummary) {
   return renderMetaBadge("Absent", "destructive");
 }
 
-function renderPhaseBadge(kind: "Check In" | "Check Out", marked: boolean, opened: number) {
-  const Icon = kind === "Check In" ? LogIn : LogOut;
+function renderPhaseBadge(kind: "PHASE_ONE" | "PHASE_TWO", marked: boolean, opened: number) {
+  const isPhaseOne = kind === "PHASE_ONE";
+  const Icon = isPhaseOne ? LogIn : LogOut;
+  const label = isPhaseOne ? "Phase 1" : "Phase 2";
 
   if (marked) {
     return (
       <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${getToneClasses()}`}>
         <Icon className="h-3.5 w-3.5" />
-        {kind}
+        {label} Marked
       </span>
     );
   }
@@ -107,7 +109,7 @@ function renderPhaseBadge(kind: "Check In" | "Check Out", marked: boolean, opene
         )}`}
       >
         <Icon className="h-3.5 w-3.5" />
-        {kind} Missed
+        {label} Missed
       </span>
     );
   }
@@ -119,7 +121,7 @@ function renderPhaseBadge(kind: "Check In" | "Check Out", marked: boolean, opene
       )}`}
     >
       <Icon className="h-3.5 w-3.5" />
-      {kind} Not Opened
+      {label} Not Opened
     </span>
   );
 }
@@ -286,9 +288,9 @@ export default async function StudentHistoryPage() {
               open={index === 0}
             >
               <summary className="cursor-pointer list-none p-4 sm:p-5 [&::-webkit-details-marker]:hidden">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0 space-y-3">
-                    <div className="flex items-start gap-3">
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex items-start gap-3">
                       <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-muted/35">
                         <BookOpen className="h-5 w-5 text-muted-foreground" />
                       </span>
@@ -301,28 +303,28 @@ export default async function StudentHistoryPage() {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
-                      {renderMetaBadge(`Present ${course.fullyPresent}`)}
-                      {renderMetaBadge(`Partial ${course.partial}`, "muted")}
-                      {renderMetaBadge(`Missed ${course.missed}`, "destructive")}
-                      {course.flagged > 0
-                        ? renderMetaBadge(`Flagged ${course.flagged}`, "destructive")
-                        : null}
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span
+                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${
+                          course.attendanceRate < 75
+                            ? "border-destructive/20 bg-destructive/5 text-destructive"
+                            : "border-border bg-muted/40 text-foreground"
+                        }`}
+                      >
+                        {course.attendanceRate}%
+                      </span>
+                      <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
                     </div>
                   </div>
 
-                  <div className="flex shrink-0 items-center gap-3">
-                    <span
-                      className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${
-                        course.attendanceRate < 75
-                          ? "border-destructive/20 bg-destructive/5 text-destructive"
-                          : "border-border bg-muted/40 text-foreground"
-                      }`}
-                    >
-                      {course.attendanceRate}%
-                    </span>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+                  <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {renderMetaBadge(`Present ${course.fullyPresent}`)}
+                    {renderMetaBadge(`Partial ${course.partial}`, "muted")}
+                    {renderMetaBadge(`Missed ${course.missed}`, "destructive")}
                   </div>
+                  {course.flagged > 0 ? (
+                    <div>{renderMetaBadge(`Flagged ${course.flagged}`, "destructive")}</div>
+                  ) : null}
                 </div>
               </summary>
 
@@ -361,12 +363,12 @@ export default async function StudentHistoryPage() {
 
                         <div className="mt-3 flex flex-wrap gap-2">
                           {renderPhaseBadge(
-                            "Check In",
+                            "PHASE_ONE",
                             entry.phaseOneDone,
                             entry.phaseOneSessions
                           )}
                           {renderPhaseBadge(
-                            "Check Out",
+                            "PHASE_TWO",
                             entry.phaseTwoDone,
                             entry.phaseTwoSessions
                           )}

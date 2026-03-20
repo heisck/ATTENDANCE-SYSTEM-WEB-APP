@@ -33,7 +33,7 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
   const [nextSequenceId, setNextSequenceId] = useState<string>("E001");
   const [cueColor, setCueColor] = useState<string>("green");
   const [countdownMs, setCountdownMs] = useState<number>(5000);
-  const [brightnessBoost, setBrightnessBoost] = useState<boolean>(true);
+  const [brightnessBoost, setBrightnessBoost] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const buildDataUrl = useCallback(async (payload: unknown) => {
@@ -311,6 +311,12 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
     "flex h-9 min-w-0 items-center justify-center gap-1 rounded-xl border border-border/70 bg-background/50 px-2 text-center text-[10px] font-medium leading-none text-foreground transition-colors hover:bg-accent sm:h-10 sm:gap-1.5 sm:px-3 sm:text-[11px]";
   const staticUtilityItemClass =
     "flex h-9 min-w-0 items-center justify-center rounded-xl border border-border/70 bg-background/50 px-2 text-center text-[10px] font-medium leading-none text-foreground sm:h-10 sm:px-3 sm:text-[11px]";
+  const qrShellClass = cn(
+    "mx-auto w-full max-w-[560px] overflow-hidden rounded-2xl border-2 bg-white p-2 transition-all duration-200",
+    brightnessBoost
+      ? "border-white shadow-[0_0_0_10px_rgba(255,255,255,0.96),0_0_40px_rgba(255,255,255,0.82)]"
+      : "border-border"
+  );
 
   async function toggleFullscreen() {
     try {
@@ -387,14 +393,14 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
             type="button"
             onClick={() => setBrightnessBoost((value) => !value)}
             className={utilityItemClass}
-            title={brightnessBoost ? "Brightness +" : "Normal Brightness"}
+            title={brightnessBoost ? "Brightness Boost On" : "Increase Brightness"}
           >
             <Sun className="h-3.5 w-3.5" />
             <span className="truncate min-[480px]:hidden">
-              {brightnessBoost ? "Bright +" : "Normal"}
+              {brightnessBoost ? "Boost On" : "Bright +"}
             </span>
             <span className="hidden truncate min-[480px]:inline">
-              {brightnessBoost ? "Brightness +" : "Normal Brightness"}
+              {brightnessBoost ? "Brightness Boost On" : "Increase Brightness"}
             </span>
           </button>
           <button
@@ -415,8 +421,15 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
       </div>
 
       <div
-        className="mx-auto w-full max-w-[560px] overflow-hidden rounded-2xl border-2 border-border bg-white p-2"
-        style={brightnessBoost ? { filter: "brightness(1.2) contrast(1.15)" } : undefined}
+        className={qrShellClass}
+        style={
+          brightnessBoost
+            ? {
+                filter: "brightness(1.28) contrast(1.22)",
+                backgroundColor: "#ffffff",
+              }
+            : undefined
+        }
       >
         {qrDataUrl && (
           <div className="relative mx-auto aspect-square w-full">
@@ -424,7 +437,10 @@ export function QrDisplay({ sessionId, mode = "lecturer" }: QrDisplayProps) {
             <img
               src={qrDataUrl}
               alt={`Attendance QR Code ${sequenceId}`}
-              className="h-full w-full object-contain"
+              className={cn(
+                "h-full w-full object-contain transition-transform duration-200",
+                brightnessBoost ? "scale-[1.01]" : "scale-100"
+              )}
             />
             <div
               className={`pointer-events-none absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow ${cueDotClass}`}

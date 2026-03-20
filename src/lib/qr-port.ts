@@ -127,8 +127,7 @@ export async function getLiveQrForPort(sessionId: string, studentId: string) {
     attendanceSession.qrSecret,
     syncedSession.phase,
     currentSequence,
-    syncedSession.qrRotationMs,
-    nowTs
+    syncedSession.qrRotationMs
   );
   const nextQr = generateQrPayloadForSequence(
     attendanceSession.id,

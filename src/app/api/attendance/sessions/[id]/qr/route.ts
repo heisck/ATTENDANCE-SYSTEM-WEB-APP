@@ -62,8 +62,7 @@ export async function GET(
     attendanceSession.qrSecret,
     syncedSession.phase,
     currentSequence,
-    syncedSession.qrRotationMs,
-    nowTs
+    syncedSession.qrRotationMs
   );
   const nextSequence = currentSequence + 1;
   const nextQr = generateQrPayloadForSequence(
