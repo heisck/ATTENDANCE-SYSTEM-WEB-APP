@@ -126,6 +126,19 @@ src/
 docker compose -f docker-compose.prod.yml up --build -d
 ```
 
+## Production-Like Load Test Stack
+
+For concurrency testing behind Linux containers, shared Redis, and Nginx load balancing:
+
+```bash
+npm run stack:loadtest:up
+npm run loadtest:stack:prepare -- 500
+```
+
+Then run the generated command in `load-tests/fixtures/attendance-loadtest-command.txt`.
+
+See [Production-Like Load Test Stack](docs/LOAD_TEST_STACK.md) for the full workflow.
+
 ## Vercel + Neon Deployment
 
 See [Vercel + Neon Deployment Guide](docs/VERCEL_NEON_DEPLOY.md) for the exact production setup commands and required environment variables.

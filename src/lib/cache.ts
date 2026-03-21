@@ -456,9 +456,8 @@ export async function cacheIncrement(key: string, ttlSeconds: number): Promise<n
   }
 
   try {
-    const exists = await client.exists(key);
     const count = await client.incr(key);
-    if (exists === 0) {
+    if (count === 1) {
       await client.expire(key, ttlSeconds);
     }
     return count;

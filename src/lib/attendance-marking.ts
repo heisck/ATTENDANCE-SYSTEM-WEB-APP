@@ -9,8 +9,8 @@ import {
   checkRateLimit,
 } from "@/lib/cache";
 import {
+  deriveAttendancePhase,
   getBoundedSessionTtlSeconds,
-  syncAttendanceSessionState,
 } from "@/lib/attendance";
 import { requireAttendanceProof } from "@/lib/attendance-proof";
 import {
@@ -28,12 +28,41 @@ import { getDeviceBleStats } from "@/lib/ble-verification";
 import {
   buildStudentPhaseCompletionStatus,
   getStudentPhaseCompletionForCourseDay,
+  prewarmPhaseCompletionSnapshotForCourseDay,
   setStudentPhaseCompletionForCourseDay,
   type StudentPhaseCompletion,
 } from "@/lib/phase-completion";
-import { hasSuccessfulPhaseOneFaceVerificationForCourseDay } from "@/lib/face";
+import {
+  hasSuccessfulPhaseOneFaceVerificationForCourseDay,
+  prewarmPhaseOneFaceSuccessSnapshotForCourseDay,
+} from "@/lib/face";
 
 const ATTENDANCE_SESSION_META_TTL_SECONDS = 5 * 60;
+const ATTENDANCE_SESSION_STATE_TTL_SECONDS = 15;
+const COURSE_ATTENDANCE_ELIGIBILITY_TTL_MS = 5 * 60 * 1000;
+
+const attendanceSessionContextInFlight = new Map<
+  string,
+  Promise<{ syncedSession: SyncedAttendanceSessionState; attendanceSession: AttendanceSessionMeta } | null>
+>();
+const attendanceSessionContextLocalCache = new Map<
+  string,
+  {
+    expiresAtMs: number;
+    cached: CachedPreparedAttendanceSessionContext;
+  }
+>();
+const courseAttendanceEligibilityInFlight = new Map<
+  string,
+  Promise<Record<string, CourseAttendanceEligibility>>
+>();
+const courseAttendanceEligibilityCache = new Map<
+  string,
+  {
+    expiresAtMs: number;
+    snapshot: Record<string, CourseAttendanceEligibility>;
+  }
+>();
 
 type CachedAttendanceSessionMeta = {
   id: string;
@@ -48,6 +77,15 @@ type CachedAttendanceSessionMeta = {
       settings: unknown;
     };
   };
+};
+
+type CachedPreparedAttendanceSessionContext = CachedAttendanceSessionMeta & {
+  status: "ACTIVE" | "CLOSED";
+  phase: "PHASE_ONE" | "PHASE_TWO" | "CLOSED";
+  closedAt: string | null;
+  relayEnabled: boolean;
+  qrRotationMs: number;
+  qrGraceMs: number;
 };
 
 type AttendanceSessionMeta = {
@@ -65,6 +103,18 @@ type AttendanceSessionMeta = {
   };
 };
 
+type SyncedAttendanceSessionState = {
+  id: string;
+  status: "ACTIVE" | "CLOSED";
+  phase: "PHASE_ONE" | "PHASE_TWO" | "CLOSED";
+  startedAt: Date;
+  endsAt: Date;
+  closedAt: Date | null;
+  relayEnabled: boolean;
+  qrRotationMs: number;
+  qrGraceMs: number;
+};
+
 type DevicePayload = {
   deviceToken?: unknown;
   deviceName?: unknown;
@@ -74,6 +124,12 @@ type DevicePayload = {
   deviceFingerprint?: unknown;
   bleSignature?: unknown;
   bleSignalStrength?: unknown;
+};
+
+type CourseAttendanceEligibility = {
+  personalEmailReady: boolean;
+  faceEnrollmentReady: boolean;
+  hasPasskey: boolean;
 };
 
 type SecurityBuildInput = {
@@ -132,7 +188,7 @@ export class AttendanceAlreadyMarkedError extends AttendanceRequestError {
 }
 
 export type PreparedAttendanceMarkContext = {
-  syncedSession: NonNullable<Awaited<ReturnType<typeof syncAttendanceSessionState>>>;
+  syncedSession: SyncedAttendanceSessionState;
   attendanceSession: AttendanceSessionMeta;
   phaseCompletionGate: StudentPhaseCompletion;
 };
@@ -205,49 +261,175 @@ function deserializeAttendanceSessionMeta(
   };
 }
 
-async function getAttendanceSessionMeta(sessionId: string) {
-  const cacheKey = `attendance:mark-session:${sessionId}`;
-  const cached = await cacheGet<CachedAttendanceSessionMeta>(cacheKey);
-  if (cached) {
-    return deserializeAttendanceSessionMeta(cached);
+function serializePreparedAttendanceSessionContext(input: {
+  syncedSession: SyncedAttendanceSessionState;
+  attendanceSession: AttendanceSessionMeta;
+}): CachedPreparedAttendanceSessionContext {
+  return {
+    ...serializeAttendanceSessionMeta(input.attendanceSession),
+    status: input.syncedSession.status,
+    phase: input.syncedSession.phase,
+    closedAt: input.syncedSession.closedAt
+      ? input.syncedSession.closedAt.toISOString()
+      : null,
+    relayEnabled: input.syncedSession.relayEnabled,
+    qrRotationMs: input.syncedSession.qrRotationMs,
+    qrGraceMs: input.syncedSession.qrGraceMs,
+  };
+}
+
+function deserializePreparedAttendanceSessionContext(
+  cached: CachedPreparedAttendanceSessionContext
+): {
+  syncedSession: SyncedAttendanceSessionState;
+  attendanceSession: AttendanceSessionMeta;
+} {
+  const attendanceSession = deserializeAttendanceSessionMeta(cached);
+  const now = new Date();
+  const derivedPhase = deriveAttendancePhase(
+    {
+      status: cached.status,
+      phase: cached.phase,
+      endsAt: attendanceSession.endsAt,
+    },
+    now
+  );
+  const derivedStatus = derivedPhase === "CLOSED" ? "CLOSED" : cached.status;
+
+  return {
+    attendanceSession,
+    syncedSession: {
+      id: cached.id,
+      status: derivedStatus,
+      phase: derivedPhase,
+      startedAt: attendanceSession.startedAt,
+      endsAt: attendanceSession.endsAt,
+      closedAt:
+        derivedStatus === "CLOSED"
+          ? cached.closedAt
+            ? new Date(cached.closedAt)
+            : now
+          : cached.closedAt
+            ? new Date(cached.closedAt)
+            : null,
+      relayEnabled: derivedStatus === "CLOSED" ? false : cached.relayEnabled,
+      qrRotationMs: cached.qrRotationMs,
+      qrGraceMs: cached.qrGraceMs,
+    },
+  };
+}
+
+function getFreshLocalPreparedAttendanceSessionContext(sessionId: string) {
+  const cached = attendanceSessionContextLocalCache.get(sessionId);
+  if (!cached) {
+    return null;
   }
 
-  const session = await db.attendanceSession.findUnique({
-    where: { id: sessionId },
-    select: {
-      id: true,
-      courseId: true,
-      lecturerId: true,
-      sessionFamilyId: true,
-      qrSecret: true,
-      startedAt: true,
-      endsAt: true,
-      course: {
-        select: {
-          organization: {
-            select: {
-              settings: true,
+  if (cached.expiresAtMs <= Date.now()) {
+    attendanceSessionContextLocalCache.delete(sessionId);
+    return null;
+  }
+
+  return cached.cached;
+}
+
+function setLocalPreparedAttendanceSessionContext(
+  sessionId: string,
+  cached: CachedPreparedAttendanceSessionContext
+) {
+  attendanceSessionContextLocalCache.set(sessionId, {
+    expiresAtMs:
+      Date.now() +
+      getBoundedSessionTtlSeconds(
+        new Date(cached.endsAt),
+        ATTENDANCE_SESSION_STATE_TTL_SECONDS
+      ) *
+        1000,
+    cached,
+  });
+}
+
+async function getPreparedAttendanceSessionContext(sessionId: string) {
+  const localCached = getFreshLocalPreparedAttendanceSessionContext(sessionId);
+  if (localCached) {
+    return deserializePreparedAttendanceSessionContext(localCached);
+  }
+
+  const cacheKey = `attendance:mark-session:${sessionId}`;
+  const cached = await cacheGet<CachedPreparedAttendanceSessionContext>(cacheKey);
+  if (cached) {
+    setLocalPreparedAttendanceSessionContext(sessionId, cached);
+    return deserializePreparedAttendanceSessionContext(cached);
+  }
+
+  const inFlight = attendanceSessionContextInFlight.get(sessionId);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const queryPromise = (async () => {
+    const session = await db.attendanceSession.findUnique({
+      where: { id: sessionId },
+      select: {
+        id: true,
+        courseId: true,
+        lecturerId: true,
+        status: true,
+        phase: true,
+        sessionFamilyId: true,
+        qrSecret: true,
+        startedAt: true,
+        endsAt: true,
+        closedAt: true,
+        relayEnabled: true,
+        qrRotationMs: true,
+        qrGraceMs: true,
+        course: {
+          select: {
+            organization: {
+              select: {
+                settings: true,
+              },
             },
           },
         },
       },
-    },
-  });
+    });
 
-  if (!session) {
-    return null;
+    if (!session) {
+      return null;
+    }
+
+    const serializedPrepared = serializePreparedAttendanceSessionContext(
+      deserializePreparedAttendanceSessionContext({
+        ...serializeAttendanceSessionMeta(session),
+        status: session.status,
+        phase: session.phase,
+        closedAt: session.closedAt ? session.closedAt.toISOString() : null,
+        relayEnabled: session.relayEnabled,
+        qrRotationMs: session.qrRotationMs,
+        qrGraceMs: session.qrGraceMs,
+      })
+    );
+
+    setLocalPreparedAttendanceSessionContext(sessionId, serializedPrepared);
+
+    await cacheSet(
+      cacheKey,
+      serializedPrepared,
+      getBoundedSessionTtlSeconds(session.endsAt, ATTENDANCE_SESSION_STATE_TTL_SECONDS)
+    );
+
+    return deserializePreparedAttendanceSessionContext(serializedPrepared);
+  })();
+
+  attendanceSessionContextInFlight.set(sessionId, queryPromise);
+
+  try {
+    return await queryPromise;
+  } finally {
+    attendanceSessionContextInFlight.delete(sessionId);
   }
-
-  await cacheSet(
-    cacheKey,
-    serializeAttendanceSessionMeta(session),
-    getBoundedSessionTtlSeconds(
-      session.endsAt,
-      ATTENDANCE_SESSION_META_TTL_SECONDS
-    )
-  );
-
-  return session;
 }
 
 async function getCachedStudentAttendanceState(studentId: string) {
@@ -259,13 +441,21 @@ async function getCachedStudentAttendanceState(studentId: string) {
       status: string;
       primaryImageUrl: string | null;
     } | null;
+    hasPasskey?: boolean;
     credentialCount?: number;
   }>(cacheKey);
+
+  if (studentState && typeof studentState.hasPasskey !== "boolean") {
+    studentState = {
+      ...studentState,
+      hasPasskey: (studentState.credentialCount ?? 0) > 0,
+    };
+  }
 
   if (
     !studentState ||
     !("faceEnrollment" in studentState) ||
-    typeof studentState.credentialCount !== "number"
+    typeof studentState.hasPasskey !== "boolean"
   ) {
     const result = await db.user.findUnique({
       where: { id: studentId },
@@ -278,10 +468,11 @@ async function getCachedStudentAttendanceState(studentId: string) {
             primaryImageUrl: true,
           },
         },
-        _count: {
+        credentials: {
           select: {
-            credentials: true,
+            id: true,
           },
+          take: 1,
         },
       },
     });
@@ -290,7 +481,7 @@ async function getCachedStudentAttendanceState(studentId: string) {
           personalEmail: result.personalEmail,
           personalEmailVerifiedAt: result.personalEmailVerifiedAt,
           faceEnrollment: result.faceEnrollment,
-          credentialCount: result._count.credentials,
+          hasPasskey: result.credentials.length > 0,
         }
       : null;
     if (studentState) {
@@ -299,6 +490,163 @@ async function getCachedStudentAttendanceState(studentId: string) {
   }
 
   return studentState;
+}
+
+function getFreshCourseAttendanceEligibilitySnapshot(courseId: string) {
+  const cached = courseAttendanceEligibilityCache.get(courseId);
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAtMs <= Date.now()) {
+    courseAttendanceEligibilityCache.delete(courseId);
+    return null;
+  }
+
+  return cached.snapshot;
+}
+
+async function getCourseAttendanceEligibilitySnapshot(courseId: string) {
+  const localSnapshot = getFreshCourseAttendanceEligibilitySnapshot(courseId);
+  if (localSnapshot) {
+    return localSnapshot;
+  }
+
+  const inFlight = courseAttendanceEligibilityInFlight.get(courseId);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const queryPromise = (async () => {
+    const rows = await db.enrollment.findMany({
+      where: {
+        courseId,
+      },
+      select: {
+        studentId: true,
+        student: {
+          select: {
+            personalEmail: true,
+            personalEmailVerifiedAt: true,
+            faceEnrollment: {
+              select: {
+                status: true,
+                primaryImageUrl: true,
+              },
+            },
+            credentials: {
+              select: {
+                id: true,
+              },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+
+    const snapshot: Record<string, CourseAttendanceEligibility> = {};
+    for (const row of rows) {
+      snapshot[row.studentId] = {
+        personalEmailReady: Boolean(
+          row.student.personalEmail && row.student.personalEmailVerifiedAt
+        ),
+        faceEnrollmentReady:
+          row.student.faceEnrollment?.status === "COMPLETED" &&
+          Boolean(row.student.faceEnrollment.primaryImageUrl),
+        hasPasskey: row.student.credentials.length > 0,
+      };
+    }
+
+    courseAttendanceEligibilityCache.set(courseId, {
+      expiresAtMs: Date.now() + COURSE_ATTENDANCE_ELIGIBILITY_TTL_MS,
+      snapshot,
+    });
+
+    return snapshot;
+  })();
+
+  courseAttendanceEligibilityInFlight.set(courseId, queryPromise);
+
+  try {
+    return await queryPromise;
+  } finally {
+    courseAttendanceEligibilityInFlight.delete(courseId);
+  }
+}
+
+async function getStudentAttendanceEligibility(input: {
+  studentId: string;
+  courseId: string;
+}) {
+  const snapshot = await getCourseAttendanceEligibilitySnapshot(input.courseId);
+  const cached = snapshot[input.studentId];
+
+  if (
+    cached &&
+    cached.personalEmailReady &&
+    cached.faceEnrollmentReady &&
+    cached.hasPasskey
+  ) {
+    return {
+      enrolled: true,
+      ...cached,
+    };
+  }
+
+  const [studentState, enrollmentCount] = await Promise.all([
+    getCachedStudentAttendanceState(input.studentId),
+    db.enrollment.count({
+      where: {
+        courseId: input.courseId,
+        studentId: input.studentId,
+      },
+    }),
+  ]);
+
+  return {
+    enrolled: enrollmentCount > 0,
+    personalEmailReady: Boolean(
+      studentState?.personalEmail && studentState.personalEmailVerifiedAt
+    ),
+    faceEnrollmentReady:
+      studentState?.faceEnrollment?.status === "COMPLETED" &&
+      Boolean(studentState.faceEnrollment.primaryImageUrl),
+    hasPasskey: studentState?.hasPasskey ?? false,
+  };
+}
+
+export async function prewarmAttendanceMarkingSession(sessionId: string) {
+  const preparedSessionContext = await getPreparedAttendanceSessionContext(sessionId);
+  if (!preparedSessionContext) {
+    return null;
+  }
+
+  const { syncedSession, attendanceSession } = preparedSessionContext;
+  await Promise.all([
+    getCourseAttendanceEligibilitySnapshot(attendanceSession.courseId),
+    prewarmPhaseCompletionSnapshotForCourseDay({
+      sessionFamilyId: attendanceSession.sessionFamilyId,
+      courseId: attendanceSession.courseId,
+      lecturerId: attendanceSession.lecturerId,
+      referenceTime: attendanceSession.startedAt,
+    }),
+    syncedSession.phase === "PHASE_TWO"
+      ? prewarmPhaseOneFaceSuccessSnapshotForCourseDay({
+          sessionFamilyId: attendanceSession.sessionFamilyId,
+          courseId: attendanceSession.courseId,
+          lecturerId: attendanceSession.lecturerId,
+          referenceTime: attendanceSession.startedAt,
+        })
+      : Promise.resolve(),
+  ]);
+
+  return {
+    sessionId: attendanceSession.id,
+    courseId: attendanceSession.courseId,
+    phase: syncedSession.phase,
+    sessionFamilyId: attendanceSession.sessionFamilyId,
+  };
 }
 
 function resolveDeviceContext(
@@ -396,69 +744,63 @@ export async function prepareAttendanceMarkContext(input: {
     );
   }
 
-  const [studentState, syncedSession, attendanceSession] = await Promise.all([
-    getCachedStudentAttendanceState(input.studentId),
-    syncAttendanceSessionState(input.sessionId),
-    getAttendanceSessionMeta(input.sessionId),
-  ]);
+  const preparedSessionContext = await getPreparedAttendanceSessionContext(input.sessionId);
 
-  if (!studentState?.personalEmail || !studentState.personalEmailVerifiedAt) {
+  if (!preparedSessionContext) {
+    throw new AttendanceRequestError("Session not found", 404);
+  }
+
+  const { syncedSession, attendanceSession } = preparedSessionContext;
+
+  if (syncedSession.status !== "ACTIVE") {
+    throw new AttendanceRequestError("Session is no longer active", 410);
+  }
+
+  const eligibility = await getStudentAttendanceEligibility({
+    studentId: input.studentId,
+    courseId: attendanceSession.courseId,
+  });
+
+  if (!eligibility.enrolled) {
+    throw new AttendanceRequestError("You are not enrolled in this course", 403);
+  }
+
+  if (!eligibility.personalEmailReady) {
     throw new AttendanceRequestError(
       "Complete and verify your personal email before attendance.",
       403
     );
   }
 
-  if (
-    studentState.faceEnrollment?.status !== "COMPLETED" ||
-    !studentState.faceEnrollment.primaryImageUrl
-  ) {
+  if (!eligibility.faceEnrollmentReady) {
     throw new AttendanceRequestError(
       "Complete face enrollment before attendance.",
       403
     );
   }
 
-  if ((studentState.credentialCount ?? 0) === 0) {
+  if (!eligibility.hasPasskey) {
     throw new AttendanceRequestError("Register a passkey before attendance.", 403);
   }
 
-  if (!syncedSession) {
-    throw new AttendanceRequestError("Session not found", 404);
-  }
-
-  if (syncedSession.status !== "ACTIVE") {
-    throw new AttendanceRequestError("Session is no longer active", 410);
-  }
-
-  if (!attendanceSession) {
-    throw new AttendanceRequestError("Session not found", 404);
-  }
-
-  const enrollmentCacheKey = `attendance:enrollment:${input.sessionId}:${input.studentId}`;
-  let isEnrolled = await cacheGet<boolean>(enrollmentCacheKey);
-  if (isEnrolled == null) {
-    const enrollmentCount = await db.enrollment.count({
-      where: {
-        courseId: attendanceSession.courseId,
-        studentId: input.studentId,
-      },
-    });
-    isEnrolled = enrollmentCount > 0;
-    await cacheSet(enrollmentCacheKey, isEnrolled, 300);
-  }
-
-  if (!isEnrolled) {
-    throw new AttendanceRequestError("You are not enrolled in this course", 403);
-  }
-
-  const phaseCompletionGate = await getStudentPhaseCompletionForCourseDay({
-    studentId: input.studentId,
-    sessionFamilyId: attendanceSession.sessionFamilyId,
-    courseId: attendanceSession.courseId,
-    lecturerId: attendanceSession.lecturerId,
-    referenceTime: attendanceSession.startedAt,
-  });
+  const [phaseCompletionGate, hasSuccessfulPhaseOneFaceVerification] = await Promise.all([
+    getStudentPhaseCompletionForCourseDay({
+      studentId: input.studentId,
+      sessionFamilyId: attendanceSession.sessionFamilyId,
+      courseId: attendanceSession.courseId,
+      lecturerId: attendanceSession.lecturerId,
+      referenceTime: attendanceSession.startedAt,
+    }),
+    syncedSession.phase === "PHASE_TWO"
+      ? hasSuccessfulPhaseOneFaceVerificationForCourseDay({
+          userId: input.studentId,
+          sessionFamilyId: attendanceSession.sessionFamilyId,
+          courseId: attendanceSession.courseId,
+          lecturerId: attendanceSession.lecturerId,
+          referenceTime: attendanceSession.startedAt,
+        })
+      : Promise.resolve(true),
+  ]);
 
   if (syncedSession.phase === "PHASE_ONE" && phaseCompletionGate.phaseOneDone) {
     throw new AttendanceRequestError(
@@ -474,15 +816,6 @@ export async function prepareAttendanceMarkContext(input: {
         403
       );
     }
-
-    const hasSuccessfulPhaseOneFaceVerification =
-      await hasSuccessfulPhaseOneFaceVerificationForCourseDay({
-        userId: input.studentId,
-        sessionFamilyId: attendanceSession.sessionFamilyId,
-        courseId: attendanceSession.courseId,
-        lecturerId: attendanceSession.lecturerId,
-        referenceTime: attendanceSession.startedAt,
-      });
 
     if (!hasSuccessfulPhaseOneFaceVerification) {
       throw new AttendanceRequestError(
@@ -517,20 +850,22 @@ export async function buildAttendanceMark(input: {
 }): Promise<BuiltAttendanceMark> {
   const deviceContext = resolveDeviceContext(input.request, input.studentId, input.body);
 
-  const deviceLinkResult = await linkDevice(input.studentId, deviceContext.deviceToken, {
-    deviceName: deviceContext.deviceName,
-    deviceType: deviceContext.deviceType as "iOS" | "Android" | "Web",
-    osVersion: deviceContext.osVersion,
-    appVersion: deviceContext.appVersion,
-    fingerprint: deviceContext.fingerprint,
-    bleSignature: deviceContext.bleSignature,
-    browserProofValid: deviceContext.browserProofValid,
-  });
-
-  const deviceConsistency = await getDeviceConsistencyScore(
+  const { consistencyScoreHint, ...deviceLinkResult } = await linkDevice(
     input.studentId,
-    deviceContext.deviceToken
+    deviceContext.deviceToken,
+    {
+      deviceName: deviceContext.deviceName,
+      deviceType: deviceContext.deviceType as "iOS" | "Android" | "Web",
+      osVersion: deviceContext.osVersion,
+      appVersion: deviceContext.appVersion,
+      fingerprint: deviceContext.fingerprint,
+      bleSignature: deviceContext.bleSignature,
+      browserProofValid: deviceContext.browserProofValid,
+    }
   );
+  const deviceConsistency =
+    consistencyScoreHint ??
+    (await getDeviceConsistencyScore(input.studentId, deviceContext.deviceToken));
   const deviceMismatch = deviceConsistency < 50 && !deviceLinkResult.trustedAt;
 
   const bleStats = input.loadBleStats

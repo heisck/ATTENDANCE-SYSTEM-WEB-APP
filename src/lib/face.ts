@@ -22,10 +22,28 @@ import { destroyCloudinaryAsset, uploadCloudinaryAsset } from "@/lib/cloudinary"
 import { createExpiryDate, createRawToken, hashToken } from "@/lib/tokens";
 import { syncAttendanceSessionState } from "@/lib/attendance";
 import { CACHE_KEYS, cacheDel } from "@/lib/cache";
+import { resolveSessionFamilyKey } from "@/lib/session-flow";
 
 const DEFAULT_FACE_FLOW_TOKEN_TTL_MS = 1000 * 60 * 30;
 const DEFAULT_LIVENESS_THRESHOLD = 70;
 const DEFAULT_SIMILARITY_THRESHOLD = 90;
+const PHASE_ONE_FACE_SUCCESS_TTL_MS = 5 * 60 * 1000;
+
+const phaseOneFaceSuccessSnapshotInFlight = new Map<string, Promise<Set<string>>>();
+const phaseOneFaceSuccessSnapshotCache = new Map<
+  string,
+  {
+    expiresAtMs: number;
+    users: Set<string>;
+  }
+>();
+const phaseOneFaceSuccessByUserCache = new Map<
+  string,
+  {
+    expiresAtMs: number;
+    value: boolean;
+  }
+>();
 
 export type FaceAwsCredentials = {
   accessKeyId: string;
@@ -356,15 +374,6 @@ export async function createPendingAttendanceFaceVerification(input: {
     try {
       return await db.$transaction(
         async (tx) => {
-          await tx.pendingAttendanceFaceVerification.findFirst({
-            where: {
-              userId: input.userId,
-              sessionId: input.sessionId,
-              consumedAt: null,
-            },
-            select: { id: true },
-          });
-
           await tx.pendingAttendanceFaceVerification.updateMany({
             where: {
               userId: input.userId,
@@ -856,6 +865,14 @@ export async function performAttendanceFaceVerification(input: {
     },
   });
 
+  rememberPhaseOneFaceSuccess({
+    userId: input.userId,
+    sessionFamilyId: pending.session.sessionFamilyId,
+    courseId: pending.session.courseId,
+    lecturerId: pending.session.lecturerId,
+    referenceTime: pending.session.startedAt,
+  });
+
   return {
     pending,
     livenessScore,
@@ -880,6 +897,158 @@ function getUtcDayRange(reference: Date) {
   return { start, end };
 }
 
+function buildPhaseOneFaceSuccessSnapshotKey(input: {
+  sessionFamilyId?: string | null;
+  courseId: string;
+  lecturerId?: string | null;
+  referenceTime: Date;
+}) {
+  const familyKey = resolveSessionFamilyKey({
+    sessionFamilyId: input.sessionFamilyId,
+    courseId: input.courseId,
+    lecturerId: input.lecturerId,
+    startedAt: input.referenceTime,
+  });
+
+  return `attendance:phase-one-face-success:${familyKey}`;
+}
+
+function buildPhaseOneFaceSuccessUserKey(input: {
+  userId: string;
+  sessionFamilyId?: string | null;
+  courseId: string;
+  lecturerId?: string | null;
+  referenceTime: Date;
+}) {
+  return `${buildPhaseOneFaceSuccessSnapshotKey(input)}:${input.userId}`;
+}
+
+function getFreshPhaseOneFaceSuccessSnapshot(cacheKey: string) {
+  const cached = phaseOneFaceSuccessSnapshotCache.get(cacheKey);
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAtMs <= Date.now()) {
+    phaseOneFaceSuccessSnapshotCache.delete(cacheKey);
+    return null;
+  }
+
+  return cached.users;
+}
+
+function getFreshPhaseOneFaceSuccessUserValue(cacheKey: string) {
+  const cached = phaseOneFaceSuccessByUserCache.get(cacheKey);
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAtMs <= Date.now()) {
+    phaseOneFaceSuccessByUserCache.delete(cacheKey);
+    return null;
+  }
+
+  return cached.value;
+}
+
+function rememberPhaseOneFaceSuccess(input: {
+  userId: string;
+  sessionFamilyId?: string | null;
+  courseId: string;
+  lecturerId?: string | null;
+  referenceTime: Date;
+}) {
+  const expiresAtMs = Date.now() + PHASE_ONE_FACE_SUCCESS_TTL_MS;
+  phaseOneFaceSuccessByUserCache.set(buildPhaseOneFaceSuccessUserKey(input), {
+    expiresAtMs,
+    value: true,
+  });
+
+  const snapshotUsers = getFreshPhaseOneFaceSuccessSnapshot(
+    buildPhaseOneFaceSuccessSnapshotKey(input)
+  );
+  if (snapshotUsers) {
+    snapshotUsers.add(input.userId);
+  }
+}
+
+async function getPhaseOneFaceSuccessSnapshot(input: {
+  sessionFamilyId?: string | null;
+  courseId: string;
+  lecturerId?: string | null;
+  referenceTime: Date;
+}) {
+  const cacheKey = buildPhaseOneFaceSuccessSnapshotKey(input);
+  const cached = getFreshPhaseOneFaceSuccessSnapshot(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const inFlight = phaseOneFaceSuccessSnapshotInFlight.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const queryPromise = (async () => {
+    const dayRange = getUtcDayRange(input.referenceTime);
+    const rows =
+      typeof input.sessionFamilyId === "string" && input.sessionFamilyId.trim().length > 0
+        ? await db.faceVerificationLog.findMany({
+            where: {
+              purpose: FaceFlowPurpose.ATTENDANCE_PHASE_ONE,
+              status: FaceVerificationStatus.SUCCEEDED,
+              session: {
+                sessionFamilyId: input.sessionFamilyId.trim(),
+              },
+            },
+            select: {
+              userId: true,
+            },
+          })
+        : await db.faceVerificationLog.findMany({
+            where: {
+              purpose: FaceFlowPurpose.ATTENDANCE_PHASE_ONE,
+              status: FaceVerificationStatus.SUCCEEDED,
+              session: {
+                courseId: input.courseId,
+                ...(input.lecturerId ? { lecturerId: input.lecturerId } : {}),
+                startedAt: {
+                  gte: dayRange.start,
+                  lt: dayRange.end,
+                },
+              },
+            },
+            select: {
+              userId: true,
+            },
+          });
+
+    const users = new Set(rows.map((row) => row.userId));
+    phaseOneFaceSuccessSnapshotCache.set(cacheKey, {
+      expiresAtMs: Date.now() + PHASE_ONE_FACE_SUCCESS_TTL_MS,
+      users,
+    });
+    return users;
+  })();
+
+  phaseOneFaceSuccessSnapshotInFlight.set(cacheKey, queryPromise);
+
+  try {
+    return await queryPromise;
+  } finally {
+    phaseOneFaceSuccessSnapshotInFlight.delete(cacheKey);
+  }
+}
+
+export async function prewarmPhaseOneFaceSuccessSnapshotForCourseDay(input: {
+  sessionFamilyId?: string | null;
+  courseId: string;
+  lecturerId?: string | null;
+  referenceTime: Date;
+}) {
+  await getPhaseOneFaceSuccessSnapshot(input);
+}
+
 export async function hasSuccessfulPhaseOneFaceVerificationForCourseDay(input: {
   userId: string;
   sessionFamilyId?: string | null;
@@ -887,34 +1056,18 @@ export async function hasSuccessfulPhaseOneFaceVerificationForCourseDay(input: {
   lecturerId?: string | null;
   referenceTime: Date;
 }) {
-  const where =
-    typeof input.sessionFamilyId === "string" && input.sessionFamilyId.trim().length > 0
-      ? {
-          userId: input.userId,
-          purpose: FaceFlowPurpose.ATTENDANCE_PHASE_ONE,
-          status: FaceVerificationStatus.SUCCEEDED,
-          session: {
-            sessionFamilyId: input.sessionFamilyId.trim(),
-          },
-        }
-      : {
-          userId: input.userId,
-          purpose: FaceFlowPurpose.ATTENDANCE_PHASE_ONE,
-          status: FaceVerificationStatus.SUCCEEDED,
-          session: {
-            courseId: input.courseId,
-            ...(input.lecturerId ? { lecturerId: input.lecturerId } : {}),
-            startedAt: {
-              gte: getUtcDayRange(input.referenceTime).start,
-              lt: getUtcDayRange(input.referenceTime).end,
-            },
-          },
-        };
+  const cachedByUser = getFreshPhaseOneFaceSuccessUserValue(
+    buildPhaseOneFaceSuccessUserKey(input)
+  );
+  if (cachedByUser) {
+    return true;
+  }
 
-  const match = await db.faceVerificationLog.findFirst({
-    where,
-    select: { id: true },
-  });
+  const snapshot = await getPhaseOneFaceSuccessSnapshot(input);
+  const hasMatch = snapshot.has(input.userId);
+  if (hasMatch) {
+    rememberPhaseOneFaceSuccess(input);
+  }
 
-  return Boolean(match);
+  return hasMatch;
 }

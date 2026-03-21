@@ -1,6 +1,7 @@
 import http from "k6/http";
 import { check, fail } from "k6";
 import crypto from "k6/crypto";
+import { SharedArray } from "k6/data";
 
 const BASE_URL = (__ENV.BASE_URL || "http://localhost:3000").replace(/\/$/, "");
 const SESSION_ID = __ENV.SESSION_ID || "";
@@ -17,16 +18,26 @@ const ONE_SHOT = String(__ENV.ONE_SHOT || "").toLowerCase() === "true";
 function readJsonFile(fileEnvName) {
   const filePath = __ENV[fileEnvName];
   if (!filePath) return [];
-  return JSON.parse(open(filePath));
+
+  return new SharedArray(`${fileEnvName}:${filePath}`, () => {
+    const parsed = JSON.parse(open(filePath));
+    if (!Array.isArray(parsed)) {
+      fail(`${fileEnvName} must contain a JSON array.`);
+    }
+    return parsed;
+  });
 }
 
 function readUsers() {
   if (!USERS_FILE) return [];
-  const users = JSON.parse(open(USERS_FILE));
-  if (!Array.isArray(users)) {
-    fail("USERS_FILE must contain a JSON array.");
-  }
-  return users;
+
+  return new SharedArray(`USERS_FILE:${USERS_FILE}`, () => {
+    const parsed = JSON.parse(open(USERS_FILE));
+    if (!Array.isArray(parsed)) {
+      fail("USERS_FILE must contain a JSON array.");
+    }
+    return parsed;
+  });
 }
 
 const users = readUsers();

@@ -126,7 +126,12 @@ export async function linkDevice(
     bleSignature?: string;
     browserProofValid?: boolean;
   }
-): Promise<{ id: string; isNewDevice: boolean; trustedAt: Date | null }> {
+): Promise<{
+  id: string;
+  isNewDevice: boolean;
+  trustedAt: Date | null;
+  consistencyScoreHint: number | null;
+}> {
   const touchedAt = new Date();
 
   try {
@@ -166,6 +171,7 @@ export async function linkDevice(
           id: existingByToken.id,
           isNewDevice: false,
           trustedAt: existingByToken.trustedAt,
+          consistencyScoreHint: 100,
         };
       }
 
@@ -182,6 +188,7 @@ export async function linkDevice(
         id: updated.id,
         isNewDevice: false,
         trustedAt: updated.trustedAt,
+        consistencyScoreHint: 100,
       };
     }
 
@@ -218,6 +225,7 @@ export async function linkDevice(
             id: sameFingerprintDevice.id,
             isNewDevice: false,
             trustedAt: sameFingerprintDevice.trustedAt,
+            consistencyScoreHint: 100,
           };
         }
 
@@ -237,6 +245,7 @@ export async function linkDevice(
           id: updated.id,
           isNewDevice: false,
           trustedAt: updated.trustedAt,
+          consistencyScoreHint: 100,
         };
       }
 
@@ -275,6 +284,7 @@ export async function linkDevice(
       id: newDevice.id,
       isNewDevice: true,
       trustedAt: newDevice.trustedAt,
+      consistencyScoreHint: null,
     };
   } catch (error) {
     if (error instanceof DeviceTokenConflictError) {
@@ -319,6 +329,7 @@ export async function linkDevice(
             id: conflicting.id,
             isNewDevice: false,
             trustedAt: conflicting.trustedAt,
+            consistencyScoreHint: 100,
           };
         }
 
@@ -335,6 +346,7 @@ export async function linkDevice(
           id: updated.id,
           isNewDevice: false,
           trustedAt: updated.trustedAt,
+          consistencyScoreHint: 100,
         };
       }
     }

@@ -17,6 +17,7 @@ import {
   buildDefaultBeaconName,
   setSessionBleBroadcast,
 } from "@/lib/lecturer-ble";
+import { triggerAttendanceSessionClusterPrewarm } from "@/lib/attendance-prewarm";
 import { getStudentPhaseCompletionForCourseDay } from "@/lib/phase-completion";
 import {
   getHistoricalPhaseFromSession,
@@ -252,6 +253,17 @@ export async function POST(request: NextRequest) {
       select: { studentId: true },
     });
     await invalidateStudentSessionKeys(enrollmentRows.map((row) => row.studentId));
+
+    const prewarmResult = await triggerAttendanceSessionClusterPrewarm(
+      attendanceSession.id
+    );
+    if (prewarmResult.failedTargets.length > 0) {
+      console.warn("[attendance-sessions] session prewarm incomplete", {
+        sessionId: attendanceSession.id,
+        mode: prewarmResult.mode,
+        failedTargets: prewarmResult.failedTargets,
+      });
+    }
 
     return NextResponse.json(attendanceSession, { status: 201 });
   } catch (error: any) {

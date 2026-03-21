@@ -1,0 +1,116 @@
+name: attendance-loadtest
+
+x-app-env: &app-env
+  NODE_ENV: production
+  NEXT_TELEMETRY_DISABLED: "1"
+  PORT: "3000"
+  HOSTNAME: 0.0.0.0
+  DATABASE_URL: postgresql://postgres:postgres@postgres:5432/attendance_db?schema=public&connection_limit=20
+  DIRECT_URL: postgresql://postgres:postgres@postgres:5432/attendance_db?schema=public&connection_limit=20
+  REDIS_URL: redis://redis:6379
+  AUTH_SECRET: ${AUTH_SECRET:-development-attendance-loadtest-secret}
+  NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-development-attendance-loadtest-secret}
+  AUTH_URL: ${LOADTEST_PUBLIC_URL:-http://localhost:8080}
+  AUTH_TRUST_HOST: "true"
+  NEXT_PUBLIC_APP_URL: ${LOADTEST_PUBLIC_URL:-http://localhost:8080}
+  WEBAUTHN_RP_ID: ${LOADTEST_WEBAUTHN_RP_ID:-localhost}
+  WEBAUTHN_ORIGIN: ${LOADTEST_PUBLIC_URL:-http://localhost:8080}
+  WEBAUTHN_RP_NAME: ${LOADTEST_WEBAUTHN_RP_NAME:-AttendanceIQ Load Test}
+  REMINDER_CRON_SECRET: ${REMINDER_CRON_SECRET:-loadtest-reminder-secret}
+  ORGANIZATION_ONBOARDING_SECRET: ${ORGANIZATION_ONBOARDING_SECRET:-loadtest-bootstrap-secret}
+  GMAIL_SMTP_USER: ${GMAIL_SMTP_USER:-}
+  GMAIL_SMTP_APP_PASSWORD: ${GMAIL_SMTP_APP_PASSWORD:-}
+  GMAIL_FROM_EMAIL: ${GMAIL_FROM_EMAIL:-}
+  GMAIL_SMTP_HOST: ${GMAIL_SMTP_HOST:-smtp.gmail.com}
+  GMAIL_SMTP_PORT: ${GMAIL_SMTP_PORT:-465}
+  NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY: ${NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY:-loadtest-public-key}
+  WEB_PUSH_PRIVATE_KEY: ${WEB_PUSH_PRIVATE_KEY:-loadtest-private-key}
+  ATTENDANCE_PREWARM_TARGETS: http://app-1:3000,http://app-2:3000,http://app-3:3000
+  ATTENDANCE_PREWARM_TIMEOUT_MS: "20000"
+
+x-app-base: &app-base
+  build:
+    context: .
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  environment: *app-env
+  command: ["/app/docker-loadtest-entrypoint.sh"]
+  depends_on:
+    app-init:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/login || exit 1"]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+    start_period: 20s
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: attendance_db
+    ports:
+      - "55432:5432"
+    volumes:
+      - loadtest_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d attendance_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "56379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  app-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: "no"
+    environment: *app-env
+    command: ["/app/docker-init-db.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app-1:
+    <<: *app-base
+
+  app-2:
+    <<: *app-base
+
+  app-3:
+    <<: *app-base
+
+  proxy:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./docker/nginx/loadtest.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      app-1:
+        condition: service_healthy
+      app-2:
+        condition: service_healthy
+      app-3:
+        condition: service_healthy
+
+volumes:
+  loadtest_postgres_data:

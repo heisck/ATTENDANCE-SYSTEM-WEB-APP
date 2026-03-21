@@ -29,6 +29,7 @@ const FIXTURES_DIR = path.join(process.cwd(), "load-tests", "fixtures");
 const USERS_FILE = path.join(FIXTURES_DIR, "attendance-users.json");
 const META_FILE = path.join(FIXTURES_DIR, "attendance-meta.json");
 const COMMAND_FILE = path.join(FIXTURES_DIR, "attendance-loadtest-command.txt");
+const LOAD_TEST_BASE_URL = process.env.LOAD_TEST_BASE_URL || "http://localhost:3000";
 const STUDENT_EMAIL_PREFIX = "load.student";
 const STUDENT_DOMAIN = "st.knust.edu.gh";
 const STUDENT_PERSONAL_DOMAIN = "loadtest.local";
@@ -62,6 +63,10 @@ const ARGON2_HASH_OPTIONS = {
   timeCost: 3,
   parallelism: 1,
 };
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
 
 function fail(message) {
   throw new Error(message);
@@ -604,10 +609,11 @@ async function main() {
     usersFile: USERS_FILE,
     recommendedCommand:
       `k6 run load-tests/attendance-burst.js ` +
-      `-e USERS_FILE=${USERS_FILE} ` +
-      `-e SESSION_ID=${session.id} ` +
-      `-e QR_SECRET=${session.qrSecret} ` +
-      `-e PHASE=${session.phase} ` +
+      `-e BASE_URL=${shellQuote(LOAD_TEST_BASE_URL)} ` +
+      `-e USERS_FILE=${shellQuote(USERS_FILE)} ` +
+      `-e SESSION_ID=${shellQuote(session.id)} ` +
+      `-e QR_SECRET=${shellQuote(session.qrSecret)} ` +
+      `-e PHASE=${shellQuote(session.phase)} ` +
       `-e ONE_SHOT=true ` +
       `-e QR_VUS=5000 -e BLE_VUS=0 -e READ_VUS=0`,
   };
