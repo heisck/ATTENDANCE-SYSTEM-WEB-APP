@@ -124,12 +124,12 @@ function FeatureCard({
   title,
   description,
   score,
-}: {
+}: Readonly<{
   icon: React.ReactNode;
   title: string;
   description: string;
   score: string;
-}) {
+}>) {
   return (
     <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
       <div className="flex items-center justify-between">
