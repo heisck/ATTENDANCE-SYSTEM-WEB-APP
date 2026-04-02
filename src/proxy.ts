@@ -15,8 +15,41 @@ const roleDashboard: Record<string, string> = {
   SUPER_ADMIN: "/super-admin",
 };
 
+function buildContentSecurityPolicy(nonce: string) {
+  const isDevelopment = process.env.NODE_ENV === "development";
+
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDevelopment ? " 'unsafe-eval'" : ""}`,
+    `style-src 'self' 'nonce-${nonce}'`,
+    "img-src 'self' data: blob: https://res.cloudinary.com",
+    "font-src 'self'",
+    `connect-src 'self' https://*.amazonaws.com https://*.cloudinary.com ${isDevelopment ? "ws: wss:" : "wss:"}`,
+    "frame-src 'self' https://*.amazonaws.com",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    process.env.NODE_ENV === "production" ? "upgrade-insecure-requests" : "",
+  ]
+    .filter(Boolean)
+    .join("; ");
+}
+
+function withSecurityHeaders(response: NextResponse, csp: string) {
+  response.headers.set("Content-Security-Policy", csp);
+  return response;
+}
+
 export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const contentSecurityPolicy = buildContentSecurityPolicy(nonce);
+  const requestHeaders = new Headers(req.headers);
+
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", contentSecurityPolicy);
+
   const token = await getToken({
     req,
     secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
@@ -58,10 +91,20 @@ export default async function proxy(req: NextRequest) {
       pathname.startsWith("/api/health");
 
     if (!isPublicApi && !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return withSecurityHeaders(
+        NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+        contentSecurityPolicy
+      );
     }
 
-    return NextResponse.next();
+    return withSecurityHeaders(
+      NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      }),
+      contentSecurityPolicy
+    );
   }
 
   const isAuthPage = pathname.startsWith("/login") || pathname.startsWith("/register");
@@ -74,11 +117,17 @@ export default async function proxy(req: NextRequest) {
 
   if (isAuthPage && user) {
     const dashboard = roleDashboard[user.role] || "/student";
-    return NextResponse.redirect(new URL(dashboard, req.url));
+    return withSecurityHeaders(
+      NextResponse.redirect(new URL(dashboard, req.url)),
+      contentSecurityPolicy
+    );
   }
 
   if ((isDashboard || isSetupDevice) && !user) {
-    return NextResponse.redirect(new URL("/login", req.url));
+    return withSecurityHeaders(
+      NextResponse.redirect(new URL("/login", req.url)),
+      contentSecurityPolicy
+    );
   }
 
   if (isDashboard && user) {
@@ -88,22 +137,32 @@ export default async function proxy(req: NextRequest) {
 
     if (!hasAccess) {
       const dashboard = roleDashboard[role] || "/student";
-      return NextResponse.redirect(new URL(dashboard, req.url));
+      return withSecurityHeaders(
+        NextResponse.redirect(new URL(dashboard, req.url)),
+        contentSecurityPolicy
+      );
     }
   }
 
-  return NextResponse.next();
+  return withSecurityHeaders(
+    NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    }),
+    contentSecurityPolicy
+  );
 }
 
 export const config = {
   matcher: [
-    "/student/:path*",
-    "/lecturer/:path*",
-    "/admin/:path*",
-    "/super-admin/:path*",
-    "/login",
-    "/register",
-    "/setup-device",
     "/api/:path*",
+    {
+      source: "/((?!_next/static|_next/image|favicon.ico).*)",
+      missing: [
+        { type: "header", key: "next-router-prefetch" },
+        { type: "header", key: "purpose", value: "prefetch" },
+      ],
+    },
   ],
 };

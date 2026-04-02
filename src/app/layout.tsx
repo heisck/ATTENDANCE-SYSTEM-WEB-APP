@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import { connection } from "next/server";
+import { headers } from "next/headers";
 import { Providers } from "@/components/providers";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeMetaSync } from "@/components/ui/theme-meta-sync";
@@ -59,17 +61,28 @@ export const viewport: Viewport = {
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
+  return <RootLayoutInner>{children}</RootLayoutInner>;
+}
+
+async function RootLayoutInner({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  await connection();
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
         <meta name="theme-color" content={LIGHT_THEME_COLOR} />
-        <script dangerouslySetInnerHTML={{ __html: THEME_META_BOOTSTRAP_SCRIPT }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_META_BOOTSTRAP_SCRIPT }} />
       </head>
       <body>
-        <Providers>
+        <Providers nonce={nonce}>
           <ThemeMetaSync />
           {children}
           <Toaster />
