@@ -230,6 +230,14 @@ function phaseLabel(phase: ActiveSession["phase"]) {
   return "Closed";
 }
 
+function canOpenSessionStatus(session: ActiveSession) {
+  return (
+    session.canMarkPhase !== false ||
+    session.hasMarked === true ||
+    session.phaseCompletion?.overallPresent === true
+  );
+}
+
 function buildFaceRecognitionFailureMessage(message: string) {
   const normalized = message.trim();
   if (!normalized) {
@@ -574,7 +582,10 @@ export default function AttendPage() {
 
   const handleSelectSession = useCallback(
     async (session: ActiveSession) => {
-      if (session.canMarkPhase === false) {
+      const canReviewLockedSession =
+        session.hasMarked === true || session.phaseCompletion?.overallPresent === true;
+
+      if (session.canMarkPhase === false && !canReviewLockedSession) {
         toast.error(session.blockReason || "Complete Phase 1 first before marking Phase 2.");
         return;
       }
@@ -602,7 +613,7 @@ export default function AttendPage() {
         setScanMode(detectBrowserFamily() === "Android" && bleSupport.supported ? "BLE" : "QR");
       }
 
-      if (session.hasMarked || synced.body.attendance) {
+      if (session.hasMarked || synced.body.attendance || canReviewLockedSession) {
         const derivedLayers =
           synced.body.attendance?.layers ??
           session.layers ?? {
@@ -620,6 +631,9 @@ export default function AttendPage() {
           phaseCompletion: synced.body.phaseCompletion ?? session.phaseCompletion ?? null,
         });
         setStep("result");
+        if (session.blockReason) {
+          toast.info(session.blockReason);
+        }
         return;
       }
 
@@ -872,6 +886,34 @@ export default function AttendPage() {
     previousQrPortStatusRef.current = null;
   }, []);
 
+  const sharedResultActionClass =
+    "inline-flex min-w-0 w-full items-center justify-center gap-2 rounded-xl border border-border px-4 py-2 text-center text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50";
+  const qrPortAction =
+    activeSessionId && qrPortStatus === "APPROVED" ? (
+      <button
+        type="button"
+        onClick={() => setShowPortVerifyOverlay(true)}
+        className={sharedResultActionClass}
+      >
+        <Fingerprint className="h-4 w-4 shrink-0" />
+        <span className="min-w-0 truncate">Verify Passkey to Start Porting</span>
+      </button>
+    ) : activeSessionId && qrPortStatus == null ? (
+      <button
+        type="button"
+        onClick={handleRequestQrPort}
+        disabled={requestingQrPort}
+        className={sharedResultActionClass}
+      >
+        {requestingQrPort ? (
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+        ) : (
+          <Share2 className="h-4 w-4 shrink-0" />
+        )}
+        <span className="min-w-0 truncate">Request QR Port Access</span>
+      </button>
+    ) : null;
+
   return (
     <div className="w-full max-w-none space-y-6">
       {hasDevice === null && (
@@ -945,38 +987,61 @@ export default function AttendPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {sessions.map((s) => (
-                    <button
-                      key={s.id}
-                      disabled={s.canMarkPhase === false}
-                      onClick={() => void handleSelectSession(s)}
-                      className="w-full rounded-md border border-border px-4 py-3 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <span className="font-medium">{s.course.code}</span>
-                      <span className="text-muted-foreground"> — {s.course.name}</span>
-                      <span className="ml-2 inline-flex rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                        {phaseLabel(s.phase)}
-                      </span>
-                      {s.hasMarked ? (
+                  {sessions.map((s) => {
+                    const canOpen = canOpenSessionStatus(s);
+
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        aria-disabled={!canOpen}
+                        onClick={() => {
+                          if (!canOpen) {
+                            toast.error(
+                              s.blockReason || "Complete Phase 1 first before marking Phase 2."
+                            );
+                            return;
+                          }
+                          void handleSelectSession(s);
+                        }}
+                        className={`w-full rounded-md border border-border px-4 py-3 text-left transition-colors ${
+                          canOpen
+                            ? "hover:bg-accent"
+                            : "cursor-not-allowed opacity-60"
+                        }`}
+                      >
+                        <span className="font-medium">{s.course.code}</span>
+                        <span className="text-muted-foreground"> — {s.course.name}</span>
                         <span className="ml-2 inline-flex rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                          Marked this phase
+                          {phaseLabel(s.phase)}
                         </span>
-                      ) : null}
-                      {s.phaseCompletion?.overallPresent ? (
-                        <span className="ml-2 inline-flex rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] text-foreground">
-                          Present (Phase 1 + 2)
-                        </span>
-                      ) : s.canMarkPhase === false ? (
-                        <span className="ml-2 inline-flex rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
-                          Phase 1 required first
-                        </span>
-                      ) : s.phaseCompletion?.pendingPhase ? (
-                        <span className="ml-2 inline-flex rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
-                          Pending {phaseLabel(s.phaseCompletion.pendingPhase)}
-                        </span>
-                      ) : null}
-                    </button>
-                  ))}
+                        {s.hasMarked ? (
+                          <span className="ml-2 inline-flex rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                            Marked this phase
+                          </span>
+                        ) : null}
+                        {s.phaseCompletion?.overallPresent ? (
+                          <span className="ml-2 inline-flex rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] text-foreground">
+                            Present (Phase 1 + 2)
+                          </span>
+                        ) : s.canMarkPhase === false ? (
+                          <span className="ml-2 inline-flex rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
+                            Phase 1 required first
+                          </span>
+                        ) : s.phaseCompletion?.pendingPhase ? (
+                          <span className="ml-2 inline-flex rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
+                            Pending {phaseLabel(s.phaseCompletion.pendingPhase)}
+                          </span>
+                        ) : null}
+                        {s.hasMarked || s.phaseCompletion?.overallPresent ? (
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            Attendance is already recorded for this active session. Open it to view
+                            status or manage QR port sharing.
+                          </p>
+                        ) : null}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1214,14 +1279,6 @@ export default function AttendPage() {
                       <div className="status-panel-subtle text-xs">
                         Approved. Verify your passkey to open the dedicated QR port screen.
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowPortVerifyOverlay(true)}
-                        className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-accent"
-                      >
-                        <Fingerprint className="h-4 w-4" />
-                        Verify Passkey to Start Porting
-                      </button>
                     </div>
                   ) : qrPortStatus === "PENDING" ? (
                     <div className="status-panel-subtle text-xs">
@@ -1232,29 +1289,25 @@ export default function AttendPage() {
                       Your request was declined for this session.
                     </div>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={handleRequestQrPort}
-                      disabled={requestingQrPort}
-                      className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
-                    >
-                      {requestingQrPort ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Share2 className="h-4 w-4" />
-                      )}
-                      Request QR Port Access
-                    </button>
+                    <div className="status-panel-subtle text-xs">
+                      No QR port request yet. You can request access below if classmates need to
+                      scan from your device.
+                    </div>
                   )}
                 </div>
               )}
 
-              <div className="flex flex-wrap gap-2">
+              <div
+                className={`grid gap-2 ${
+                  qrPortAction ? "grid-cols-2" : "grid-cols-1"
+                }`}
+              >
+                {qrPortAction}
                 <Link
                   href="/student"
-                  className="inline-flex w-fit items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+                  className={sharedResultActionClass}
                 >
-                  Go to Dashboard
+                  <span className="min-w-0 truncate">Go to Dashboard</span>
                 </Link>
               </div>
             </div>
