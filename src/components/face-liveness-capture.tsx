@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { Camera, Loader2 } from "lucide-react";
 import "@aws-amplify/ui-react-liveness/styles.css";
 import type { AwsCredentials } from "@aws-amplify/ui-react-liveness";
@@ -19,6 +19,45 @@ const FaceLivenessDetectorCore = dynamic(
     ),
   }
 );
+
+const AMPLIFY_LIVENESS_CAMERA_ID_KEY = "AmplifyLivenessCameraId";
+
+function isRecoverableCameraConstraintError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    error.name === "OverconstrainedError" ||
+    error.name === "ConstraintNotSatisfiedError" ||
+    /invalid constraint/i.test(error.message)
+  );
+}
+
+function buildRelaxedConstraintFallbacks(
+  constraints?: MediaStreamConstraints
+): MediaStreamConstraints[] {
+  const audio = constraints?.audio ?? false;
+
+  return [
+    {
+      audio,
+      video: { facingMode: "user" },
+    },
+    {
+      audio,
+      video: true,
+    },
+  ];
+}
+
+function normalizeLivenessFailureMessage(message: string) {
+  if (/invalid constraint/i.test(message) || /overconstrained/i.test(message)) {
+    return "Camera setup failed on this device. Close other apps using the camera and try again.";
+  }
+
+  return message;
+}
 
 type FaceLivenessCaptureProps = {
   sessionId: string;
@@ -63,6 +102,57 @@ export function FaceLivenessCapture({
     ]
   );
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.removeItem(AMPLIFY_LIVENESS_CAMERA_ID_KEY);
+  }, []);
+
+  useEffect(() => {
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices ||
+      typeof navigator.mediaDevices.getUserMedia !== "function"
+    ) {
+      return;
+    }
+
+    const mediaDevices = navigator.mediaDevices;
+    const originalGetUserMedia = mediaDevices.getUserMedia.bind(mediaDevices);
+
+    mediaDevices.getUserMedia = async (constraints?: MediaStreamConstraints) => {
+      try {
+        return await originalGetUserMedia(constraints);
+      } catch (error) {
+        if (!constraints?.video || !isRecoverableCameraConstraintError(error)) {
+          throw error;
+        }
+
+        window.localStorage.removeItem(AMPLIFY_LIVENESS_CAMERA_ID_KEY);
+
+        let lastError = error;
+        for (const fallback of buildRelaxedConstraintFallbacks(constraints)) {
+          try {
+            return await originalGetUserMedia(fallback);
+          } catch (fallbackError) {
+            lastError = fallbackError;
+            if (!isRecoverableCameraConstraintError(fallbackError)) {
+              throw fallbackError;
+            }
+          }
+        }
+
+        throw lastError;
+      }
+    };
+
+    return () => {
+      mediaDevices.getUserMedia = originalGetUserMedia;
+    };
+  }, []);
+
   return (
     <div className="space-y-4 rounded-2xl border border-border/70 bg-background/40 p-4 sm:p-5">
       <div className="flex items-start gap-3">
@@ -93,9 +183,10 @@ export function FaceLivenessCapture({
           }}
           onUserCancel={onCancel}
           onError={(livenessError) => {
-            const message =
+            const message = normalizeLivenessFailureMessage(
               livenessError.error?.message ||
-              "Face capture could not be started. Please try again.";
+                "Face capture could not be started. Please try again."
+            );
             onFailure?.(message);
             toast.error(message);
           }}
