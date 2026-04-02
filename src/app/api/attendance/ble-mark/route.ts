@@ -154,15 +154,12 @@ export async function POST(request: NextRequest) {
       });
 
       const pendingTtlSeconds = Number(process.env.PENDING_FACE_VERIFICATION_TTL_SECONDS);
+      const resolvedPendingTtlSeconds =
+        Number.isFinite(pendingTtlSeconds) && pendingTtlSeconds > 0
+          ? pendingTtlSeconds
+          : 300;
       const provisionalExpiresAt = new Date(
-        Math.min(
-          context.attendanceSession.endsAt.getTime(),
-          Date.now() +
-            ((Number.isFinite(pendingTtlSeconds) && pendingTtlSeconds > 0
-              ? pendingTtlSeconds
-              : 300) *
-              1000)
-        )
+        Date.now() + resolvedPendingTtlSeconds * 1000
       );
 
       const pending = await createPendingAttendanceFaceVerification({

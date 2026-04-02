@@ -755,8 +755,8 @@ export async function createAttendanceFaceVerificationCapture(input: {
   }
 
   const syncedSession = await syncAttendanceSessionState(pending.sessionId);
-  if (!syncedSession || syncedSession.status !== "ACTIVE" || syncedSession.phase !== "PHASE_ONE") {
-    throw new FaceFlowError("Phase 1 is no longer active for this class.", 410);
+  if (!syncedSession || pending.phase !== "PHASE_ONE") {
+    throw new FaceFlowError("This attendance face verification request is no longer valid.", 410);
   }
 
   const [sessionId, credentials] = await Promise.all([
@@ -817,8 +817,8 @@ export async function performAttendanceFaceVerification(input: {
   }
 
   const syncedSession = await syncAttendanceSessionState(pending.sessionId);
-  if (!syncedSession || syncedSession.status !== "ACTIVE" || syncedSession.phase !== "PHASE_ONE") {
-    throw new FaceFlowError("Phase 1 is no longer active for this class.", 410);
+  if (!syncedSession || pending.phase !== "PHASE_ONE") {
+    throw new FaceFlowError("This attendance face verification request is no longer valid.", 410);
   }
 
   const enrollment = await db.faceEnrollment.findUnique({

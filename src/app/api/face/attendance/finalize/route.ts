@@ -78,6 +78,8 @@ export async function POST(request: NextRequest) {
       request,
       studentId: session.user.id,
       sessionId: verification.pending.sessionId,
+      phaseOverride: "PHASE_ONE",
+      allowClosedSessionForPhaseFinalization: true,
     });
 
     const built: BuiltAttendanceMark = {

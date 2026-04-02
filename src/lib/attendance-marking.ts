@@ -728,6 +728,8 @@ export async function prepareAttendanceMarkContext(input: {
   sessionId: string;
   maxAttempts?: number;
   windowSeconds?: number;
+  phaseOverride?: "PHASE_ONE" | "PHASE_TWO";
+  allowClosedSessionForPhaseFinalization?: boolean;
 }) {
   requireAttendanceProof(input.request, input.studentId);
 
@@ -751,8 +753,12 @@ export async function prepareAttendanceMarkContext(input: {
   }
 
   const { syncedSession, attendanceSession } = preparedSessionContext;
+  const effectivePhase = input.phaseOverride ?? syncedSession.phase;
+  const allowClosedSessionForPhaseFinalization =
+    input.allowClosedSessionForPhaseFinalization === true &&
+    effectivePhase !== "CLOSED";
 
-  if (syncedSession.status !== "ACTIVE") {
+  if (syncedSession.status !== "ACTIVE" && !allowClosedSessionForPhaseFinalization) {
     throw new AttendanceRequestError("Session is no longer active", 410);
   }
 
@@ -791,7 +797,7 @@ export async function prepareAttendanceMarkContext(input: {
       lecturerId: attendanceSession.lecturerId,
       referenceTime: attendanceSession.startedAt,
     }),
-    syncedSession.phase === "PHASE_TWO"
+    effectivePhase === "PHASE_TWO"
       ? hasSuccessfulPhaseOneFaceVerificationForCourseDay({
           userId: input.studentId,
           sessionFamilyId: attendanceSession.sessionFamilyId,
@@ -802,14 +808,14 @@ export async function prepareAttendanceMarkContext(input: {
       : Promise.resolve(true),
   ]);
 
-  if (syncedSession.phase === "PHASE_ONE" && phaseCompletionGate.phaseOneDone) {
+  if (effectivePhase === "PHASE_ONE" && phaseCompletionGate.phaseOneDone) {
     throw new AttendanceRequestError(
       "You already completed Phase 1 for this class. Wait for Phase 2 or ask your lecturer for guidance.",
       409
     );
   }
 
-  if (syncedSession.phase === "PHASE_TWO") {
+  if (effectivePhase === "PHASE_TWO") {
     if (!phaseCompletionGate.phaseOneDone) {
       throw new AttendanceRequestError(
         "Phase 1 attendance is required before you can mark Phase 2 for this class.",
@@ -833,7 +839,10 @@ export async function prepareAttendanceMarkContext(input: {
   }
 
   return {
-    syncedSession,
+    syncedSession: {
+      ...syncedSession,
+      phase: effectivePhase,
+    },
     attendanceSession,
     phaseCompletionGate,
   } as PreparedAttendanceMarkContext;
