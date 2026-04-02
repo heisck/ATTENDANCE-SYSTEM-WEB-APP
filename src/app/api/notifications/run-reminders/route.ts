@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { runDueJobs } from "@/lib/job-queue";
@@ -7,7 +8,15 @@ function isCronAuthorized(request: NextRequest): boolean {
   const secret = process.env.REMINDER_CRON_SECRET;
   if (!secret) return false;
   const provided = request.headers.get("x-cron-secret");
-  return provided === secret;
+  if (!provided) return false;
+  try {
+    const a = Buffer.from(secret, "utf8");
+    const b = Buffer.from(provided, "utf8");
+    if (a.length !== b.length) return false;
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
 }
 
 export async function POST(request: NextRequest) {

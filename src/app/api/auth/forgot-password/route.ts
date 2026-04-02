@@ -4,6 +4,20 @@ import { forgotPasswordSchema } from "@/lib/validators";
 import { buildAppUrl, sendEmail } from "@/lib/email";
 import { passwordResetEmailHtml } from "@/lib/email-templates";
 import { createExpiryDate, createRawToken, hashToken } from "@/lib/tokens";
+import { checkRateLimitKey } from "@/lib/cache";
+
+const RESET_IP_MAX_ATTEMPTS = 5;
+const RESET_EMAIL_MAX_ATTEMPTS = 3;
+const RESET_WINDOW_SECONDS = 15 * 60;
+
+function getClientIp(request: NextRequest): string {
+  return (
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip")?.trim() ||
+    request.headers.get("cf-connecting-ip")?.trim() ||
+    "unknown"
+  );
+}
 
 async function sendResetEmail(targetEmail: string, name: string, resetUrl: string, expiresAt: Date) {
   await sendEmail({
@@ -20,9 +34,44 @@ async function sendResetEmail(targetEmail: string, name: string, resetUrl: strin
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit password reset by IP and email
+    const clientIp = getClientIp(request);
+    try {
+      const { allowed } = await checkRateLimitKey(
+        `reset-ratelimit:ip:${clientIp}`,
+        RESET_IP_MAX_ATTEMPTS,
+        RESET_WINDOW_SECONDS
+      );
+      if (!allowed) {
+        // Still return success to prevent enumeration, but don't send email
+        return NextResponse.json({
+          success: true,
+          message: "If the email exists, a reset link has been sent.",
+        });
+      }
+    } catch {
+      // If Redis is unavailable in development, allow through
+    }
+
     const body = await request.json();
     const parsed = forgotPasswordSchema.parse(body);
     const email = parsed.email.trim().toLowerCase();
+
+    try {
+      const { allowed } = await checkRateLimitKey(
+        `reset-ratelimit:email:${email}`,
+        RESET_EMAIL_MAX_ATTEMPTS,
+        RESET_WINDOW_SECONDS
+      );
+      if (!allowed) {
+        return NextResponse.json({
+          success: true,
+          message: "If the email exists, a reset link has been sent.",
+        });
+      }
+    } catch {
+      // If Redis is unavailable in development, allow through
+    }
 
     const user =
       (await db.user.findUnique({ where: { email } })) ||

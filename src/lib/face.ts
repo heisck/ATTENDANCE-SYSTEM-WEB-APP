@@ -29,6 +29,23 @@ const DEFAULT_LIVENESS_THRESHOLD = 70;
 const DEFAULT_SIMILARITY_THRESHOLD = 90;
 const PHASE_ONE_FACE_SUCCESS_TTL_MS = 5 * 60 * 1000;
 
+// Max entries per in-memory cache to prevent unbounded memory growth
+const MAX_CACHE_ENTRIES = 500;
+
+/**
+ * Evicts the oldest entries from a Map when it exceeds maxSize.
+ * Uses insertion-order iteration (Map guarantees FIFO order).
+ */
+function evictIfNeeded<K, V>(map: Map<K, V>, maxSize: number) {
+  if (map.size <= maxSize) return;
+  const excess = map.size - maxSize;
+  const iter = map.keys();
+  for (let i = 0; i < excess; i++) {
+    const key = iter.next().value;
+    if (key !== undefined) map.delete(key);
+  }
+}
+
 const phaseOneFaceSuccessSnapshotInFlight = new Map<string, Promise<Set<string>>>();
 const phaseOneFaceSuccessSnapshotCache = new Map<
   string,
@@ -200,12 +217,18 @@ export function getFaceClientConfig() {
 function createRekognitionClient() {
   return new RekognitionClient({
     region: getFaceRegion(),
+    requestHandler: {
+      requestTimeout: 15_000, // 15s timeout for Rekognition calls
+    } as any,
   });
 }
 
 function createCognitoIdentityClient() {
   return new CognitoIdentityClient({
     region: getCognitoIdentityRegion(),
+    requestHandler: {
+      requestTimeout: 10_000, // 10s timeout for Cognito calls
+    } as any,
   });
 }
 
@@ -294,7 +317,10 @@ function getReferenceImageBytes(referenceImage: { Bytes?: Uint8Array | Buffer } 
 }
 
 async function fetchRemoteImageBytes(imageUrl: string) {
-  const response = await fetch(imageUrl, { cache: "no-store" });
+  const response = await fetch(imageUrl, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000), // 10s timeout
+  });
   if (!response.ok) {
     throw new FaceFlowError("Unable to load the enrolled face reference image.", 502);
   }
@@ -959,6 +985,7 @@ function rememberPhaseOneFaceSuccess(input: {
   referenceTime: Date;
 }) {
   const expiresAtMs = Date.now() + PHASE_ONE_FACE_SUCCESS_TTL_MS;
+  evictIfNeeded(phaseOneFaceSuccessByUserCache, MAX_CACHE_ENTRIES);
   phaseOneFaceSuccessByUserCache.set(buildPhaseOneFaceSuccessUserKey(input), {
     expiresAtMs,
     value: true,
@@ -1024,6 +1051,7 @@ async function getPhaseOneFaceSuccessSnapshot(input: {
           });
 
     const users = new Set(rows.map((row) => row.userId));
+    evictIfNeeded(phaseOneFaceSuccessSnapshotCache, MAX_CACHE_ENTRIES);
     phaseOneFaceSuccessSnapshotCache.set(cacheKey, {
       expiresAtMs: Date.now() + PHASE_ONE_FACE_SUCCESS_TTL_MS,
       users,

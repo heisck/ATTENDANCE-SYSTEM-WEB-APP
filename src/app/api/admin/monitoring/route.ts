@@ -62,48 +62,80 @@ async function getAllActiveSessionsMonitoring(organizationId: string | null) {
       take: 20,
     });
 
-    const monitoring = await Promise.all(
-      sessions.map(async (session) => {
-        const enrolled = await db.enrollment.count({
-          where: { courseId: session.courseId },
-        });
+    // Batch all counts in parallel instead of N+1 per-session queries
+    const sessionIds = sessions.map((s) => s.id);
+    const courseIds = [...new Set(sessions.map((s) => s.courseId))];
 
-        const flagged = await db.attendanceRecord.count({
+    const [enrollmentCounts, flaggedCounts, anomalyCounts, confidenceAverages] =
+      await Promise.all([
+        // One query for all enrollment counts
+        db.enrollment.groupBy({
+          by: ["courseId"],
+          where: { courseId: { in: courseIds } },
+          _count: { _all: true },
+        }),
+        // One query for all flagged counts
+        db.attendanceRecord.groupBy({
+          by: ["sessionId"],
+          where: { sessionId: { in: sessionIds }, flagged: true },
+          _count: { _all: true },
+        }),
+        // One query for all anomaly counts
+        db.attendanceAnomaly.groupBy({
+          by: ["sessionId"],
           where: {
-            sessionId: session.id,
-            flagged: true,
-          },
-        });
-
-        const anomalies = await db.attendanceAnomaly.count({
-          where: {
-            sessionId: session.id,
+            sessionId: { in: sessionIds },
             reviewedAt: null,
           },
-        });
-
-        const avgConfidence = await db.attendanceRecord.aggregate({
-          where: { sessionId: session.id },
+          _count: { _all: true },
+        }),
+        // One query for all confidence averages
+        db.attendanceRecord.groupBy({
+          by: ["sessionId"],
+          where: { sessionId: { in: sessionIds } },
           _avg: { confidence: true },
-        });
+        }),
+      ]);
 
-        return {
-          sessionId: session.id,
-          courseCode: session.course.code,
-          courseName: session.course.name,
-          status: session.status,
-          phase: session.phase,
-          startedAt: session.startedAt,
-          totalEnrolled: enrolled,
-          totalAttempted: session._count.records,
-          flaggedCount: flagged,
-          anomalyCount: anomalies,
-          progressPercent: enrolled > 0 ? Math.round((session._count.records / enrolled) * 100) : 0,
-          averageConfidence: Math.round(avgConfidence._avg.confidence || 0),
-          estimatedCompletion: estimateCompletion(session.endsAt, session.startedAt),
-        };
-      })
+    // Index results by session/course ID for O(1) lookup
+    const enrollmentMap = new Map(
+      enrollmentCounts.map((e) => [e.courseId, e._count._all])
     );
+    const flaggedMap = new Map(
+      flaggedCounts.map((f) => [f.sessionId, f._count._all])
+    );
+    const anomalyMap = new Map(
+      anomalyCounts.map((a) => [a.sessionId, a._count._all])
+    );
+    const confidenceMap = new Map(
+      confidenceAverages.map((c) => [c.sessionId, c._avg.confidence])
+    );
+
+    const monitoring = sessions.map((session) => {
+      const enrolled = enrollmentMap.get(session.courseId) ?? 0;
+      const flagged = flaggedMap.get(session.id) ?? 0;
+      const anomalies = anomalyMap.get(session.id) ?? 0;
+      const avgConf = confidenceMap.get(session.id) ?? 0;
+
+      return {
+        sessionId: session.id,
+        courseCode: session.course.code,
+        courseName: session.course.name,
+        status: session.status,
+        phase: session.phase,
+        startedAt: session.startedAt,
+        totalEnrolled: enrolled,
+        totalAttempted: session._count.records,
+        flaggedCount: flagged,
+        anomalyCount: anomalies,
+        progressPercent:
+          enrolled > 0
+            ? Math.round((session._count.records / enrolled) * 100)
+            : 0,
+        averageConfidence: Math.round(avgConf || 0),
+        estimatedCompletion: estimateCompletion(session.endsAt, session.startedAt),
+      };
+    });
 
     return NextResponse.json({
       activeSessions: monitoring,

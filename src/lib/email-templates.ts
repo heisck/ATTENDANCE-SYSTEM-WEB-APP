@@ -7,6 +7,16 @@ const APP_NAME = "ATTENDANCE IQ";
 const APP_TAGLINE = "Smart attendance for modern universities";
 const LOGO_SRC = "cid:attendance-iq-logo";
 
+/** Escape user-controlled values before interpolating into HTML templates. */
+function escapeHtml(unsafe: string): string {
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 const BG_COLOR = "#f6f7f9";
 const CARD_COLOR = "#ffffff";
 const TEXT_COLOR = "#0f172a";
@@ -91,9 +101,10 @@ export function verificationEmailHtml(params: {
         ? "You updated your personal email. Click below to verify the new address."
         : "Use the link below to verify your personal email.";
 
+  const safeName = escapeHtml(recipientName);
   const content = `
 <p style="margin: 0 0 16px 0; font-size: 16px; color: ${TEXT_COLOR};">
-  Hello ${recipientName},
+  Hello ${safeName},
 </p>
 <p style="margin: 0 0 18px 0; font-size: 15px; color: ${MUTED_COLOR};">
   ${greeting}
@@ -121,10 +132,11 @@ export function passwordResetEmailHtml(params: {
   expiresAt: Date;
 }): string {
   const { recipientName, resetUrl, expiresAt } = params;
+  const safeName = escapeHtml(recipientName);
 
   const content = `
 <p style="margin: 0 0 16px 0; font-size: 16px; color: ${TEXT_COLOR};">
-  Hello ${recipientName},
+  Hello ${safeName},
 </p>
 <p style="margin: 0 0 18px 0; font-size: 15px; color: ${MUTED_COLOR};">
   We received a request to reset your ATTENDANCE IQ password. Click the button below to choose a new password.
@@ -156,13 +168,14 @@ export function lecturerInviteEmailHtml(params: {
   isResend?: boolean;
 }): string {
   const { organizationName, acceptUrl, expiresAt, isResend } = params;
+  const safeOrgName = escapeHtml(organizationName);
 
   const content = `
 <p style="margin: 0 0 16px 0; font-size: 16px; color: ${TEXT_COLOR};">
   ${isResend ? "Your lecturer invite has been refreshed." : "You have been invited to join ATTENDANCE IQ as a lecturer."}
 </p>
 <p style="margin: 0 0 18px 0; font-size: 15px; color: ${MUTED_COLOR};">
-  ${isResend ? "Use the link below to accept your updated invite." : `You&apos;ve been invited by <strong style="color: ${TEXT_COLOR};">${organizationName}</strong>. Click below to create your lecturer account and get started.`}
+  ${isResend ? "Use the link below to accept your updated invite." : `You&apos;ve been invited by <strong style="color: ${TEXT_COLOR};">${safeOrgName}</strong>. Click below to create your lecturer account and get started.`}
 </p>
 <p style="margin: 0 0 8px 0; font-size: 13px; color: ${MUTED_COLOR};">
   This invite expires on <strong style="color: ${TEXT_COLOR};">${expiresAt.toUTCString()}</strong>.
@@ -188,13 +201,14 @@ export function courseRepInviteEmailHtml(params: {
   isResend?: boolean;
 }): string {
   const { organizationName, acceptUrl, expiresAt, isResend } = params;
+  const safeOrgName = escapeHtml(organizationName);
 
   const content = `
 <p style="margin: 0 0 16px 0; font-size: 16px; color: ${TEXT_COLOR};">
   ${isResend ? "Your Course Rep invite has been refreshed." : "You have been invited to join ATTENDANCE IQ as a Course Rep."}
 </p>
 <p style="margin: 0 0 18px 0; font-size: 15px; color: ${MUTED_COLOR};">
-  ${isResend ? "Use the link below to accept your updated invite." : `You&apos;ve been invited by <strong style="color: ${TEXT_COLOR};">${organizationName}</strong>. Create your student account (or sign in if you already have one) and your Course Rep tools will be unlocked after verification.`}
+  ${isResend ? "Use the link below to accept your updated invite." : `You&apos;ve been invited by <strong style="color: ${TEXT_COLOR};">${safeOrgName}</strong>. Create your student account (or sign in if you already have one) and your Course Rep tools will be unlocked after verification.`}
 </p>
 <p style="margin: 0 0 8px 0; font-size: 13px; color: ${MUTED_COLOR};">
   This invite expires on <strong style="color: ${TEXT_COLOR};">${expiresAt.toUTCString()}</strong>.

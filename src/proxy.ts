@@ -40,6 +40,23 @@ export default async function proxy(req: NextRequest) {
         }
       : null;
 
+  // --- API auth guard: reject unauthenticated requests to protected API routes ---
+  if (pathname.startsWith("/api/")) {
+    const isPublicApi =
+      pathname.startsWith("/api/auth") ||
+      pathname.startsWith("/api/public") ||
+      pathname.startsWith("/api/v1") ||
+      pathname.startsWith("/api/internal") ||
+      pathname.startsWith("/api/face/enrollment/public") ||
+      pathname.startsWith("/api/health");
+
+    if (!isPublicApi && !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    return NextResponse.next();
+  }
+
   const isAuthPage = pathname.startsWith("/login") || pathname.startsWith("/register");
   const isDashboard =
     pathname.startsWith("/student") ||
@@ -80,5 +97,6 @@ export const config = {
     "/login",
     "/register",
     "/setup-device",
+    "/api/:path*",
   ],
 };

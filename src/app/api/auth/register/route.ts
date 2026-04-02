@@ -8,9 +8,40 @@ import { buildAppUrl, sendEmail } from "@/lib/email";
 import { verificationEmailHtml } from "@/lib/email-templates";
 import { getStudentEmailDomains } from "@/lib/organization-settings";
 import { validateStudentSignupToken } from "@/lib/student-signup-window";
+import { checkRateLimitKey } from "@/lib/cache";
+
+const REGISTER_IP_MAX_ATTEMPTS = 5;
+const REGISTER_WINDOW_SECONDS = 15 * 60;
+
+function getClientIp(request: NextRequest): string {
+  return (
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip")?.trim() ||
+    request.headers.get("cf-connecting-ip")?.trim() ||
+    "unknown"
+  );
+}
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit registration by IP
+    const clientIp = getClientIp(request);
+    try {
+      const { allowed } = await checkRateLimitKey(
+        `register-ratelimit:ip:${clientIp}`,
+        REGISTER_IP_MAX_ATTEMPTS,
+        REGISTER_WINDOW_SECONDS
+      );
+      if (!allowed) {
+        return NextResponse.json(
+          { error: "Too many registration attempts. Please try again later." },
+          { status: 429 }
+        );
+      }
+    } catch {
+      // If Redis is unavailable in development, allow through
+    }
+
     const body = await request.json();
     const parsed = registerSchema.parse(body);
 

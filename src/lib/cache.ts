@@ -52,6 +52,7 @@ class UpstashRestClient {
       },
       body: JSON.stringify(commands),
       cache: "no-store",
+      signal: AbortSignal.timeout(5_000), // 5s timeout for Redis operations
     });
 
     if (!response.ok) {

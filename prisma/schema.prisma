@@ -693,6 +693,8 @@ model Enrollment {
   student User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@unique([courseId, studentId])
+  @@index([studentId])
+  @@index([courseId])
 }
 
 model AttendanceSession {
@@ -734,6 +736,9 @@ model AttendanceSession {
   @@index([sessionFamilyId])
   @@index([linkedSessionId])
   @@index([relayEnabled])
+  @@index([courseId, status])
+  @@index([courseId, startedAt])
+  @@index([status, courseId, startedAt])
 }
 
 model AttendanceRecord {
@@ -763,6 +768,7 @@ model AttendanceRecord {
   @@index([anomalyScore])
   @@index([deviceToken])
   @@index([faceVerified])
+  @@index([sessionId, markedAt])
 }
 
 model FaceEnrollment {

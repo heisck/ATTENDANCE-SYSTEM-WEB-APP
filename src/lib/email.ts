@@ -72,6 +72,9 @@ function getTransporter(user: string, pass: string) {
       port: GMAIL_SMTP_PORT,
       secure: GMAIL_SMTP_SECURE,
       auth: { user, pass },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 15_000,
     });
   }
 
