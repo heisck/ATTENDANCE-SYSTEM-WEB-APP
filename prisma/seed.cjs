@@ -937,6 +937,7 @@ async function seedOrganization() {
         data: {
           groupId: groupA.id,
           studentId: student.id,
+          sessionId: session.id,
         },
       });
     }
@@ -945,6 +946,7 @@ async function seedOrganization() {
         data: {
           groupId: groupB.id,
           studentId: student.id,
+          sessionId: session.id,
         },
       });
     }
