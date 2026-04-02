@@ -133,7 +133,7 @@ export async function buildXlsxBuffer<T extends ExportRow>(input: {
   }
 
   // Add auto-filter
-  if (rows.length > 0) {
+  if (rows.length > 0 && columns.length > 0) {
     sheet.autoFilter = {
       from: { row: 1, column: 1 },
       to: { row: rows.length + 1, column: columns.length },

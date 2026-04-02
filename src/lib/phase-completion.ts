@@ -5,7 +5,7 @@ import { getHistoricalPhaseFromSession, resolveSessionFamilyKey } from "@/lib/se
 export type PendingPhase = "PHASE_ONE" | "PHASE_TWO" | null;
 const PHASE_ONE_FLAG = 1;
 const PHASE_TWO_FLAG = 2;
-const PHASE_COMPLETION_SNAPSHOT_TTL_MS = 5 * 60 * 1000;
+const PHASE_COMPLETION_SNAPSHOT_TTL_MS = 10 * 60 * 1000;
 
 const phaseCompletionSnapshotInFlight = new Map<
   string,

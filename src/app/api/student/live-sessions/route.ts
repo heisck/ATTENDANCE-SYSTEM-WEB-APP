@@ -28,28 +28,41 @@ export async function GET() {
     });
   }
 
+  // Two-step approach: first get student's enrolled course IDs (heavily cached),
+  // then find active sessions for those courses (short cache).
+  // This avoids the expensive nested enrollment filter on every poll.
+  const enrollmentCacheKey = `student:enrolled-courses:${user.id}`;
+  let courseIds = await cacheGet<string[]>(enrollmentCacheKey);
+  if (!courseIds) {
+    const enrollments = await db.enrollment.findMany({
+      where: { studentId: user.id },
+      select: { courseId: true },
+    });
+    courseIds = enrollments.map((e) => e.courseId);
+    await cacheSet(enrollmentCacheKey, courseIds, 300); // 5 min — enrollments rarely change
+  }
+
   const now = new Date();
-  const sessions = await db.attendanceSession.findMany({
-    where: {
-      status: "ACTIVE",
-      endsAt: { gt: now },
-      course: {
-        enrollments: {
-          some: { studentId: user.id },
-        },
-      },
-    },
-    select: {
-      id: true,
-      status: true,
-      phase: true,
-      startedAt: true,
-      endsAt: true,
-      course: { select: { code: true, name: true } },
-    },
-    orderBy: { startedAt: "desc" },
-    take: 10,
-  });
+  const sessions =
+    courseIds.length > 0
+      ? await db.attendanceSession.findMany({
+          where: {
+            status: "ACTIVE",
+            endsAt: { gt: now },
+            courseId: { in: courseIds },
+          },
+          select: {
+            id: true,
+            status: true,
+            phase: true,
+            startedAt: true,
+            endsAt: true,
+            course: { select: { code: true, name: true } },
+          },
+          orderBy: { startedAt: "desc" },
+          take: 10,
+        })
+      : [];
 
   const normalized = sessions
     .map((sessionRow) => {

@@ -31,30 +31,36 @@ export async function GET(
     return NextResponse.json(cached);
   }
 
-  const syncedSession = await syncAttendanceSessionState(id);
-  if (!syncedSession) {
+  // Run session sync and enrollment check in parallel
+  const [syncedSession, attendanceSession] = await Promise.all([
+    syncAttendanceSessionState(id),
+    db.attendanceSession.findUnique({
+      where: { id },
+      select: {
+        sessionFamilyId: true,
+        courseId: true,
+        lecturerId: true,
+        startedAt: true,
+      },
+    }),
+  ]);
+
+  if (!syncedSession || !attendanceSession) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
 
-  const attendanceSession = await db.attendanceSession.findUnique({
-    where: { id },
-    include: {
-      course: {
-        include: {
-          enrollments: {
-            where: { studentId: user.id },
-            select: { id: true },
-          },
-        },
+  // Lightweight enrollment check — uses the composite unique index directly
+  const enrollment = await db.enrollment.findUnique({
+    where: {
+      courseId_studentId: {
+        courseId: attendanceSession.courseId,
+        studentId: user.id,
       },
     },
+    select: { id: true },
   });
 
-  if (!attendanceSession) {
-    return NextResponse.json({ error: "Session not found" }, { status: 404 });
-  }
-
-  if (attendanceSession.course.enrollments.length === 0) {
+  if (!enrollment) {
     return NextResponse.json(
       { error: "You are not enrolled in this course" },
       { status: 403 }

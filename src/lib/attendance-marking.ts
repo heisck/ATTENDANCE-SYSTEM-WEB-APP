@@ -39,7 +39,7 @@ import {
 
 const ATTENDANCE_SESSION_META_TTL_SECONDS = 5 * 60;
 const ATTENDANCE_SESSION_STATE_TTL_SECONDS = 15;
-const COURSE_ATTENDANCE_ELIGIBILITY_TTL_MS = 5 * 60 * 1000;
+const COURSE_ATTENDANCE_ELIGIBILITY_TTL_MS = 10 * 60 * 1000;
 
 const attendanceSessionContextInFlight = new Map<
   string,

@@ -42,11 +42,18 @@ export default async function proxy(req: NextRequest) {
 
   // --- API auth guard: reject unauthenticated requests to protected API routes ---
   if (pathname.startsWith("/api/")) {
+    // Public API routes bypass session-based auth.
+    // /api/auth — NextAuth endpoints (login, register, etc.)
+    // /api/public — explicitly public routes
+    // /api/v1/attendance — external API (validates its own API key)
+    // /api/internal/attendance/prewarm — server-to-server (validates its own secret)
+    // /api/face/enrollment/public — public face enrollment check
+    // /api/health — load balancer health probes
     const isPublicApi =
       pathname.startsWith("/api/auth") ||
       pathname.startsWith("/api/public") ||
-      pathname.startsWith("/api/v1") ||
-      pathname.startsWith("/api/internal") ||
+      pathname.startsWith("/api/v1/attendance") ||
+      pathname.startsWith("/api/internal/attendance/prewarm") ||
       pathname.startsWith("/api/face/enrollment/public") ||
       pathname.startsWith("/api/health");
 

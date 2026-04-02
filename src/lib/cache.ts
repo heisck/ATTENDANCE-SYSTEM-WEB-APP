@@ -260,7 +260,10 @@ export function getRedis(): CacheClient | null {
           enableReadyCheck: false,
           enableOfflineQueue: true,
           lazyConnect: false,
+          connectTimeout: 5_000,
+          commandTimeout: 3_000,
           retryStrategy: (times) => Math.min(times * 50, 2000),
+          keepAlive: 30_000,
         });
 
         redis.on("error", (err) => {

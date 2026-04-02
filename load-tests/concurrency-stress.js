@@ -290,11 +290,16 @@ export function apiWrites() {
           }
         );
       } else {
-        // Without auth, hit the health endpoint as a write proxy
-        res = http.get(`${BASE_URL}/api/health`, {
-          headers: commonHeaders,
-          tags: { endpoint: "health-write-fallback" },
-        });
+        // Without auth, simulate a public POST (forgot-password) instead of
+        // a GET to /api/health, which would pollute write latency metrics.
+        res = http.post(
+          `${BASE_URL}/api/auth/forgot-password`,
+          JSON.stringify({ email: `stress-write-${__VU}@test.edu` }),
+          {
+            headers: commonHeaders,
+            tags: { endpoint: "forgot-password-write" },
+          }
+        );
       }
       break;
   }

@@ -14,22 +14,28 @@ const REGISTER_IP_MAX_ATTEMPTS = 5;
 const REGISTER_WINDOW_SECONDS = 15 * 60;
 
 function getClientIp(request: NextRequest): string {
-  return (
+  const ip =
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     request.headers.get("x-real-ip")?.trim() ||
     request.headers.get("cf-connecting-ip")?.trim() ||
-    "unknown"
-  );
+    "";
+  if (!ip) {
+    console.warn("[register] Could not resolve client IP from request headers");
+  }
+  return ip || "unknown";
 }
+
+const UNKNOWN_IP_MAX_ATTEMPTS = 2;
 
 export async function POST(request: NextRequest) {
   try {
     // Rate limit registration by IP
     const clientIp = getClientIp(request);
+    const ipLimit = clientIp === "unknown" ? UNKNOWN_IP_MAX_ATTEMPTS : REGISTER_IP_MAX_ATTEMPTS;
     try {
       const { allowed } = await checkRateLimitKey(
         `register-ratelimit:ip:${clientIp}`,
-        REGISTER_IP_MAX_ATTEMPTS,
+        ipLimit,
         REGISTER_WINDOW_SECONDS
       );
       if (!allowed) {
@@ -38,8 +44,14 @@ export async function POST(request: NextRequest) {
           { status: 429 }
         );
       }
-    } catch {
-      // If Redis is unavailable in development, allow through
+    } catch (err) {
+      console.error("[register] IP rate limit check failed:", err);
+      if (process.env.NODE_ENV === "production") {
+        return NextResponse.json(
+          { error: "Service temporarily unavailable. Please try again." },
+          { status: 503 }
+        );
+      }
     }
 
     const body = await request.json();

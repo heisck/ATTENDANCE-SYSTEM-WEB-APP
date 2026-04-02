@@ -14,15 +14,15 @@ function buildDatabaseUrl() {
   return `${url}${separator}connection_limit=50&pool_timeout=30`;
 }
 
+const dbUrl = buildDatabaseUrl();
+
 export const db =
   globalForPrisma.prisma ||
   new PrismaClient({
-    datasources: {
-      db: {
-        url: buildDatabaseUrl(),
-      },
-    },
-    log: process.env.NODE_ENV === "development" ? ["query"] : [],
+    ...(dbUrl ? { datasources: { db: { url: dbUrl } } } : {}),
+    log: [],
   });
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
+// Cache the Prisma instance globally to prevent connection pool exhaustion
+// across hot-module reloads (dev) and serverless function re-invocations (prod)
+if (!globalForPrisma.prisma) globalForPrisma.prisma = db;

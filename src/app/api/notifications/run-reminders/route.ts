@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { runDueJobs } from "@/lib/job-queue";
@@ -10,9 +10,10 @@ function isCronAuthorized(request: NextRequest): boolean {
   const provided = request.headers.get("x-cron-secret");
   if (!provided) return false;
   try {
-    const a = Buffer.from(secret, "utf8");
-    const b = Buffer.from(provided, "utf8");
-    if (a.length !== b.length) return false;
+    // Compare HMAC digests (fixed-length) to avoid leaking secret length
+    const key = "cron-auth";
+    const a = createHmac("sha256", key).update(secret).digest();
+    const b = createHmac("sha256", key).update(provided).digest();
     return timingSafeEqual(a, b);
   } catch {
     return false;

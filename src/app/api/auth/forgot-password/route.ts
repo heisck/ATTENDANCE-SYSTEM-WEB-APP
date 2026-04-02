@@ -11,13 +11,18 @@ const RESET_EMAIL_MAX_ATTEMPTS = 3;
 const RESET_WINDOW_SECONDS = 15 * 60;
 
 function getClientIp(request: NextRequest): string {
-  return (
+  const ip =
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     request.headers.get("x-real-ip")?.trim() ||
     request.headers.get("cf-connecting-ip")?.trim() ||
-    "unknown"
-  );
+    "";
+  if (!ip) {
+    console.warn("[forgot-password] Could not resolve client IP from request headers");
+  }
+  return ip || "unknown";
 }
+
+const UNKNOWN_IP_MAX_ATTEMPTS = 2;
 
 async function sendResetEmail(targetEmail: string, name: string, resetUrl: string, expiresAt: Date) {
   await sendEmail({
@@ -36,10 +41,11 @@ export async function POST(request: NextRequest) {
   try {
     // Rate limit password reset by IP and email
     const clientIp = getClientIp(request);
+    const ipLimit = clientIp === "unknown" ? UNKNOWN_IP_MAX_ATTEMPTS : RESET_IP_MAX_ATTEMPTS;
     try {
       const { allowed } = await checkRateLimitKey(
         `reset-ratelimit:ip:${clientIp}`,
-        RESET_IP_MAX_ATTEMPTS,
+        ipLimit,
         RESET_WINDOW_SECONDS
       );
       if (!allowed) {
@@ -49,8 +55,14 @@ export async function POST(request: NextRequest) {
           message: "If the email exists, a reset link has been sent.",
         });
       }
-    } catch {
-      // If Redis is unavailable in development, allow through
+    } catch (err) {
+      console.error("[forgot-password] IP rate limit check failed:", err);
+      if (process.env.NODE_ENV === "production") {
+        return NextResponse.json({
+          success: true,
+          message: "If the email exists, a reset link has been sent.",
+        });
+      }
     }
 
     const body = await request.json();
@@ -69,8 +81,14 @@ export async function POST(request: NextRequest) {
           message: "If the email exists, a reset link has been sent.",
         });
       }
-    } catch {
-      // If Redis is unavailable in development, allow through
+    } catch (err) {
+      console.error("[forgot-password] Email rate limit check failed:", err);
+      if (process.env.NODE_ENV === "production") {
+        return NextResponse.json({
+          success: true,
+          message: "If the email exists, a reset link has been sent.",
+        });
+      }
     }
 
     const user =
