@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Role } from "@prisma/client";
+import { getClientIpAddress } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { hashPassword } from "@/lib/passwords";
 import { registerSchema } from "@/lib/validators";
@@ -13,24 +14,12 @@ import { checkRateLimitKey } from "@/lib/cache";
 const REGISTER_IP_MAX_ATTEMPTS = 5;
 const REGISTER_WINDOW_SECONDS = 15 * 60;
 
-function getClientIp(request: NextRequest): string {
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip")?.trim() ||
-    request.headers.get("cf-connecting-ip")?.trim() ||
-    "";
-  if (!ip) {
-    console.warn("[register] Could not resolve client IP from request headers");
-  }
-  return ip || "unknown";
-}
-
 const UNKNOWN_IP_MAX_ATTEMPTS = 2;
 
 export async function POST(request: NextRequest) {
   try {
     // Rate limit registration by IP
-    const clientIp = getClientIp(request);
+    const clientIp = getClientIpAddress(request);
     const ipLimit = clientIp === "unknown" ? UNKNOWN_IP_MAX_ATTEMPTS : REGISTER_IP_MAX_ATTEMPTS;
     try {
       const { allowed } = await checkRateLimitKey(

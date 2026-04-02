@@ -167,6 +167,7 @@ export async function POST(
       data: {
         groupId: availableSlots[cursor].id,
         studentId: student.id,
+        sessionId: formation.id,
       },
     });
 
@@ -181,4 +182,3 @@ export async function POST(
     totalCandidates: unassignedStudents.length,
   });
 }
-

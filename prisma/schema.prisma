@@ -165,6 +165,7 @@ model User {
   personalEmailVerifiedAt       DateTime?
   lastProfileCompletionPromptAt DateTime?
   image                         String?
+  passwordChangedAt             DateTime?
   passkeysLockedUntilAdminReset Boolean   @default(false)
   firstPasskeyCreatedAt         DateTime?
   createdAt                     DateTime  @default(now())
@@ -617,6 +618,7 @@ model GroupFormationSession {
   course       Course?        @relation(fields: [courseId], references: [id], onDelete: SetNull)
   createdBy    User           @relation("GroupFormationSessionsCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
   groups       StudentGroup[]
+  groupMemberships GroupMembership[]
 
   @@index([organizationId, startsAt, endsAt])
   @@index([cohortId])
@@ -646,13 +648,17 @@ model GroupMembership {
   id        String   @id @default(cuid())
   groupId   String
   studentId String
+  sessionId String
   joinedAt  DateTime @default(now())
 
   group   StudentGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   student User         @relation("StudentGroupMemberships", fields: [studentId], references: [id], onDelete: Cascade)
+  session GroupFormationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@unique([groupId, studentId])
+  @@unique([sessionId, studentId])
   @@index([studentId])
+  @@index([sessionId])
 }
 
 model GroupLeaderVote {

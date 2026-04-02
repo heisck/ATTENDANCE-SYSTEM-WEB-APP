@@ -588,6 +588,24 @@ export async function finalizeEnrollmentLivenessCapture(input: {
   }
 
     let previousPublicId = faceEnrollment?.primaryImagePublicId ?? null;
+
+    const tokenClaimResult = await db.faceFlowToken.updateMany({
+      where: {
+        id: token.id,
+        usedAt: null,
+      },
+      data: {
+        usedAt: new Date(),
+      },
+    });
+
+    if (tokenClaimResult.count === 0) {
+      throw new FaceFlowError(
+        "This face enrollment link has already been consumed or is currently processing.",
+        409
+      );
+    }
+
     try {
       const result = await getFaceLivenessResults(input.livenessSessionId);
       const livenessScore = result.Confidence ?? 0;

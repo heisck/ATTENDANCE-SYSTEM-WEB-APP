@@ -61,56 +61,72 @@ export async function POST(
     const body = await request.json();
     const parsed = joinGroupSchema.parse(body);
 
-    const [group, existingMembership] = await Promise.all([
-      db.studentGroup.findFirst({
-        where: {
-          id: parsed.groupId,
-          sessionId: formation.id,
-        },
-        include: {
-          _count: { select: { memberships: true } },
-        },
-      }),
-      db.groupMembership.findFirst({
-        where: {
-          studentId: context.userId,
-          group: { sessionId: formation.id },
-        },
-      }),
-    ]);
-
-    if (!group) {
-      return NextResponse.json({ error: "Selected group not found in this session" }, { status: 404 });
-    }
-    if (existingMembership) {
-      return NextResponse.json({ error: "You are already assigned to a group in this session" }, { status: 409 });
-    }
-    if (group._count.memberships >= group.capacity) {
-      return NextResponse.json({ error: "This group is already full" }, { status: 400 });
-    }
-
-    const membership = await db.groupMembership.create({
-      data: {
-        groupId: group.id,
-        studentId: context.userId,
-      },
-    });
-
-    if (formation.leaderMode === "VOLUNTEER_FIRST_COME") {
-      const groupState = await db.studentGroup.findUnique({
-        where: { id: group.id },
-        select: { leaderId: true },
-      });
-      if (!groupState?.leaderId) {
-        await db.studentGroup.update({
-          where: { id: group.id },
-          data: { leaderId: context.userId },
+    const membership = await db.$transaction(
+      async (tx) => {
+        const existingMembership = await tx.groupMembership.findUnique({
+          where: {
+            sessionId_studentId: {
+              sessionId: formation.id,
+              studentId: context.userId,
+            },
+          },
         });
-      }
-    }
+
+        if (existingMembership) {
+          throw new Error("You are already assigned to a group in this session");
+        }
+
+        const group = await tx.studentGroup.findFirst({
+          where: {
+            id: parsed.groupId,
+            sessionId: formation.id,
+          },
+          include: {
+            _count: { select: { memberships: true } },
+          },
+        });
+
+        if (!group) {
+          throw new Error("Selected group not found in this session");
+        }
+
+        if (group._count.memberships >= group.capacity) {
+          throw new Error("This group is already full");
+        }
+
+        const newMembership = await tx.groupMembership.create({
+          data: {
+            groupId: group.id,
+            studentId: context.userId,
+            sessionId: formation.id,
+          },
+        });
+
+        if (formation.leaderMode === "VOLUNTEER_FIRST_COME") {
+          if (!group.leaderId) {
+            await tx.studentGroup.update({
+              where: { id: group.id },
+              data: { leaderId: context.userId },
+            });
+          }
+        }
+
+        return newMembership;
+      },
+      { isolationLevel: "Serializable" }
+    );
 
     return NextResponse.json({ membership }, { status: 201 });
   } catch (error: any) {
+    if (error?.message === "You are already assigned to a group in this session") {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    if (error?.message === "Selected group not found in this session") {
+      return NextResponse.json({ error: error.message }, { status: 404 });
+    }
+    if (error?.message === "This group is already full") {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     if (error?.name === "ZodError") {
       return NextResponse.json(
         { error: error?.issues?.[0]?.message || error?.errors?.[0]?.message || "Invalid payload" },

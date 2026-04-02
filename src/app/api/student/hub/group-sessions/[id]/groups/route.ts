@@ -58,40 +58,51 @@ export async function POST(
     return NextResponse.json({ error: "This group session is outside the active window." }, { status: 400 });
   }
 
-  const existingMembership = await db.groupMembership.findFirst({
-    where: {
-      studentId: context.userId,
-      group: { sessionId: formation.id },
-    },
-    select: { id: true },
-  });
-  if (existingMembership) {
-    return NextResponse.json({ error: "You are already assigned to a group in this session" }, { status: 409 });
-  }
-
   try {
     const body = await request.json();
     const parsed = createStudentGroupSchema.parse(body);
 
-    const group = await db.studentGroup.create({
-      data: {
-        sessionId: formation.id,
-        name: parsed.name.trim(),
-        capacity: parsed.capacity ?? formation.groupSize,
-        ...(formation.leaderMode !== "RANDOM" ? { leaderId: context.userId } : {}),
-        memberships: {
-          create: {
-            studentId: context.userId,
+    const group = await db.$transaction(
+      async (tx) => {
+        const existingMembership = await tx.groupMembership.findUnique({
+          where: {
+            sessionId_studentId: {
+              sessionId: formation.id,
+              studentId: context.userId,
+            },
           },
-        },
+        });
+
+        if (existingMembership) {
+          throw new Error("You are already assigned to a group in this session");
+        }
+
+        return await tx.studentGroup.create({
+          data: {
+            sessionId: formation.id,
+            name: parsed.name.trim(),
+            capacity: parsed.capacity ?? formation.groupSize,
+            ...(formation.leaderMode !== "RANDOM" ? { leaderId: context.userId } : {}),
+            memberships: {
+              create: {
+                studentId: context.userId,
+                sessionId: formation.id,
+              },
+            },
+          },
+          include: {
+            _count: { select: { memberships: true } },
+          },
+        });
       },
-      include: {
-        _count: { select: { memberships: true } },
-      },
-    });
+      { isolationLevel: "Serializable" }
+    );
 
     return NextResponse.json({ group }, { status: 201 });
   } catch (error: any) {
+    if (error?.message === "You are already assigned to a group in this session") {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     if (error?.name === "ZodError") {
       return NextResponse.json(
         { error: error?.issues?.[0]?.message || error?.errors?.[0]?.message || "Invalid payload" },

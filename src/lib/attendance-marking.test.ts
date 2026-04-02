@@ -11,8 +11,11 @@ const calculateConfidenceMock = vi.fn();
 const isFlaggedMock = vi.fn();
 const invalidateStudentPhaseCompletionForCourseDayMock = vi.fn();
 const getStudentPhaseCompletionForCourseDayMock = vi.fn();
+const buildStudentPhaseCompletionStatusMock = vi.fn();
+const setStudentPhaseCompletionForCourseDayMock = vi.fn();
 const createBrowserFingerprintHashMock = vi.fn();
 const hasValidBrowserDeviceProofMock = vi.fn();
+const cacheDelBatchMock = vi.fn();
 
 vi.mock("@/lib/db", () => ({
   db: {
@@ -34,6 +37,7 @@ vi.mock("@/lib/cache", () => ({
     USER_CREDENTIALS: 1800,
   },
   cacheDel: cacheDelMock,
+  cacheDelBatch: cacheDelBatchMock,
   cacheGet: vi.fn(),
   cacheSet: vi.fn(),
   checkRateLimit: vi.fn(),
@@ -72,6 +76,8 @@ vi.mock("@/lib/phase-completion", () => ({
   getStudentPhaseCompletionForCourseDay: getStudentPhaseCompletionForCourseDayMock,
   invalidateStudentPhaseCompletionForCourseDay:
     invalidateStudentPhaseCompletionForCourseDayMock,
+  buildStudentPhaseCompletionStatus: buildStudentPhaseCompletionStatusMock,
+  setStudentPhaseCompletionForCourseDay: setStudentPhaseCompletionForCourseDayMock,
 }));
 
 vi.mock("@/lib/face", () => ({
@@ -99,6 +105,7 @@ describe("executeAttendanceMark", () => {
       })
     );
     cacheDelMock.mockResolvedValue(true);
+    cacheDelBatchMock.mockResolvedValue(true);
     linkDeviceMock.mockResolvedValue({
       id: "device-1",
       isNewDevice: false,
@@ -114,11 +121,18 @@ describe("executeAttendanceMark", () => {
     calculateConfidenceMock.mockReturnValue(95);
     isFlaggedMock.mockReturnValue(false);
     invalidateStudentPhaseCompletionForCourseDayMock.mockResolvedValue(undefined);
+    setStudentPhaseCompletionForCourseDayMock.mockResolvedValue(undefined);
     getStudentPhaseCompletionForCourseDayMock.mockResolvedValue({
       phaseOneDone: true,
       phaseTwoDone: false,
       overallPresent: false,
       pendingPhase: "PHASE_TWO",
+    });
+    buildStudentPhaseCompletionStatusMock.mockReturnValue({
+      phaseOneDone: true,
+      phaseTwoDone: true,
+      overallPresent: true,
+      pendingPhase: null,
     });
     createBrowserFingerprintHashMock.mockImplementation(() => "browser-fingerprint-hash");
     hasValidBrowserDeviceProofMock.mockImplementation(() => true);
@@ -159,6 +173,12 @@ describe("executeAttendanceMark", () => {
               },
             },
           },
+        },
+        phaseCompletionGate: {
+          phaseOneDone: true,
+          phaseTwoDone: false,
+          overallPresent: false,
+          pendingPhase: "PHASE_TWO",
         },
       },
       body: {
@@ -207,7 +227,7 @@ describe("executeAttendanceMark", () => {
   it("invalidates only the per-user attendance caches after a successful mark", async () => {
     await executeAttendanceMark(buildInput());
 
-    const deletedKeys = cacheDelMock.mock.calls.map(([key]) => key);
+    const deletedKeys = cacheDelBatchMock.mock.calls.flatMap(([keys]) => keys);
 
     expect(deletedKeys).toEqual(
       expect.arrayContaining([
@@ -219,13 +239,16 @@ describe("executeAttendanceMark", () => {
     expect(deletedKeys).not.toContain("session:session-1");
     expect(deletedKeys).not.toContain("attendance:enrollment:session-1:student-1");
     expect(deletedKeys).not.toContain("student:live-sessions:student-1");
-    expect(invalidateStudentPhaseCompletionForCourseDayMock).toHaveBeenCalledWith({
-      studentId: "student-1",
-      sessionFamilyId: null,
-      courseId: "course-1",
-      lecturerId: "lecturer-1",
-      referenceTime: new Date("2026-03-17T10:00:00.000Z"),
-    });
+    expect(setStudentPhaseCompletionForCourseDayMock).toHaveBeenCalledWith(
+      {
+        studentId: "student-1",
+        sessionFamilyId: null,
+        courseId: "course-1",
+        lecturerId: "lecturer-1",
+        referenceTime: new Date("2026-03-17T10:00:00.000Z"),
+      },
+      expect.anything()
+    );
   });
 
   it("returns browser device binding details for browser-based attendance", async () => {

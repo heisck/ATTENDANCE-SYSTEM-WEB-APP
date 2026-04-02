@@ -325,7 +325,17 @@ export const groupLeaderVoteSchema = z.object({
 });
 
 export const groupLinkSchema = z.object({
-  inviteUrl: z.string().url("Valid WhatsApp invite URL is required"),
+  inviteUrl: z
+    .string()
+    .url("Valid WhatsApp invite URL is required")
+    .refine((val) => {
+      try {
+        const url = new URL(val);
+        return url.hostname === "chat.whatsapp.com" || url.hostname === "wa.me";
+      } catch {
+        return false;
+      }
+    }, "Only official WhatsApp invite links are allowed (chat.whatsapp.com or wa.me)"),
 });
 
 export const acceptLecturerInviteSchema = z.object({

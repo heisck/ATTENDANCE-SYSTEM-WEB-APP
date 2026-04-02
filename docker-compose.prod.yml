@@ -8,7 +8,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/attendance_db?schema=public
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
       - AUTH_SECRET=${AUTH_SECRET}
       - AUTH_URL=${AUTH_URL}
       - WEBAUTHN_RP_NAME=${WEBAUTHN_RP_NAME}
@@ -23,24 +24,38 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
   postgres:
     image: postgres:16-alpine
     container_name: attendance_db_prod
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-      POSTGRES_DB: attendance_db
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: attendance_redis_prod
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis_data:/data
+
 volumes:
   postgres_data:
+  redis_data:

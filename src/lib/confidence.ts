@@ -9,8 +9,8 @@ interface ConfidenceInput {
 
 const WEIGHTS = {
   webauthn: 45,
-  qr: 30,
-  bleProximity: 25,
+  qr: 20,
+  bleProximity: 35,
 } as const;
 
 const PENALTIES = {

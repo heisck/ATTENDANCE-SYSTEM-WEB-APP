@@ -40,10 +40,28 @@ export async function POST(request: NextRequest) {
     }
 
     const passwordHash = await hashPassword(parsed.password);
+
+    // Atomically consume this specific token
+    const tokenUpdateResult = await db.passwordResetToken.updateMany({
+      where: {
+        tokenHash,
+        usedAt: null,
+        expiresAt: { gt: now },
+      },
+      data: { usedAt: now },
+    });
+
+    if (tokenUpdateResult.count !== 1) {
+      return NextResponse.json({ error: "Reset token is invalid, expired, or already used" }, { status: 400 });
+    }
+
     await db.$transaction([
       db.user.update({
         where: { id: resetToken.userId },
-        data: { passwordHash },
+        data: { 
+          passwordHash,
+          passwordChangedAt: now,
+        },
       }),
       db.passwordResetToken.updateMany({
         where: {

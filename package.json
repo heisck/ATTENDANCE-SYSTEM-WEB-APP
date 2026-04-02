@@ -20,6 +20,7 @@
     "db:push": "npx prisma db push",
     "db:migrate": "npx prisma migrate dev",
     "db:deploy": "npx prisma db push --skip-generate",
+    "db:repair-remediation": "node scripts/repair-remediation-schema.mjs",
     "db:seed": "node prisma/seed.cjs",
     "db:setup": "npx prisma db push --skip-generate --accept-data-loss --schema prisma/schema.prisma && node prisma/seed.cjs",
     "db:studio": "npx prisma studio",

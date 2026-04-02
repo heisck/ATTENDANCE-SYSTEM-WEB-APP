@@ -31,23 +31,20 @@ function hashLoginRateLimitValue(value: string) {
   return createHash("sha256").update(value).digest("base64url").slice(0, 32);
 }
 
-function getClientIpAddress(request: Request) {
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  if (forwardedFor) {
-    const [first] = forwardedFor.split(",");
-    if (first && first.trim().length > 0) {
-      return first.trim();
-    }
-  }
+export function getClientIpAddress(request: Request) {
+  const vercelIp = request.headers.get("x-vercel-forwarded-for");
+  if (vercelIp) return vercelIp.split(",")[0].trim();
 
   const realIp = request.headers.get("x-real-ip");
-  if (realIp && realIp.trim().length > 0) {
-    return realIp.trim();
-  }
+  if (realIp && realIp.trim().length > 0) return realIp.trim();
 
-  const connectingIp = request.headers.get("cf-connecting-ip");
-  if (connectingIp && connectingIp.trim().length > 0) {
-    return connectingIp.trim();
+  const cfIp = request.headers.get("cf-connecting-ip");
+  if (cfIp && cfIp.trim().length > 0) return cfIp.trim();
+
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    const ips = forwardedFor.split(",");
+    return ips[ips.length - 1].trim() || "unknown";
   }
 
   return "unknown";
@@ -132,7 +129,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         await Promise.all([
           resetRateLimitKey(emailRateLimitKey),
-          resetRateLimitKey(ipRateLimitKey),
         ]);
 
         return {
@@ -142,6 +138,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           role: user.role,
           organizationId: user.organizationId,
           image: user.image,
+          passwordChangedAt: user.passwordChangedAt?.toISOString() ?? null,
         };
       },
     }),
@@ -153,30 +150,46 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.role = (user as any).role;
         token.organizationId = ((user as any).organizationId ?? null) as string | null;
         token.image = ((user as any).image ?? null) as string | null;
+        token.passwordChangedAt = ((user as any).passwordChangedAt ?? null) as string | null;
       }
 
-      // Self-heal older/incomplete JWT payloads by hydrating role/org from DB.
-      if ((!token.role || !token.id || token.image == null) && token.sub) {
+      if (token.sub) {
         const dbUser = await db.user.findUnique({
           where: { id: token.sub },
           select: {
             role: true,
             organizationId: true,
             image: true,
+            passwordChangedAt: true,
           },
         });
 
-        if (dbUser) {
-          token.id = token.sub;
-          token.role = dbUser.role;
-          token.organizationId = dbUser.organizationId;
-          token.image = dbUser.image;
+        if (!dbUser) {
+          return { ...token, invalid: true };
         }
+
+        const dbTime = dbUser.passwordChangedAt?.getTime();
+        const tokenTime = token.passwordChangedAt ? new Date(token.passwordChangedAt as string).getTime() : null;
+
+        if (dbTime && (!tokenTime || tokenTime < dbTime)) {
+          return { ...token, invalid: true };
+        }
+
+        token.id = token.sub;
+        token.role = dbUser.role;
+        token.organizationId = dbUser.organizationId;
+        token.image = dbUser.image;
+        token.passwordChangedAt = dbUser.passwordChangedAt?.toISOString() ?? null;
       }
 
       return token;
     },
     async session({ session, token }) {
+      if (token.invalid || !token.id) {
+        session.user = null as any;
+        return session;
+      }
+
       if (session.user) {
         const resolvedId = (token.id as string | undefined) ?? token.sub;
         session.user.id = resolvedId as string;

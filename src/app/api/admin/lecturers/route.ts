@@ -20,11 +20,23 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "organizationId is required" }, { status: 400 });
   }
 
+  const searchParams = new URL(request.url).searchParams;
+  const q = searchParams.get("q") || "";
+  const take = Math.min(Math.max(1, parseInt(searchParams.get("take") || "500", 10)), 2000);
+  const skip = Math.max(0, parseInt(searchParams.get("skip") || "0", 10));
+
+  const whereClause: any = { organizationId, role: "LECTURER" };
+  if (q.trim()) {
+    whereClause.OR = [
+      { name: { contains: q.trim(), mode: "insensitive" } },
+      { email: { contains: q.trim(), mode: "insensitive" } },
+    ];
+  }
+
   const lecturers = await db.user.findMany({
-    where: {
-      organizationId,
-      role: "LECTURER",
-    },
+    where: whereClause,
+    take,
+    skip,
     select: {
       id: true,
       name: true,

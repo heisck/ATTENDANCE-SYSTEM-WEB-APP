@@ -149,6 +149,7 @@ export async function uploadCloudinaryAsset(input: {
     {
       method: "POST",
       body,
+      signal: AbortSignal.timeout(15_000),
     }
   );
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getClientIpAddress } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { forgotPasswordSchema } from "@/lib/validators";
 import { buildAppUrl, sendEmail } from "@/lib/email";
@@ -9,18 +10,6 @@ import { checkRateLimitKey } from "@/lib/cache";
 const RESET_IP_MAX_ATTEMPTS = 5;
 const RESET_EMAIL_MAX_ATTEMPTS = 3;
 const RESET_WINDOW_SECONDS = 15 * 60;
-
-function getClientIp(request: NextRequest): string {
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip")?.trim() ||
-    request.headers.get("cf-connecting-ip")?.trim() ||
-    "";
-  if (!ip) {
-    console.warn("[forgot-password] Could not resolve client IP from request headers");
-  }
-  return ip || "unknown";
-}
 
 const UNKNOWN_IP_MAX_ATTEMPTS = 2;
 
@@ -40,7 +29,7 @@ async function sendResetEmail(targetEmail: string, name: string, resetUrl: strin
 export async function POST(request: NextRequest) {
   try {
     // Rate limit password reset by IP and email
-    const clientIp = getClientIp(request);
+    const clientIp = getClientIpAddress(request);
     const ipLimit = clientIp === "unknown" ? UNKNOWN_IP_MAX_ATTEMPTS : RESET_IP_MAX_ATTEMPTS;
     try {
       const { allowed } = await checkRateLimitKey(
