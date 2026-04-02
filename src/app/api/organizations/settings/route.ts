@@ -51,8 +51,28 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Organization not found" }, { status: 404 });
     }
 
+    // Only allow known settings keys to prevent arbitrary property injection
+    const ALLOWED_SETTINGS_KEYS = new Set([
+      "featureFlags",
+      "classHubGovernance",
+      "academicCalendar",
+      "academicProgression",
+      "studentHubBilling",
+      "studentEmailDomains",
+      "studentSignupWindows",
+    ]);
+
+    const patch = body.settings as Record<string, unknown>;
+    const unknownKeys = Object.keys(patch).filter((k) => !ALLOWED_SETTINGS_KEYS.has(k));
+    if (unknownKeys.length > 0) {
+      return NextResponse.json(
+        { error: `Unknown settings keys: ${unknownKeys.join(", ")}` },
+        { status: 400 }
+      );
+    }
+
     const currentSettings = getOrganizationSettings(org.settings);
-    const newSettings = deepMerge(currentSettings, body.settings as Record<string, unknown>);
+    const newSettings = deepMerge(currentSettings, patch);
 
     const updated = await db.organization.update({
       where: { id: user.organizationId },

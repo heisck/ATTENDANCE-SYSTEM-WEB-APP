@@ -181,54 +181,52 @@ async function getSessionMonitoringDetail(
           where: { courseId: session.courseId },
         });
 
-        const records = await db.attendanceRecord.findMany({
-          where: { sessionId },
-          select: {
-            id: true,
-            studentId: true,
-            confidence: true,
-            flagged: true,
-            anomalyScore: true,
-            markedAt: true,
-          },
-        });
+        // Use DB aggregations instead of loading all records into memory
+        const [recordAgg, flaggedCount, anomalyCounts, unreviewedCount] =
+          await Promise.all([
+            db.attendanceRecord.aggregate({
+              where: { sessionId },
+              _count: { id: true },
+              _avg: { confidence: true },
+            }),
+            db.attendanceRecord.count({
+              where: { sessionId, flagged: true },
+            }),
+            db.attendanceAnomaly.groupBy({
+              by: ["anomalyType"],
+              where: { sessionId },
+              _count: { id: true },
+            }),
+            db.attendanceAnomaly.count({
+              where: { sessionId, reviewedAt: null },
+            }),
+          ]);
 
-        const anomalies = await db.attendanceAnomaly.findMany({
-          where: { sessionId },
-          select: {
-            id: true,
-            anomalyType: true,
-            severity: true,
-            studentId: true,
-            reviewedAt: true,
-          },
-        });
-
-        const flaggedByType = anomalies.reduce(
+        const flaggedByType = anomalyCounts.reduce(
           (acc, a) => {
-            acc[a.anomalyType] = (acc[a.anomalyType] || 0) + 1;
+            acc[a.anomalyType] = a._count.id;
             return acc;
           },
           {} as Record<string, number>
         );
 
-        const confScores = records.map((r) => r.confidence);
-        const avgConfidence =
-          confScores.length > 0
-            ? Math.round(confScores.reduce((a, b) => a + b) / confScores.length)
-            : 0;
-
-        const p95Confidence = confScores
-          .sort((a, b) => a - b)
-          [Math.floor(confScores.length * 0.05)];
+        // Compute p95 confidence in PostgreSQL rather than in-memory sort
+        let p95Confidence = 0;
+        if (recordAgg._count.id > 0) {
+          const p95Result = await db.$queryRaw<
+            { p95: number }[]
+          >`SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY confidence) AS p95
+            FROM "AttendanceRecord" WHERE "sessionId" = ${sessionId}`;
+          p95Confidence = Math.round(p95Result[0]?.p95 || 0);
+        }
 
         return {
           enrolled,
-          attempted: records.length,
-          flaggedCount: records.filter((r) => r.flagged).length,
-          unreviewedAnomalies: anomalies.filter((a) => !a.reviewedAt).length,
-          averageConfidence: avgConfidence,
-          p95Confidence: Math.round(p95Confidence || 0),
+          attempted: recordAgg._count.id,
+          flaggedCount,
+          unreviewedAnomalies: unreviewedCount,
+          averageConfidence: Math.round(recordAgg._avg.confidence || 0),
+          p95Confidence,
           anomaliesByType: flaggedByType,
           lastUpdated: new Date().toISOString(),
         };

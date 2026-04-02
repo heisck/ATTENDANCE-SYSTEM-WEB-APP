@@ -50,7 +50,8 @@ export async function DELETE(
       success: true,
       message: "Device removed successfully",
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error("[webauthn/devices/delete] Error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

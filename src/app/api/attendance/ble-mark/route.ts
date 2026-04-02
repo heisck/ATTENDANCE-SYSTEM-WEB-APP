@@ -80,7 +80,8 @@ export async function POST(request: NextRequest) {
     const maxScanAgeMs =
       context.syncedSession.qrRotationMs + context.syncedSession.qrGraceMs;
     const scanAgeMs = requestReceivedAt - parsed.tokenTimestamp;
-    const verificationTimestamp = parsed.tokenTimestamp;
+    // Use server time for token verification to prevent client timestamp manipulation
+    const verificationTimestamp = requestReceivedAt;
     if (scanAgeMs > maxScanAgeMs || scanAgeMs < -1_500) {
       return NextResponse.json(
         { error: "BLE token is out of the allowed validation window. Scan again." },

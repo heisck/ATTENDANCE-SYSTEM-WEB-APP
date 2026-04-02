@@ -49,7 +49,8 @@ export async function POST(request: NextRequest) {
     const maxScanAgeMs =
       context.syncedSession.qrRotationMs + context.syncedSession.qrGraceMs;
     const scanAgeMs = requestReceivedAt - scanTimestamp;
-    const verificationTimestamp = scanTimestamp;
+    // Use server time for token verification to prevent client timestamp manipulation
+    const verificationTimestamp = requestReceivedAt;
     if (scanAgeMs > maxScanAgeMs || scanAgeMs < -1_500) {
       return NextResponse.json(
         {

@@ -53,7 +53,8 @@ export async function POST(
       success: true,
       message: "Passkeys unlocked successfully",
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error("[admin/passkeys/unlock] Error unlocking passkeys:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

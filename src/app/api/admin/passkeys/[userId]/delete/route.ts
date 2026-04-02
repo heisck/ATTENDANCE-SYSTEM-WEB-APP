@@ -71,7 +71,8 @@ export async function POST(
       message: `${credentialCount} passkey(s) deleted successfully`,
       deletedCount: credentialCount,
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error("[admin/passkeys/delete] Error deleting passkeys:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

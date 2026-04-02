@@ -44,7 +44,8 @@ export async function GET(_request: NextRequest) {
       })),
       passkeysLockedUntilAdminReset: userState.passkeysLockedUntilAdminReset,
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error("[webauthn/devices] Error listing devices:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
