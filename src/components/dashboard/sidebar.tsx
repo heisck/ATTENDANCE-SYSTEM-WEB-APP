@@ -60,6 +60,7 @@ const baseNavByRole: Record<string, NavItem[]> = {
     { label: "Dashboard", href: "/lecturer", icon: Home },
     { label: "Courses", href: "/lecturer/courses", icon: BookOpen },
     { label: "New Session", href: "/lecturer/session/new", icon: Play },
+    { label: "Session History", href: "/lecturer/history", icon: History },
     { label: "Reports", href: "/lecturer/reports", icon: FileText },
     { label: "Profile", href: "/lecturer/profile", icon: User },
   ],

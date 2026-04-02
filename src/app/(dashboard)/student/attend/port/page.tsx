@@ -71,9 +71,9 @@ export default function StudentQrPortPage() {
   if (!verified) {
     return (
       <div className="space-y-4">
-        <div className="surface-muted p-4 text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Verify your passkey before starting QR porting.
-        </div>
+        </p>
         <WebAuthnPrompt onVerified={() => setVerified(true)} />
       </div>
     );

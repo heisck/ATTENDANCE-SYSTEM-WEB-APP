@@ -559,7 +559,9 @@ export function QrScanner({
       )}
 
       {!overlayOpen && error ? (
-        <div className="status-panel-subtle text-sm">{error}</div>
+        <p className="px-1 text-xs leading-relaxed text-muted-foreground" role="status" aria-live="polite">
+          {error}
+        </p>
       ) : null}
     </div>
   );

@@ -66,7 +66,7 @@ class UpstashRestClient {
 
     const payload = (await response.json()) as unknown;
     if (!Array.isArray(payload)) {
-      throw new Error("Unexpected Upstash REST pipeline response");
+      throw new TypeError("Unexpected Upstash REST pipeline response");
     }
 
     return payload as UpstashPipelineResponse[];
@@ -238,6 +238,20 @@ function memoryDelKey(key: string): boolean {
   return memoryCache.delete(key);
 }
 
+function parseCachedValue<T>(key: string, raw: string): T | null {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    memoryDelKey(key);
+    return null;
+  }
+}
+
+function readMemoryCacheValue<T>(key: string): T | null {
+  const raw = memoryGetRaw(key);
+  return raw ? parseCachedValue<T>(key, raw) : null;
+}
+
 function memoryIncrement(key: string, ttlSeconds: number): number {
   const currentRaw = memoryGetRaw(key);
   const current = currentRaw ? Number.parseInt(currentRaw, 10) || 0 : 0;
@@ -284,7 +298,7 @@ export function getRedis(): CacheClient | null {
     return null;
   }
 
-  if (!upstashRestClient || !upstashRestClient.matches(restConfig)) {
+  if (!upstashRestClient?.matches(restConfig)) {
     try {
       upstashRestClient = new UpstashRestClient(restConfig);
     } catch (error) {
@@ -325,14 +339,7 @@ export const CACHE_TTL = {
 export async function cacheGet<T>(key: string): Promise<T | null> {
   const client = getRedis();
   if (shouldUseMemoryFallback()) {
-    const data = memoryGetRaw(key);
-    if (!data) return null;
-    try {
-      return JSON.parse(data) as T;
-    } catch {
-      memoryDelKey(key);
-      return null;
-    }
+    return readMemoryCacheValue<T>(key);
   }
 
   if (!client) {
@@ -341,21 +348,10 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
 
   try {
     const data = await client.get(key);
-    if (!data) return null;
-    return JSON.parse(data) as T;
+    return data ? parseCachedValue<T>(key, data) : null;
   } catch (error) {
     console.error(`[v0] Cache get error for ${key}:`, error);
-    if (canUseMemoryFallback()) {
-      const data = memoryGetRaw(key);
-      if (!data) return null;
-      try {
-        return JSON.parse(data) as T;
-      } catch {
-        memoryDelKey(key);
-        return null;
-      }
-    }
-    return null;
+    return canUseMemoryFallback() ? readMemoryCacheValue<T>(key) : null;
   }
 }
 
@@ -648,6 +644,6 @@ export async function cacheHealthCheck(): Promise<boolean> {
     const result = await client.ping();
     return result === "PONG";
   } catch {
-    return canUseMemoryFallback() ? memoryCache.size >= 0 : false;
+    return canUseMemoryFallback();
   }
 }

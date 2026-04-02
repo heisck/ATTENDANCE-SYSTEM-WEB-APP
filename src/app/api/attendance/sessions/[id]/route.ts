@@ -3,44 +3,11 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getPhaseEndsAt, syncAttendanceSessionState } from "@/lib/attendance";
 import { generateQrPayload } from "@/lib/qr";
-import { CACHE_KEYS, cacheDel } from "@/lib/cache";
+import {
+  getLecturerOwnedSessionsForDeletion,
+  invalidateAttendanceSessionCaches,
+} from "@/lib/attendance-session-management";
 import { clearSessionBleBroadcast } from "@/lib/lecturer-ble";
-
-async function invalidateClosedSessionCaches(sessionId: string, lecturerId: string, courseId: string) {
-  const enrollmentRows = await db.enrollment.findMany({
-    where: { courseId },
-    select: { studentId: true },
-  });
-
-  await Promise.all([
-    cacheDel(`attendance:session-meta:${sessionId}`),
-    cacheDel(`attendance:session-secret:${sessionId}`),
-    cacheDel(`attendance:mark-session:${sessionId}`),
-    cacheDel(CACHE_KEYS.SESSION_STATE(sessionId)),
-    cacheDel(`attendance:sessions:list:LECTURER:${lecturerId}:ACTIVE`),
-    cacheDel(`attendance:sessions:list:LECTURER:${lecturerId}:ALL`),
-    cacheDel(`attendance:sessions:list:LECTURER:${lecturerId}:CLOSED`),
-    cacheDel(`attendance:sessions:list:LECTURER:${lecturerId}:ACTIVE:20`),
-    cacheDel(`attendance:sessions:list:LECTURER:${lecturerId}:ALL:20`),
-    cacheDel(`attendance:sessions:list:LECTURER:${lecturerId}:CLOSED:20`),
-    cacheDel(`attendance:sessions:list:LECTURER:${lecturerId}:ACTIVE:100`),
-    cacheDel(`attendance:sessions:list:LECTURER:${lecturerId}:ALL:100`),
-    cacheDel(`attendance:sessions:list:LECTURER:${lecturerId}:CLOSED:100`),
-    ...enrollmentRows.flatMap((row) => [
-      cacheDel(`attendance:session-me:${sessionId}:${row.studentId}`),
-      cacheDel(`attendance:sessions:list:STUDENT:${row.studentId}:ACTIVE`),
-      cacheDel(`attendance:sessions:list:STUDENT:${row.studentId}:ALL`),
-      cacheDel(`attendance:sessions:list:STUDENT:${row.studentId}:CLOSED`),
-      cacheDel(`attendance:sessions:list:STUDENT:${row.studentId}:ACTIVE:20`),
-      cacheDel(`attendance:sessions:list:STUDENT:${row.studentId}:ALL:20`),
-      cacheDel(`attendance:sessions:list:STUDENT:${row.studentId}:CLOSED:20`),
-      cacheDel(`attendance:sessions:list:STUDENT:${row.studentId}:ACTIVE:100`),
-      cacheDel(`attendance:sessions:list:STUDENT:${row.studentId}:ALL:100`),
-      cacheDel(`attendance:sessions:list:STUDENT:${row.studentId}:CLOSED:100`),
-      cacheDel(`student:live-sessions:${row.studentId}`),
-    ]),
-  ]);
-}
 
 export async function GET(
   _request: NextRequest,
@@ -154,7 +121,59 @@ export async function PATCH(
     console.error("Failed to clear BLE broadcast during session close:", error);
   }
 
-  await invalidateClosedSessionCaches(id, user.id, attendanceSession.courseId);
+  await invalidateAttendanceSessionCaches([
+    {
+      id,
+      lecturerId: user.id,
+      courseId: attendanceSession.courseId,
+    },
+  ]);
 
   return NextResponse.json(updated);
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const user = session.user as { id: string; role: string };
+  if (user.role !== "LECTURER") {
+    return NextResponse.json(
+      { error: "Only lecturers can delete attendance sessions" },
+      { status: 403 }
+    );
+  }
+
+  const { id } = await params;
+  const { sessions, missingIds, activeIds } = await getLecturerOwnedSessionsForDeletion(
+    user.id,
+    [id]
+  );
+
+  if (missingIds.length > 0 || sessions.length === 0) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  }
+
+  if (activeIds.length > 0) {
+    return NextResponse.json(
+      { error: "Active sessions must be ended before deletion.", activeSessionIds: activeIds },
+      { status: 409 }
+    );
+  }
+
+  await db.attendanceSession.delete({
+    where: { id },
+  });
+
+  await invalidateAttendanceSessionCaches(sessions);
+
+  return NextResponse.json({
+    success: true,
+    deletedSessionIds: [id],
+  });
 }

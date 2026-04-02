@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import {
   DashboardActionButton,
   getDashboardButtonClassName,
@@ -63,7 +64,6 @@ function getPhaseLabel(phase: SessionData["phase"]) {
 
 export default function SessionMonitorPage() {
   const params = useParams();
-  const router = useRouter();
   const sessionId = params.id as string;
 
   const [data, setData] = useState<SessionData | null>(null);
@@ -71,35 +71,59 @@ export default function SessionMonitorPage() {
   const [bleAction, setBleAction] = useState<"start" | "stop" | "refresh" | null>(null);
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);
+  const [sessionUnavailable, setSessionUnavailable] = useState(false);
+  const [sessionUnavailableMessage, setSessionUnavailableMessage] = useState(
+    "This session is no longer available."
+  );
 
-  const fetchSession = useCallback(async () => {
+  const fetchSession = useCallback(async (mode: "initial" | "poll" | "refresh" = "refresh") => {
     try {
       const res = await fetch(`/api/attendance/sessions/${sessionId}`);
-      if (res.ok) {
-        const body = await res.json();
-        setData(body);
-        if (body.status !== "ACTIVE") {
-          setBleStatus({
-            enabled: false,
-            active: false,
-            beaconName: null,
-            startedAt: null,
-            expiresAt: null,
-            lastHeartbeatAt: null,
-            serviceUuid: "",
-            currentTokenCharacteristicUuid: "",
-            sessionMetaCharacteristicUuid: "",
-            phase: "CLOSED",
-            phaseEndsAt: new Date().toISOString(),
-            manufacturerCompanyId: 0xffff,
-            manufacturerDataHex: null,
-          });
+      const body = await res.json().catch(() => ({}));
+
+      if (res.status === 404) {
+        if (mode === "poll" && !sessionUnavailable) {
+          toast.info("This session is no longer available.");
         }
+        setSessionUnavailable(true);
+        setSessionUnavailableMessage(body?.error || "This session is no longer available.");
+        setData(null);
+        setBleStatus(null);
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(body?.error || "Failed to load session.");
+      }
+
+      setSessionUnavailable(false);
+      setSessionUnavailableMessage("This session is no longer available.");
+      setData(body);
+      if (body.status !== "ACTIVE") {
+        setBleStatus({
+          enabled: false,
+          active: false,
+          beaconName: null,
+          startedAt: null,
+          expiresAt: null,
+          lastHeartbeatAt: null,
+          serviceUuid: "",
+          currentTokenCharacteristicUuid: "",
+          sessionMetaCharacteristicUuid: "",
+          phase: "CLOSED",
+          phaseEndsAt: new Date().toISOString(),
+          manufacturerCompanyId: 0xffff,
+          manufacturerDataHex: null,
+        });
+      }
+    } catch (error: any) {
+      if (mode !== "poll") {
+        toast.error(error?.message || "Unable to load this session.");
       }
     } finally {
       setLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, sessionUnavailable]);
 
   const fetchBleStatus = useCallback(async (mode: "auto" | "manual" = "auto") => {
     if (mode === "manual") {
@@ -111,6 +135,10 @@ export default function SessionMonitorPage() {
         cache: "no-store",
       });
       const body = await res.json();
+      if (res.status === 404) {
+        setBleStatus(null);
+        return;
+      }
       if (!res.ok) return;
       setBleStatus(body);
     } catch {
@@ -123,19 +151,19 @@ export default function SessionMonitorPage() {
   }, [sessionId]);
 
   useEffect(() => {
-    void fetchSession();
+    void fetchSession("initial");
   }, [fetchSession]);
 
   useEffect(() => {
-    if (data?.status !== "ACTIVE") return;
+    if (sessionUnavailable || data?.status !== "ACTIVE") return;
 
     void fetchBleStatus("auto");
     const interval = window.setInterval(() => {
-      void fetchSession();
+      void fetchSession("poll");
       void fetchBleStatus("auto");
     }, 5000);
     return () => window.clearInterval(interval);
-  }, [data?.status, fetchBleStatus, fetchSession]);
+  }, [data?.status, fetchBleStatus, fetchSession, sessionUnavailable]);
 
   async function handleStartBle() {
     if (!data) return;
@@ -209,9 +237,9 @@ export default function SessionMonitorPage() {
         manufacturerDataHex: null,
       });
       toast.success("Session closed.");
-      router.push("/lecturer");
     } catch (error: any) {
       toast.error(error?.message || "Unable to close session");
+    } finally {
       setClosing(false);
     }
   }
@@ -225,6 +253,29 @@ export default function SessionMonitorPage() {
   }
 
   if (!data) {
+    if (sessionUnavailable) {
+      return (
+        <div className="space-y-4 rounded-2xl border border-border/70 bg-background/40 p-6 text-center">
+          <p className="text-lg font-semibold">Session unavailable</p>
+          <p className="text-sm text-muted-foreground">{sessionUnavailableMessage}</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Link
+              href="/lecturer/history"
+              className={getDashboardButtonClassName()}
+            >
+              Open Session History
+            </Link>
+            <Link
+              href="/lecturer"
+              className={getDashboardButtonClassName()}
+            >
+              Go to Dashboard
+            </Link>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="py-12 text-center">
         <p className="text-muted-foreground">Session not found.</p>

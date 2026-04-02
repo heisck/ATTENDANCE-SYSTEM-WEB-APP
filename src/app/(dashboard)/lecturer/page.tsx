@@ -93,16 +93,12 @@ export default async function LecturerDashboard() {
                   </span>
                 ),
               action:
-                effectivePhase !== "CLOSED" ? (
-                  <Link
-                    href={`/lecturer/session/${s.id}`}
-                    className="text-xs font-medium text-foreground underline underline-offset-2"
-                  >
-                    Monitor
-                  </Link>
-                ) : (
-                  <span className="text-xs text-muted-foreground">-</span>
-                ),
+                <Link
+                  href={`/lecturer/session/${s.id}`}
+                  className="text-xs font-medium text-foreground underline underline-offset-2"
+                >
+                  {effectivePhase !== "CLOSED" ? "Monitor" : "View Details"}
+                </Link>,
             };
           })}
           emptyMessage="No sessions yet. Start your first attendance session!"

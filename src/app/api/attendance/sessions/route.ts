@@ -24,6 +24,10 @@ import {
   getPhaseForSessionFlow,
   resolveSessionFamilyKey,
 } from "@/lib/session-flow";
+import {
+  getLecturerOwnedSessionsForDeletion,
+  invalidateAttendanceSessionCaches,
+} from "@/lib/attendance-session-management";
 
 const SESSION_LIST_CACHE_TTL_SECONDS = 10;
 const DEFAULT_SESSION_LIST_TAKE = 20;
@@ -485,9 +489,97 @@ export async function GET(request: NextRequest) {
       ...sessionRow,
       status: derivedPhase === "CLOSED" ? "CLOSED" : sessionRow.status,
       phase: derivedPhase,
+      historicalPhase: getHistoricalPhaseFromSession({
+        sessionFlow: sessionRow.sessionFlow,
+        phase: sessionRow.phase,
+      }),
     };
   });
 
   await cacheSet(cacheKey, normalized as any, SESSION_LIST_CACHE_TTL_SECONDS);
   return NextResponse.json(normalized);
+}
+
+export async function DELETE(request: NextRequest) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const user = session.user as { id: string; role: string };
+  if (user.role !== "LECTURER") {
+    return NextResponse.json(
+      { error: "Only lecturers can delete attendance sessions" },
+      { status: 403 }
+    );
+  }
+
+  const body = await request.json().catch(() => null);
+  const rawIds = body && typeof body === "object" ? (body as { ids?: unknown }).ids : undefined;
+  const ids = Array.isArray(rawIds)
+    ? rawIds.filter((value: unknown): value is string => typeof value === "string")
+    : [];
+
+  if (ids.length === 0) {
+    return NextResponse.json({ error: "ids must be a non-empty array" }, { status: 400 });
+  }
+
+  if (ids.length > MAX_SESSION_LIST_TAKE) {
+    return NextResponse.json(
+      { error: `You can delete up to ${MAX_SESSION_LIST_TAKE} sessions at once.` },
+      { status: 400 }
+    );
+  }
+
+  const { sessions, missingIds, activeIds } = await getLecturerOwnedSessionsForDeletion(
+    user.id,
+    ids
+  );
+
+  if (missingIds.length > 0 || sessions.length === 0) {
+    return NextResponse.json(
+      { error: "Some sessions were not found.", missingIds },
+      { status: 404 }
+    );
+  }
+
+  if (activeIds.length > 0) {
+    return NextResponse.json(
+      { error: "Active sessions must be ended before deletion.", activeSessionIds: activeIds },
+      { status: 409 }
+    );
+  }
+
+  try {
+    await db.$transaction(async (tx) => {
+      const deleted = await tx.attendanceSession.deleteMany({
+        where: {
+          id: { in: sessions.map((row) => row.id) },
+          lecturerId: user.id,
+        },
+      });
+
+      if (deleted.count !== sessions.length) {
+        throw new Error("SESSION_DELETE_CONFLICT");
+      }
+    });
+  } catch (error: any) {
+    if (error?.message === "SESSION_DELETE_CONFLICT") {
+      return NextResponse.json(
+        { error: "One or more sessions changed before deletion. Refresh and try again." },
+        { status: 409 }
+      );
+    }
+
+    console.error("Bulk session delete error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+
+  await invalidateAttendanceSessionCaches(sessions);
+
+  return NextResponse.json({
+    success: true,
+    deletedCount: sessions.length,
+    deletedSessionIds: sessions.map((row) => row.id),
+  });
 }
