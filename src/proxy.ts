@@ -20,12 +20,13 @@ function buildContentSecurityPolicy(nonce: string) {
 
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDevelopment ? " 'unsafe-eval'" : ""}`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'wasm-unsafe-eval'${isDevelopment ? " 'unsafe-eval'" : ""}`,
     `style-src 'self' 'nonce-${nonce}'`,
     "style-src-attr 'unsafe-inline'",
     "img-src 'self' data: blob: https://res.cloudinary.com",
     "font-src 'self'",
     `connect-src 'self' https://*.amazonaws.com https://*.cloudinary.com ${isDevelopment ? "ws: wss:" : "wss:"}`,
+    "worker-src 'self' blob:",
     "frame-src 'self' https://*.amazonaws.com",
     "object-src 'none'",
     "base-uri 'self'",
